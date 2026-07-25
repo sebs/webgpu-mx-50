@@ -1,17 +1,14 @@
-// The Phase 0 generated source: SMPTE-style vertical colour bars with a moving sweep
-// line, produced entirely on the GPU into the linear working texture (ADR-0008,
-// ADR-0005). The sweep is driven by the logical clock's tick (via the `phase`
-// uniform) so a running app visibly updates every frame — proof the render loop and
-// the whole source -> graph -> present chain are live.
-//
-// Values are written as LINEAR light (not sRGB-encoded); the present pass performs the
-// single sRGB encode. Colours are therefore nominal, which is correct for a skeleton.
+// The Phase 1 generated source for the four Source slots: a distinct colour field per
+// `variant`, with a vertical brightness gradient and a moving bright sweep bar. Distinct
+// hues make a Mix (cross-dissolve) visibly blend, and the bright sweep gives NAM
+// (per-pixel brighter wins) something to punch through. Rendered on the GPU into the
+// linear working texture (ADR-0008, ADR-0005); the present pass does the sRGB encode.
 
 export const testPatternWGSL = /* wgsl */ `
 struct Uniforms {
   resolution : vec2f,
-  phase : f32,   // logical ticks (video frames) since start
-  _pad : f32,
+  phase : f32,    // logical ticks since start
+  variant : f32,  // 0..3, selects the base hue
 };
 
 @group(0) @binding(0) var<uniform> u : Uniforms;
@@ -33,27 +30,23 @@ fn vs(@builtin(vertex_index) vertexIndex : u32) -> VSOut {
 
 @fragment
 fn fs(in : VSOut) -> @location(0) vec4f {
-  // Seven vertical bars: white, yellow, cyan, green, magenta, red, blue.
-  var bars = array<vec3f, 7>(
-    vec3f(1.0, 1.0, 1.0),
-    vec3f(1.0, 1.0, 0.0),
-    vec3f(0.0, 1.0, 1.0),
-    vec3f(0.0, 1.0, 0.0),
-    vec3f(1.0, 0.0, 1.0),
-    vec3f(1.0, 0.0, 0.0),
-    vec3f(0.0, 0.0, 1.0),
+  // Four distinct base hues for the four Source slots.
+  var hues = array<vec3f, 4>(
+    vec3f(0.90, 0.25, 0.20),  // Source 1 — red
+    vec3f(0.20, 0.75, 0.30),  // Source 2 — green
+    vec3f(0.25, 0.45, 0.95),  // Source 3 — blue
+    vec3f(0.95, 0.65, 0.15),  // Source 4 — amber
   );
-  let idx = min(u32(in.uv.x * 7.0), 6u);
-  var col = bars[idx];
+  let idx = min(u32(u.variant), 3u);
+  let base = hues[idx];
 
-  // Bottom strip: a horizontal luminance ramp for a quick gamma sanity check.
-  if (in.uv.y > 0.85) {
-    col = vec3f(in.uv.x);
-  }
+  // Vertical brightness gradient: dim at top, bright at bottom — gives NAM contrast.
+  let brightness = 0.25 + 0.75 * in.uv.y;
+  var col = base * brightness;
 
-  // Moving vertical sweep line — completes a pass roughly every 2 seconds at 60 fps.
-  let sweep = fract(u.phase / 120.0);
-  if (abs(in.uv.x - sweep) < 0.0035) {
+  // Moving bright sweep bar (skewed), the brightest thing on screen.
+  let sweep = fract(u.phase / 90.0 + in.uv.y * 0.25);
+  if (abs(in.uv.x - sweep) < 0.03) {
     col = vec3f(1.0, 1.0, 1.0);
   }
 

@@ -84,6 +84,10 @@ These are explicit decisions of record, not omissions to revisit casually.
 
 ### Phase 0 — Skeleton: banira/TS/WebGPU with one source and a test pattern
 
+> **Status: ✅ done.** Runnable skeleton, injectable clock/loop, pass-through signal
+> graph, single store, one generated source, WebGPU capability guard; domain tests green.
+
+
 Stand up the project and prove the rendering substrate end to end with the minimum
 viable pipeline: one input source drawn to the canvas through a WebGPU render pass, on
 the timing model, with the state store and test harness bootstrapped.
@@ -122,6 +126,14 @@ the timing model, with the state store and test harness bootstrapped.
 ---
 
 ### Phase 1 — Two buses, sources, program out, and basic Mix
+
+> **Status: ✅ largely done.** Two-bus model with Matte substitution, Program Out
+> (A/B/EFFECT) routing, Mix + NAM combine driven by the lever, the Matte generator
+> (9 colours / level / gradation), and the first Web Component control strip are
+> implemented and rendering; 90 Gherkin scenarios green across the four features.
+> **Remaining:** wiring *real* browser inputs (camera/video/image live textures) into the
+> source slots — the binding domain (registry, inputs-and-devices Rule 1) is done, but
+> the live `getUserMedia`/file → GPU-texture sources and their picker are still to come.
 
 Populate the front of the signal chain. Two independent buses each assign one of four
 sources or the Matte, and the operator can choose what leaves as Program Out. The

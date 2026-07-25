@@ -46,3 +46,33 @@ test('fieldPreset returns an independent clone (reference §18 seam)', () => {
   assert.notEqual(restored, saved);
   assert.deepEqual(restored, saved);
 });
+
+test('ASSIGN_SOURCE tracks the blinking substitute (last non-Matte source, ADR-0006)', () => {
+  const s0 = structuredClone(FACTORY_PRESET);
+  const s1 = reduce(s0, { type: 'ASSIGN_SOURCE', bus: 'A', source: 3 });
+  assert.equal(s1.busA.source, 3);
+  assert.equal(s1.busA.substituteSource, 3);
+
+  const s2 = reduce(s1, { type: 'ASSIGN_SOURCE', bus: 'A', source: 'matte' });
+  assert.equal(s2.busA.source, 'matte');
+  assert.equal(s2.busA.substituteSource, 3); // preserved while Matte is selected
+});
+
+test('SET_PROGRAM_OUT switches the program mode', () => {
+  const s = structuredClone(FACTORY_PRESET);
+  assert.equal(reduce(s, { type: 'SET_PROGRAM_OUT', mode: 'A' }).programOut, 'A');
+});
+
+test('STEP_MATTE_COLOR wraps up (Black -> Colour Bar) and down', () => {
+  const s = structuredClone(FACTORY_PRESET);
+  s.matte.colorIndex = 8; // Black
+  assert.equal(reduce(s, { type: 'STEP_MATTE_COLOR', direction: 'up' }).matte.colorIndex, 0);
+  s.matte.colorIndex = 0; // Colour Bar
+  assert.equal(reduce(s, { type: 'STEP_MATTE_COLOR', direction: 'down' }).matte.colorIndex, 8);
+});
+
+test('SET_MATTE_LEVEL clamps and SET_GRADATION toggles', () => {
+  const s = structuredClone(FACTORY_PRESET);
+  assert.equal(reduce(s, { type: 'SET_MATTE_LEVEL', level: 1.5 }).matte.level, 1);
+  assert.equal(reduce(s, { type: 'SET_GRADATION', on: true }).matte.gradation, true);
+});

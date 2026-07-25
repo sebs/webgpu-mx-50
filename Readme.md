@@ -17,7 +17,8 @@ npm test        # typecheck + unit + cucumber features + golden scaffolding
 ```
 
 Stack: vanilla TypeScript + WebGPU + [banira](https://github.com/sebs/banira), no UI
-framework (ADR-0003). Current status: **Phase 0 skeleton** — one generated source
-rendered end to end through the (pass-through) signal graph. See
+framework (ADR-0003). Current status: **Phase 1** — two buses with Matte substitution,
+Program Out (A/B/EFFECT), Mix + NAM transitions on the Mix/Wipe lever, the Matte
+generator, and a first Web Component control strip. See
 [docs/ROADMAP.md](docs/ROADMAP.md) for the build plan and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 for how to run and test.

@@ -4,13 +4,17 @@
 // (reducer.ts) maps (state, command) -> next state as a pure function.
 
 import type { BusId, BusSource } from '../core/types.js';
-import type { PanelState, TransitionType } from './state.js';
+import type { PanelState, ProgramOut, TransitionType } from './state.js';
 
 export type Command =
   | { type: 'ASSIGN_SOURCE'; bus: BusId; source: BusSource }
   | { type: 'SET_LEVER'; position: number }
   | { type: 'SET_TRANSITION_TYPE'; transition: TransitionType }
+  | { type: 'SET_PROGRAM_OUT'; mode: ProgramOut }
   | { type: 'SET_MATTE_COLOR'; colorIndex: number }
+  | { type: 'STEP_MATTE_COLOR'; direction: 'up' | 'down' }
+  | { type: 'SET_MATTE_LEVEL'; level: number }
+  | { type: 'SET_GRADATION'; on: boolean }
   | { type: 'LOAD_STATE'; state: PanelState };
 
 /** Discriminant union of all command type tags, handy for exhaustiveness. */

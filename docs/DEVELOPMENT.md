@@ -60,7 +60,11 @@ src/
   constants.ts          Canonical timing + colour constants (ADR-0005, ADR-0012)
   core/
     types.ts            Domain vocabulary (bus, source, size)
-    signal-graph.ts     Ordered stage chain, pass-through in Phase 0 (ADR-0004)
+    signal-graph.ts     Per-bus / combine / downstream stage chain (ADR-0004)
+    resolve.ts          Bus resolver + Matte substitution + audio-follows (ADR-0006)
+    transition.ts       Mix weights, composite rule, NAM bias (reference §9)
+    program.ts          Program Out video + audio routing (reference §2)
+    matte.ts            Matte palette, LEVEL/GRADATION semantics, GPU colour (reference §4)
   state/
     state.ts            PanelState + FACTORY_PRESET + fieldPreset (ADR-0011, ref §18)
     commands.ts         Typed command union
@@ -69,17 +73,23 @@ src/
   engine/
     clock.ts            Fixed-timestep logical clock, injectable (ADR-0012)
     loop.ts             rAF present loop + accumulator + clamp (ADR-0012)
+    renderer.ts         Two-bus renderer: resolve → per-bus → combine → program-out → present
   sources/
     source.ts           Uniform Source interface (ADR-0008)
-    generated-source.ts GPU test-pattern source (the one Phase 0 source kind)
+    generated-source.ts GPU test-pattern source, one per slot (distinct variant)
+    matte-source.ts     GPU Matte generator source (colour / level / gradation)
+    registry.ts         BusSource → Source map used by the renderer (ADR-0008)
     binding.ts          Source→provider binding registry (inputs-and-devices)
   gpu/
     capabilities.ts     WebGPU feature detection + graceful message (ADR-0002)
     device.ts           Device + sRGB swapchain (ADR-0002, ADR-0005)
     present.ts          Blit Program Out to the canvas' sRGB view
-    shaders/*.wgsl.ts   WGSL as string modules (no bundler)
-  app.ts                Headless engine assembly (store + clock + graph + bindings)
-  main.ts               Browser entry: capability guard → device → loop
+    combine.ts          Mix/NAM combine pass (reference §9.1-§9.3)
+    shaders/*.wgsl.ts   WGSL as string modules (present / test-pattern / matte / combine)
+  ui/
+    control-strip.ts    First Web Component control surface, store-bound (ADR-0013)
+  app.ts                Headless engine assembly (store + clock + bindings)
+  main.ts               Browser entry: capability guard → device → sources → renderer → loop
 test/
   unit/                 node:test suites (pure, headless)
   features/             cucumber World + step definitions
@@ -87,9 +97,20 @@ test/
   cucumber.mjs          cucumber-js configuration
 ```
 
-## Phase 0 status
+## Status (Phase 1)
 
-Everything past the source stage is a **pass-through** (ADR-0004): the signal graph,
-store, clock, loop, capability guard, and one generated source are wired end to end,
-but colour correction, digital effects, mix/wipe, keys, DSK, fade, and audio are not
-implemented yet. Those arrive in Phases 1–8 per the [ROADMAP](ROADMAP.md).
+Implemented and rendering: **two buses** each selecting Source 1-4 or the Matte (with
+ADR-0006 substitution), **Program Out** A/B/EFFECT routing, the **Mix** cross-dissolve and
+**NAM** non-additive mix driven by the Mix/Wipe lever, the **Matte generator** (9 colours,
+level, gradation), and the first **Web Component control strip**. The four Source slots are
+distinct generated test patterns; open the app and drag the lever to see A↔B dissolve, or
+pick NAM to watch the bright sweep punch through.
+
+Still **pass-through** (later phases): colour correction, digital effects + frame memory
+(Phase 3), wipe patterns (Phase 2), luminance/chroma keys + DSK (Phase 4), fade (Phase 6),
+and audio (Phase 5). Real browser-input binding (camera/video/image live textures) is the
+one open Phase 1 item — the binding domain exists, the live sources do not yet. See the
+[ROADMAP](ROADMAP.md).
+
+The domain is verified headlessly: 50 `node:test` units and 90 Gherkin scenarios (676
+steps) across source-selection, program-output, transition-mix-nam, and matte-generator.

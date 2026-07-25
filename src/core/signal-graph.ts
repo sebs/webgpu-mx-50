@@ -21,14 +21,21 @@ export class PassthroughStage<F> implements Stage<F> {
   }
 }
 
-/** The fixed hardware stage order past a bus's source (ADR-0004, reference §1). */
-export const STAGE_ORDER = [
-  'colour-correction',
-  'digital-effect',
-  'mix-wipe',
-  'downstream-key',
-  'fade',
-] as const;
+// The fixed hardware flow (ADR-0004, reference §1) splits into three parts around the
+// point where the two buses converge:
+//   per-bus (1-in, run once per bus) → mix/wipe combine (2-in) → downstream (1-in)
+
+/** Per-bus stages, run independently on the A-bus and B-bus branch (1 texture in/out). */
+export const PER_BUS_STAGES = ['colour-correction', 'digital-effect'] as const;
+
+/** The bus-combining stage where the two branches converge (2 textures in, 1 out). */
+export const COMBINE_STAGE = 'mix-wipe' as const;
+
+/** Downstream stages, run on the single composite after combine (1 texture in/out). */
+export const DOWNSTREAM_STAGES = ['downstream-key', 'fade'] as const;
+
+/** The complete fixed stage order, source → Program Out (ADR-0004, reference §1). */
+export const STAGE_ORDER = [...PER_BUS_STAGES, COMBINE_STAGE, ...DOWNSTREAM_STAGES] as const;
 
 export type StageName = (typeof STAGE_ORDER)[number];
 
@@ -50,11 +57,12 @@ export class SignalGraph<F> {
   }
 }
 
-/**
- * Build the Phase 0 graph: the full hardware stage order, every stage a
- * pass-through. Later phases replace individual stages with real GPU passes
- * without changing the order or the graph's shape.
- */
-export function createPhase0Graph<F>(): SignalGraph<F> {
-  return new SignalGraph<F>(STAGE_ORDER.map((name) => new PassthroughStage<F>(name)));
+/** The per-bus branch (colour correction, digital effect). Pass-through until Phase 3+. */
+export function createPerBusGraph<F>(): SignalGraph<F> {
+  return new SignalGraph<F>(PER_BUS_STAGES.map((name) => new PassthroughStage<F>(name)));
+}
+
+/** The downstream branch (DSK, fade), applied after combine. Pass-through until Phase 4+. */
+export function createDownstreamGraph<F>(): SignalGraph<F> {
+  return new SignalGraph<F>(DOWNSTREAM_STAGES.map((name) => new PassthroughStage<F>(name)));
 }

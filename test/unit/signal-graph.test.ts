@@ -1,15 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createPhase0Graph, SignalGraph, STAGE_ORDER } from '../../src/core/signal-graph.js';
+import {
+  createPerBusGraph,
+  createDownstreamGraph,
+  SignalGraph,
+  STAGE_ORDER,
+  PER_BUS_STAGES,
+  DOWNSTREAM_STAGES,
+} from '../../src/core/signal-graph.js';
 
-test('the Phase 0 graph exposes the fixed hardware stage order (ADR-0004)', () => {
-  const graph = createPhase0Graph<string>();
-  assert.deepEqual(graph.stageNames, [...STAGE_ORDER]);
+test('the full stage order is the fixed hardware flow (ADR-0004)', () => {
+  assert.deepEqual(
+    [...STAGE_ORDER],
+    ['colour-correction', 'digital-effect', 'mix-wipe', 'downstream-key', 'fade'],
+  );
 });
 
-test('every Phase 0 stage is a pass-through: run returns the source frame unchanged', () => {
-  const graph = createPhase0Graph<string>();
-  assert.equal(graph.run('SOURCE'), 'SOURCE');
+test('the per-bus and downstream branches expose their stages, all pass-through', () => {
+  const perBus = createPerBusGraph<string>();
+  const downstream = createDownstreamGraph<string>();
+  assert.deepEqual(perBus.stageNames, [...PER_BUS_STAGES]);
+  assert.deepEqual(downstream.stageNames, [...DOWNSTREAM_STAGES]);
+  assert.equal(perBus.run('A'), 'A'); // pass-through
+  assert.equal(downstream.run('composite'), 'composite');
 });
 
 test('stages execute strictly in order', () => {

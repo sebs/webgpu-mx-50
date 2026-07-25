@@ -1,27 +1,21 @@
-// A synthetic Source produced entirely on the GPU (ADR-0008). Phase 1 uses one per
-// Source slot, each with a distinct `variant` (base hue), so the two buses show
-// different pictures and Mix/NAM are visible. Rendered into an owned linear working
-// texture (ADR-0005); the present pass does the sRGB encode.
+// The internal Matte generator as a Source (ADR-0006/0008, reference §4). Renders the
+// Colour Bar pattern or a flat linear colour with optional GRADATION into an owned
+// working texture. The colour/level/gradation semantics live in core/matte.ts; the
+// renderer pushes the current MatteState each frame via setMatte().
 
 import { WORKING_FORMAT } from '../constants.js';
-import { testPatternWGSL } from '../gpu/shaders/test-pattern.wgsl.js';
+import { matteWGSL } from '../gpu/shaders/matte.wgsl.js';
+import { matteFlatColor, isColourBar } from '../core/matte.js';
 import type { Size } from '../core/types.js';
+import type { MatteState } from '../state/state.js';
 import type { Source } from './source.js';
 
-export interface GeneratedOptions {
-  size: Size;
-  /** 0..3 — selects the base hue / Source-slot identity. */
-  variant?: number;
-}
-
-export class GeneratedSource implements Source {
+export class MatteSource implements Source {
   readonly kind = 'generated' as const;
   readonly intrinsicSize: Size;
   isReady = false;
 
-  /** Animation phase in logical ticks; the renderer sets this each frame. */
-  phase = 0;
-  private readonly variant: number;
+  private matte: MatteState = { colorIndex: 0, level: 1, gradation: false };
 
   private texture: GPUTexture | null = null;
   private pipeline: GPURenderPipeline | null = null;
@@ -30,10 +24,14 @@ export class GeneratedSource implements Source {
 
   constructor(
     private readonly device: GPUDevice,
-    options: GeneratedOptions,
+    size: Size,
   ) {
-    this.intrinsicSize = options.size;
-    this.variant = options.variant ?? 0;
+    this.intrinsicSize = size;
+  }
+
+  /** Push the current Matte panel state (renderer calls this each frame). */
+  setMatte(matte: MatteState): void {
+    this.matte = matte;
   }
 
   async acquire(): Promise<void> {
@@ -46,7 +44,7 @@ export class GeneratedSource implements Source {
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
 
-    const module = device.createShaderModule({ code: testPatternWGSL });
+    const module = device.createShaderModule({ code: matteWGSL });
     this.pipeline = device.createRenderPipeline({
       layout: 'auto',
       vertex: { module, entryPoint: 'vs' },
@@ -54,9 +52,9 @@ export class GeneratedSource implements Source {
       primitive: { topology: 'triangle-list' },
     });
 
-    // Uniforms: resolution (vec2f) + phase (f32) + variant (f32) = 16 bytes.
+    // Uniforms: color (vec3f, 16-aligned) + gradation (f32) + isBars (f32) = 32 bytes.
     this.uniform = device.createBuffer({
-      size: 16,
+      size: 32,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     this.bindGroup = device.createBindGroup({
@@ -70,11 +68,14 @@ export class GeneratedSource implements Source {
   getFrameTexture(device: GPUDevice): GPUTexture {
     const { texture, pipeline, uniform, bindGroup } = this;
     if (!texture || !pipeline || !uniform || !bindGroup) {
-      throw new Error('GeneratedSource.getFrameTexture() called before acquire().');
+      throw new Error('MatteSource.getFrameTexture() called before acquire().');
     }
 
-    const { width, height } = this.intrinsicSize;
-    device.queue.writeBuffer(uniform, 0, new Float32Array([width, height, this.phase, this.variant]));
+    const [r, g, b] = matteFlatColor(this.matte);
+    const bars = isColourBar(this.matte.colorIndex) ? 1 : 0;
+    const gradation = this.matte.gradation ? 1 : 0;
+    // std140 layout: [r, g, b, pad, gradation, isBars, pad, pad]
+    device.queue.writeBuffer(uniform, 0, new Float32Array([r, g, b, 0, gradation, bars, 0, 0]));
 
     const encoder = device.createCommandEncoder();
     const pass = encoder.beginRenderPass({
