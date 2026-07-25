@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>web-mx-50 — Phase 0 skeleton</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #0b0d10;
+        color: #e6e8eb;
+        font: 14px/1.5 system-ui, sans-serif;
+      }
+      #app {
+        display: grid;
+        place-items: center;
+        min-height: 100%;
+        padding: 1rem;
+        box-sizing: border-box;
+      }
+      /* Program Out canvas — the effected composite (Phase 0: one source). */
+      #program {
+        width: min(100%, 1280px);
+        aspect-ratio: 16 / 9;
+        height: auto;
+        background: #000;
+        border-radius: 6px;
+        box-shadow: 0 0 0 1px #23272e, 0 10px 40px rgba(0, 0, 0, 0.5);
+      }
+      #capability {
+        max-width: 40rem;
+        padding: 1.25rem 1.5rem;
+        border: 1px solid #5a2b2b;
+        border-radius: 8px;
+        background: #1a1113;
+        color: #f2c7c7;
+      }
+      #capability h1 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+      #capability code { color: #e6e8eb; }
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="program" width="1280" height="720" aria-label="Program output"></canvas>
+      <div id="capability" role="alert" hidden></div>
+    </main>
+    <!-- banira `dev --ts` transpiles TypeScript on the fly and maps .js -> .ts. -->
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
