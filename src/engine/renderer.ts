@@ -10,6 +10,7 @@ import { resolveBusSource } from '../core/resolve.js';
 import { compositeRule } from '../core/transition.js';
 import { directOutSource } from '../core/program.js';
 import { CombinePass } from '../gpu/combine.js';
+import { WipePass } from '../gpu/wipe.js';
 import { PresentPass } from '../gpu/present.js';
 import type { SignalGraph } from '../core/signal-graph.js';
 import type { Size } from '../core/types.js';
@@ -34,6 +35,7 @@ export class Renderer {
   private readonly perBusB: SignalGraph<GPUTexture>;
   private readonly downstream: SignalGraph<GPUTexture>;
   private readonly combine: CombinePass;
+  private readonly wipe: WipePass;
   private readonly present: PresentPass;
 
   constructor(private readonly deps: RendererDeps) {
@@ -41,6 +43,7 @@ export class Renderer {
     this.perBusB = createPerBusGraph<GPUTexture>();
     this.downstream = createDownstreamGraph<GPUTexture>();
     this.combine = new CombinePass(deps.gpu.device, deps.size);
+    this.wipe = new WipePass(deps.gpu.device, deps.size);
     this.present = new PresentPass(deps.gpu.device, deps.gpu.srgbView);
   }
 
@@ -62,7 +65,10 @@ export class Renderer {
     // EFFECT: full composite through the signal graph.
     const aTex = this.perBusA.run(registry.get(resolveBusSource(state.busA, 'mixWipe')).getFrameTexture(device));
     const bTex = this.perBusB.run(registry.get(resolveBusSource(state.busB, 'mixWipe')).getFrameTexture(device));
-    const composite = this.combine.render(aTex, bTex, compositeRule(state.transition.type), state.transition.lever);
+    const composite =
+      state.transition.type === 'wipe'
+        ? this.wipe.render(aTex, bTex, state)
+        : this.combine.render(aTex, bTex, compositeRule(state.transition.type), state.transition.lever);
     const out = this.downstream.run(composite);
     this.present.render(gpu.context, out, gpu.srgbView);
   }

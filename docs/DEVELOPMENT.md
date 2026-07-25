@@ -65,6 +65,7 @@ src/
     transition.ts       Mix weights, composite rule, NAM bias (reference §9)
     program.ts          Program Out video + audio routing (reference §2)
     matte.ts            Matte palette, LEVEL/GRADATION semantics, GPU colour (reference §4)
+    wipe.ts             Wipe families/variants, numbering oracle, legality, edges, direction (reference §9.4/§9.7)
   state/
     state.ts            PanelState + FACTORY_PRESET + fieldPreset (ADR-0011, ref §18)
     commands.ts         Typed command union
@@ -85,7 +86,8 @@ src/
     device.ts           Device + sRGB swapchain (ADR-0002, ADR-0005)
     present.ts          Blit Program Out to the canvas' sRGB view
     combine.ts          Mix/NAM combine pass (reference §9.1-§9.3)
-    shaders/*.wgsl.ts   WGSL as string modules (present / test-pattern / matte / combine)
+    wipe.ts             Compositional wipe pass (reference §9.4)
+    shaders/*.wgsl.ts   WGSL string modules (present / test-pattern / matte / combine / wipe)
   ui/
     control-strip.ts    First Web Component control surface, store-bound (ADR-0013)
   app.ts                Headless engine assembly (store + clock + bindings)
@@ -97,20 +99,25 @@ test/
   cucumber.mjs          cucumber-js configuration
 ```
 
-## Status (Phase 1)
+## Status (Phase 2)
 
-Implemented and rendering: **two buses** each selecting Source 1-4 or the Matte (with
-ADR-0006 substitution), **Program Out** A/B/EFFECT routing, the **Mix** cross-dissolve and
-**NAM** non-additive mix driven by the Mix/Wipe lever, the **Matte generator** (9 colours,
-level, gradation), and the first **Web Component control strip**. The four Source slots are
-distinct generated test patterns; open the app and drag the lever to see A↔B dissolve, or
-pick NAM to watch the bright sweep punch through.
+Implemented and rendering: **two buses** each selecting Source 1-4 or the Matte (ADR-0006
+substitution), **Program Out** A/B/EFFECT routing, **Mix** + **NAM** transitions, the
+**Matte generator**, and the full **compositional wipe engine** — 7 families × 4 variants,
+Compression/Slide/Multi/Pairing/Blinds modifiers, Border/Soft edges, One-Way/Reverse
+direction, Square Aspect, the numbering oracle (001 plain, +128 reversed) and Blinds
+legality fallback — driven by the Mix/Wipe lever, plus the Web Component control strip.
+Open the app, pick WIPE, choose a family, and drag the lever.
 
 Still **pass-through** (later phases): colour correction, digital effects + frame memory
-(Phase 3), wipe patterns (Phase 2), luminance/chroma keys + DSK (Phase 4), fade (Phase 6),
-and audio (Phase 5). Real browser-input binding (camera/video/image live textures) is the
-one open Phase 1 item — the binding domain exists, the live sources do not yet. See the
-[ROADMAP](ROADMAP.md).
+(Phase 3), luminance/chroma keys + DSK (Phase 4), fade (Phase 6), audio (Phase 5).
 
-The domain is verified headlessly: 50 `node:test` units and 90 Gherkin scenarios (676
-steps) across source-selection, program-output, transition-mix-nam, and matte-generator.
+Known deferrals: **golden-image pixel tests** (no headless-WebGPU runner in this
+environment); **Compression/Slide/Blinds are domain-modelled but not yet in the wipe
+shader** (it renders base families + edges + direction + aspect + Multi/Pairing); the
+underivable Pattern-Table parts stay `@wip`; and **real browser-input binding**
+(camera/video/image live textures) is still open from Phase 1. See the [ROADMAP](ROADMAP.md).
+
+The domain is verified headlessly: **60 `node:test` units** and **176 Gherkin scenarios
+(1237 steps)** across source-selection, program-output, transition-mix-nam,
+matte-generator, wipe-patterns, and wipe-edge-and-direction.

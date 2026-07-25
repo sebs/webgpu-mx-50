@@ -33,10 +33,37 @@ export interface MatteState {
 /** The Mix/Wipe block selection (reference §9). */
 export type TransitionType = 'mix' | 'nam' | 'wipe' | 'lum-key' | 'chroma-key';
 
+/** The 7 wipe pattern families (reference §9.4, ADR-0009). */
+export type WipeFamily = 'straight' | 'corner' | 'diagonal' | 'triangle' | 'split' | 'mosaic' | 'square';
+
+/** Boundary treatment: a hard edge, a coloured Border (narrow/wide), or a Soft feather. */
+export type WipeEdge = 'hard' | 'border-narrow' | 'border-wide' | 'soft-narrow' | 'soft-wide';
+
+/** The stackable Modify functions (reference §9.4). Each 0/false = off. */
+export interface WipeModifiers {
+  compression: 0 | 1 | 2; // 1 = incoming compressed, 2 = both
+  slide: 0 | 1 | 2; // 1 = incoming slides, 2 = both
+  multi: number; // 0 = off, 1..6 multi modes
+  pairing: boolean;
+  blinds: boolean;
+}
+
+/** The composed wipe (reference §9.4, ADR-0009). */
+export interface WipeState {
+  family: WipeFamily;
+  variant: number; // 0..3
+  modifiers: WipeModifiers;
+  edge: WipeEdge;
+  reverse: boolean;
+  oneWay: boolean;
+  aspect: number; // -1..1, 0 = centre; Square family only
+}
+
 export interface TransitionState {
   type: TransitionType;
   /** Mix/Wipe lever position, 0 = fully A-bus, 1 = fully B-bus. */
   lever: number;
+  wipe: WipeState;
 }
 
 /** What leaves the unit (reference §2): A/B direct-out, or the full EFFECT composite. */
@@ -68,7 +95,19 @@ export const FACTORY_PRESET: PanelState = {
   busA: { source: 1, substituteSource: 1 },
   busB: { source: 2, substituteSource: 2 },
   matte: { colorIndex: 0, level: 1, gradation: false },
-  transition: { type: 'mix', lever: 0 },
+  transition: {
+    type: 'mix',
+    lever: 0,
+    wipe: {
+      family: 'straight',
+      variant: 0,
+      modifiers: { compression: 0, slide: 0, multi: 0, pairing: false, blinds: false },
+      edge: 'hard',
+      reverse: false,
+      oneWay: false,
+      aspect: 0,
+    },
+  },
   programOut: 'effect',
   system: { reset: 'on' },
 };

@@ -168,6 +168,18 @@ lever to life.
 
 ### Phase 2 — Compositional wipe engine
 
+> **Status: ✅ largely done.** The compositional engine is in: 7 families × 4 variants,
+> the modifier state machine (Compression/Slide/Multi/Pairing/Blinds), Border/Soft edges,
+> One-Way/Reverse direction, Square Aspect, the numbering oracle (001 plain, +128 =
+> reversed, RS-422/AG-A800 addressing) and the Blinds legality fallback — all rendering
+> through a signed-distance-field wipe shader and driven by the lever. 86 more Gherkin
+> scenarios green (176 total). **Deferred:** golden-image pixel tests (no headless-WebGPU
+> runner available here); the shader realises the base families + edges + direction +
+> aspect + Multi/Pairing coordinate ops, while **Compression/Slide/Blinds are
+> domain-modelled but not yet in the shader** (fall through to the base field); and the
+> underivable parts of the Pattern Table (generic illegal-modifier combos, panel-only
+> 256–287) remain `@wip`, pending the manual's printed table.
+
 Replace the plain dissolve with the WJ-MX50's headline feature: the 287-combination
 wipe matrix built compositionally, not hand-authored.
 

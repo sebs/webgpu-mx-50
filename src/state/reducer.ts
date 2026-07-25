@@ -5,7 +5,8 @@
 // specs (ADR-0016), no GPU or DOM needed.
 
 import { MATTE_COLOR_COUNT } from './state.js';
-import type { PanelState } from './state.js';
+import { blindsLegal, pressBorder, pressSoft, VARIANT_COUNT } from '../core/wipe.js';
+import type { PanelState, WipeState } from './state.js';
 import type { Command } from './commands.js';
 
 /** Clamp a value into [min, max]. */
@@ -17,6 +18,11 @@ export function clamp(value: number, min: number, max: number): number {
 function wrapColor(index: number): number {
   const n = MATTE_COLOR_COUNT;
   return ((index % n) + n) % n;
+}
+
+/** Return a new state with the wipe sub-state replaced. */
+function withWipe(state: PanelState, wipe: WipeState): PanelState {
+  return { ...state, transition: { ...state.transition, wipe } };
 }
 
 export function reduce(state: PanelState, command: Command): PanelState {
@@ -68,6 +74,100 @@ export function reduce(state: PanelState, command: Command): PanelState {
     case 'SET_GRADATION':
       if (state.matte.gradation === command.on) return state;
       return { ...state, matte: { ...state.matte, gradation: command.on } };
+
+    // --- wipe (reference §9.4, ADR-0009) ---
+
+    case 'PRESS_WIPE_FAMILY': {
+      const w = state.transition.wipe;
+      if (w.family === command.family) {
+        return withWipe(state, { ...w, variant: (w.variant + 1) % VARIANT_COUNT });
+      }
+      // Switching family drops Blinds if it is illegal on the new family.
+      const blinds = w.modifiers.blinds && blindsLegal(command.family);
+      return withWipe(state, {
+        ...w,
+        family: command.family,
+        variant: 0,
+        modifiers: { ...w.modifiers, blinds },
+      });
+    }
+
+    case 'SET_WIPE_VARIANT': {
+      const w = state.transition.wipe;
+      const variant = ((command.variant % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT;
+      if (variant === w.variant) return state;
+      return withWipe(state, { ...w, variant });
+    }
+
+    case 'PRESS_COMPRESSION': {
+      const w = state.transition.wipe;
+      const compression = (((w.modifiers.compression + 1) % 3) as 0 | 1 | 2);
+      return withWipe(state, { ...w, modifiers: { ...w.modifiers, compression } });
+    }
+
+    case 'PRESS_SLIDE': {
+      const w = state.transition.wipe;
+      const slide = (((w.modifiers.slide + 1) % 3) as 0 | 1 | 2);
+      return withWipe(state, { ...w, modifiers: { ...w.modifiers, slide } });
+    }
+
+    case 'SET_WIPE_MULTI': {
+      const w = state.transition.wipe;
+      const multi = clamp(Math.round(command.mode), 0, 6);
+      if (multi === w.modifiers.multi) return state;
+      return withWipe(state, { ...w, modifiers: { ...w.modifiers, multi } });
+    }
+
+    case 'PRESS_WIPE_MULTI': {
+      const w = state.transition.wipe;
+      const multi = w.modifiers.multi >= 6 || w.modifiers.multi < 1 ? 1 : w.modifiers.multi + 1;
+      return withWipe(state, { ...w, modifiers: { ...w.modifiers, multi } });
+    }
+
+    case 'SET_PAIRING': {
+      const w = state.transition.wipe;
+      if (w.modifiers.pairing === command.on) return state;
+      return withWipe(state, { ...w, modifiers: { ...w.modifiers, pairing: command.on } });
+    }
+
+    case 'SET_BLINDS': {
+      const w = state.transition.wipe;
+      if (command.on && !blindsLegal(w.family)) {
+        // Illegal (reference §9.4): LED stays out and the pattern falls back to Straight.
+        return withWipe(state, { ...w, family: 'straight', modifiers: { ...w.modifiers, blinds: false } });
+      }
+      if (w.modifiers.blinds === command.on) return state;
+      return withWipe(state, { ...w, modifiers: { ...w.modifiers, blinds: command.on } });
+    }
+
+    case 'PRESS_BORDER': {
+      const w = state.transition.wipe;
+      return withWipe(state, { ...w, edge: pressBorder(w.edge) });
+    }
+
+    case 'PRESS_SOFT': {
+      const w = state.transition.wipe;
+      return withWipe(state, { ...w, edge: pressSoft(w.edge) });
+    }
+
+    case 'SET_REVERSE': {
+      const w = state.transition.wipe;
+      if (w.reverse === command.on) return state;
+      return withWipe(state, { ...w, reverse: command.on });
+    }
+
+    case 'SET_ONE_WAY': {
+      const w = state.transition.wipe;
+      if (w.oneWay === command.on) return state;
+      return withWipe(state, { ...w, oneWay: command.on });
+    }
+
+    case 'SET_WIPE_ASPECT': {
+      const w = state.transition.wipe;
+      const aspect = clamp(command.value, -1, 1);
+      if (aspect === w.aspect) return state;
+      return withWipe(state, { ...w, aspect });
+    }
 
     case 'LOAD_STATE':
       // Whole-panel replace: Event Memory recall, Reset/field-preset boot, preset import.
