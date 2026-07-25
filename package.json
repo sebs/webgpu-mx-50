@@ -5,7 +5,7 @@
   "type": "module",
   "description": "A WebGPU browser recreation of the Panasonic WJ-MX50 two-bus digital A/V mixer.",
   "scripts": {
-    "dev": "banira dev src/main.ts --root . --ts --hmr",
+    "dev": "banira dev src/main.ts --root . --ts",
     "build": "banira compile src/main.ts --output dist",
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && npm run test:unit && npm run test:features && npm run test:golden",

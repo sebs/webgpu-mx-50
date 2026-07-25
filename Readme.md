@@ -17,9 +17,9 @@ npm test        # typecheck + unit + cucumber features + golden scaffolding
 ```
 
 Stack: vanilla TypeScript + WebGPU + [banira](https://github.com/sebs/banira), no UI
-framework (ADR-0003). Current status: **Phase 2** — two buses with Matte substitution,
-Program Out (A/B/EFFECT), Mix + NAM transitions, the Matte generator, and the
-compositional wipe engine (7 families, modifiers, border/soft, direction, aspect, the
-+128 numbering oracle), all on the Mix/Wipe lever, with a Web Component control strip. See
+framework (ADR-0003). Current status: **Phase 3 (in progress)** — two buses + Matte
+substitution, Program Out (A/B/EFFECT), Mix/NAM + the compositional wipe engine, the Matte
+generator, and now per-bus colour correction + the four filter digital effects
+(Nega/Mosaic/Mono/Paint); freeze family (Still/Strobe/Multi/Trail) is next. See
 [docs/ROADMAP.md](docs/ROADMAP.md) for the build plan and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 for how to run and test.

@@ -7,20 +7,47 @@
 // the Matte generator, the Mix/Wipe transition, and Program Out selection. Later
 // phases extend this tree (colour correction, digital effects, DSK, fade, audio).
 
-import type { BusSource, SourceSlot } from '../core/types.js';
+import type { BusId, BusSource, SourceSlot } from '../core/types.js';
 
 /** Rear Reset switch: ON = factory preset each power-up, OFF = field preset (reference §18). */
 export type ResetMode = 'on' | 'off';
 
+/** Per-bus colour correction tri-state (reference §6): off → CHROMA only → +RGB joystick. */
+export type ColourCorrectMode = 'off' | 'chroma-only' | 'chroma-plus-joystick';
+
+export interface ColourCorrectState {
+  mode: ColourCorrectMode;
+  /** CHROMA/saturation, 0..1; 0.5 = centre (original), 0 = MIN (black & white). */
+  chroma: number;
+  /** RGB tint joystick, each axis -1..1; (0,0) = centre (original balance). */
+  joystickX: number;
+  joystickY: number;
+}
+
 /**
- * A bus's current selection plus its Matte substitute (ADR-0006). `source` is what
- * the operator picked (Source 1-4 or Matte); `substituteSource` is the last non-Matte
- * source held — the "blinking" button the unit falls back to wherever Matte is illegal
- * (keys, DSK, fade, direct program out).
+ * A bus's current selection plus its Matte substitute (ADR-0006) and its colour
+ * correction (reference §6, applied before the Digital Effect stage).
  */
 export interface BusState {
   source: BusSource;
   substituteSource: SourceSlot;
+  colourCorrect: ColourCorrectState;
+}
+
+/** The filter-family digital effects (reference §8.1–§8.4). */
+export type FilterEffect = 'nega' | 'mosaic' | 'mono' | 'paint';
+
+/**
+ * The Digital Effect block (reference §8). It targets exactly one bus at a time; `armed`
+ * is the chosen-but-not-yet-ON effect. Phase 3 (this slice) covers the four filters; the
+ * freeze family (Still/Strobe/Multi/Trail) lands next.
+ */
+export interface DigitalEffectState {
+  bus: BusId;
+  armed: FilterEffect | null;
+  active: { nega: boolean; mosaic: boolean; mono: boolean; paint: boolean };
+  mosaicSize: number; // 1..31 (reference §8.2)
+  paintLevel: number; // 0..1, MIN..MAX (reference §8.4)
 }
 
 /** The internal Matte generator (reference §4). `colorIndex` steps the 9 colours. */
@@ -79,6 +106,7 @@ export interface PanelState {
   busA: BusState;
   busB: BusState;
   matte: MatteState;
+  digitalEffect: DigitalEffectState;
   transition: TransitionState;
   programOut: ProgramOut;
   system: SystemState;
@@ -91,10 +119,19 @@ export const MATTE_COLOR_COUNT = 9;
  * The single canonical factory preset (reference §18, Reset ON). Every power-up in
  * Reset-ON mode loads exactly this, guarding against odd states after a power fault.
  */
+const NEUTRAL_CC: ColourCorrectState = { mode: 'off', chroma: 0.5, joystickX: 0, joystickY: 0 };
+
 export const FACTORY_PRESET: PanelState = {
-  busA: { source: 1, substituteSource: 1 },
-  busB: { source: 2, substituteSource: 2 },
+  busA: { source: 1, substituteSource: 1, colourCorrect: { ...NEUTRAL_CC } },
+  busB: { source: 2, substituteSource: 2, colourCorrect: { ...NEUTRAL_CC } },
   matte: { colorIndex: 0, level: 1, gradation: false },
+  digitalEffect: {
+    bus: 'A',
+    armed: null,
+    active: { nega: false, mosaic: false, mono: false, paint: false },
+    mosaicSize: 16,
+    paintLevel: 0.5,
+  },
   transition: {
     type: 'mix',
     lever: 0,

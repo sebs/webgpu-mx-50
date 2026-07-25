@@ -29,12 +29,12 @@ test('direct-out audio carries only its bus + aux; EFFECT carries both buses + M
 
 test('direct-out of a Matte-holding bus yields the blinking substitute, not Matte', () => {
   const s = withProgram('A');
-  s.busA = { source: 'matte', substituteSource: 3 };
+  s.busA = { ...s.busA, source: 'matte', substituteSource: 3 };
   assert.equal(directOutSource(s, 'A'), 3);
 });
 
 test('direct-out of a plain bus yields that source', () => {
   const s = withProgram('B');
-  s.busB = { source: 4, substituteSource: 4 };
+  s.busB = { ...s.busB, source: 4, substituteSource: 4 };
   assert.equal(directOutSource(s, 'B'), 4);
 });

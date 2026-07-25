@@ -5,10 +5,11 @@
 //
 // It reads the store snapshot but never calls into the UI (ADR-0011/0012).
 
-import { createPerBusGraph, createDownstreamGraph } from '../core/signal-graph.js';
+import { createDownstreamGraph } from '../core/signal-graph.js';
 import { resolveBusSource } from '../core/resolve.js';
 import { compositeRule } from '../core/transition.js';
 import { directOutSource } from '../core/program.js';
+import { BusProcessor } from '../gpu/bus-processor.js';
 import { CombinePass } from '../gpu/combine.js';
 import { WipePass } from '../gpu/wipe.js';
 import { PresentPass } from '../gpu/present.js';
@@ -31,16 +32,17 @@ export interface RendererDeps {
 }
 
 export class Renderer {
-  private readonly perBusA: SignalGraph<GPUTexture>;
-  private readonly perBusB: SignalGraph<GPUTexture>;
+  // The per-bus stages (Colour Correction + Digital Effect) are realised by BusProcessor.
+  private readonly busProcA: BusProcessor;
+  private readonly busProcB: BusProcessor;
   private readonly downstream: SignalGraph<GPUTexture>;
   private readonly combine: CombinePass;
   private readonly wipe: WipePass;
   private readonly present: PresentPass;
 
   constructor(private readonly deps: RendererDeps) {
-    this.perBusA = createPerBusGraph<GPUTexture>();
-    this.perBusB = createPerBusGraph<GPUTexture>();
+    this.busProcA = new BusProcessor(deps.gpu.device, deps.size);
+    this.busProcB = new BusProcessor(deps.gpu.device, deps.size);
     this.downstream = createDownstreamGraph<GPUTexture>();
     this.combine = new CombinePass(deps.gpu.device, deps.size);
     this.wipe = new WipePass(deps.gpu.device, deps.size);
@@ -63,8 +65,10 @@ export class Renderer {
     }
 
     // EFFECT: full composite through the signal graph.
-    const aTex = this.perBusA.run(registry.get(resolveBusSource(state.busA, 'mixWipe')).getFrameTexture(device));
-    const bTex = this.perBusB.run(registry.get(resolveBusSource(state.busB, 'mixWipe')).getFrameTexture(device));
+    const aSrc = registry.get(resolveBusSource(state.busA, 'mixWipe')).getFrameTexture(device);
+    const bSrc = registry.get(resolveBusSource(state.busB, 'mixWipe')).getFrameTexture(device);
+    const aTex = this.busProcA.render(aSrc, state, 'A');
+    const bTex = this.busProcB.render(bSrc, state, 'B');
     const composite =
       state.transition.type === 'wipe'
         ? this.wipe.render(aTex, bTex, state)

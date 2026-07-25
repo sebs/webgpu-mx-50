@@ -58,6 +58,15 @@ test('ASSIGN_SOURCE tracks the blinking substitute (last non-Matte source, ADR-0
   assert.equal(s2.busA.substituteSource, 3); // preserved while Matte is selected
 });
 
+test('ASSIGN_SOURCE preserves other per-bus fields (e.g. colourCorrect)', () => {
+  let s = structuredClone(FACTORY_PRESET);
+  s = reduce(s, { type: 'PRESS_COLOUR_CORRECT', bus: 'A' }); // cc → chroma-only
+  const next = reduce(s, { type: 'ASSIGN_SOURCE', bus: 'A', source: 3 });
+  assert.equal(next.busA.source, 3);
+  assert.ok(next.busA.colourCorrect, 'colourCorrect must survive ASSIGN_SOURCE');
+  assert.equal(next.busA.colourCorrect.mode, 'chroma-only');
+});
+
 test('SET_PROGRAM_OUT switches the program mode', () => {
   const s = structuredClone(FACTORY_PRESET);
   assert.equal(reduce(s, { type: 'SET_PROGRAM_OUT', mode: 'A' }).programOut, 'A');

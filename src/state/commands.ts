@@ -4,7 +4,7 @@
 // (reducer.ts) maps (state, command) -> next state as a pure function.
 
 import type { BusId, BusSource } from '../core/types.js';
-import type { PanelState, ProgramOut, TransitionType, WipeFamily } from './state.js';
+import type { FilterEffect, PanelState, ProgramOut, TransitionType, WipeFamily } from './state.js';
 
 export type Command =
   | { type: 'ASSIGN_SOURCE'; bus: BusId; source: BusSource }
@@ -15,6 +15,16 @@ export type Command =
   | { type: 'STEP_MATTE_COLOR'; direction: 'up' | 'down' }
   | { type: 'SET_MATTE_LEVEL'; level: number }
   | { type: 'SET_GRADATION'; on: boolean }
+  // --- colour correction (reference §6) ---
+  | { type: 'PRESS_COLOUR_CORRECT'; bus: BusId } // cycle off → chroma → +joystick → off
+  | { type: 'SET_CHROMA'; bus: BusId; value: number }
+  | { type: 'SET_CC_JOYSTICK'; bus: BusId; x: number; y: number }
+  // --- digital effect: filters (reference §8.1–§8.4) ---
+  | { type: 'SELECT_EFFECT_BUS'; bus: BusId }
+  | { type: 'CHOOSE_EFFECT'; effect: FilterEffect }
+  | { type: 'PRESS_EFFECT_ON' } // toggle the armed effect on the target bus
+  | { type: 'SET_MOSAIC_SIZE'; step: number } // 1..31
+  | { type: 'SET_PAINT_LEVEL'; level: number } // 0..1
   // --- wipe (reference §9.4, ADR-0009) ---
   | { type: 'PRESS_WIPE_FAMILY'; family: WipeFamily } // select family, or cycle its variant
   | { type: 'SET_WIPE_VARIANT'; variant: number }

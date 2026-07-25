@@ -206,6 +206,14 @@ wipe matrix built compositionally, not hand-authored.
 
 ### Phase 3 — Digital effects and GPU frame memory
 
+> **Status: 🟡 in progress (filters + colour correction done).** Per-bus **Colour
+> Correction** (tri-state off/CHROMA/+joystick, saturation, B&W at MIN, mono tint) and the
+> four **filter effects** (Nega, Mosaic w/ 31-step SIZE, Mono, Paint w/ LEVEL) render
+> through a per-bus BusProcessor pass, with per-bus/ON selection, the one-bus-at-a-time
+> rule, and Mono-overrides-colour-correction. 42 more Gherkin scenarios green (218 total).
+> **Still to come this phase:** the freeze family (Still/Strobe/Multi/Trail) with GPU frame
+> memory and the exclusion state machine (ADR-0007), and position control + Scene Grabber.
+
 Build the per-bus image-processing block: colour correction, geometric position, and
 the full Digital Effect block including the four freeze-family effects that share GPU
 frame memory.

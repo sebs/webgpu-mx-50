@@ -66,6 +66,8 @@ src/
     program.ts          Program Out video + audio routing (reference §2)
     matte.ts            Matte palette, LEVEL/GRADATION semantics, GPU colour (reference §4)
     wipe.ts             Wipe families/variants, numbering oracle, legality, edges, direction (reference §9.4/§9.7)
+    colour-correct.ts   Colour-correction tri-state, CHROMA/saturation, mono tint (reference §6)
+    digital-effect.ts   Filter selection, one-bus rule, Mono override, Paint coarseness (reference §8)
   state/
     state.ts            PanelState + FACTORY_PRESET + fieldPreset (ADR-0011, ref §18)
     commands.ts         Typed command union
@@ -87,7 +89,8 @@ src/
     present.ts          Blit Program Out to the canvas' sRGB view
     combine.ts          Mix/NAM combine pass (reference §9.1-§9.3)
     wipe.ts             Compositional wipe pass (reference §9.4)
-    shaders/*.wgsl.ts   WGSL string modules (present / test-pattern / matte / combine / wipe)
+    bus-processor.ts    Per-bus colour correction + filter effects pass (reference §6, §8.1-§8.4)
+    shaders/*.wgsl.ts   WGSL string modules (present / test-pattern / matte / combine / wipe / bus-effect)
   ui/
     control-strip.ts    First Web Component control surface, store-bound (ADR-0013)
   app.ts                Headless engine assembly (store + clock + bindings)
@@ -99,25 +102,26 @@ test/
   cucumber.mjs          cucumber-js configuration
 ```
 
-## Status (Phase 2)
+## Status (Phase 3, in progress)
 
-Implemented and rendering: **two buses** each selecting Source 1-4 or the Matte (ADR-0006
-substitution), **Program Out** A/B/EFFECT routing, **Mix** + **NAM** transitions, the
-**Matte generator**, and the full **compositional wipe engine** — 7 families × 4 variants,
-Compression/Slide/Multi/Pairing/Blinds modifiers, Border/Soft edges, One-Way/Reverse
-direction, Square Aspect, the numbering oracle (001 plain, +128 reversed) and Blinds
-legality fallback — driven by the Mix/Wipe lever, plus the Web Component control strip.
-Open the app, pick WIPE, choose a family, and drag the lever.
+Implemented and rendering: **two buses** + Matte substitution, **Program Out** A/B/EFFECT,
+**Mix/NAM** transitions, the **Matte generator**, the full **compositional wipe engine**
+(7 families, modifiers, border/soft, direction, aspect, +128 numbering oracle), and — new
+this slice — per-bus **Colour Correction** (tri-state, CHROMA/B&W, RGB-joystick mono tint)
+and the four **filter Digital Effects** (Nega, Mosaic + 31-step SIZE, Mono, Paint + LEVEL),
+applied per bus through the BusProcessor pass with the one-bus-at-a-time and
+Mono-overrides-correction rules. Open the app, pick a Digital-FX bus, choose an effect,
+press ON; or turn on CC and pull CHROMA to MIN for black & white.
 
-Still **pass-through** (later phases): colour correction, digital effects + frame memory
-(Phase 3), luminance/chroma keys + DSK (Phase 4), fade (Phase 6), audio (Phase 5).
+Still to come: **freeze family** (Still/Strobe/Multi/Trail + GPU frame memory, ADR-0007)
+and **position/Scene-Grabber** (rest of Phase 3), then keys + DSK (Phase 4), audio
+(Phase 5), fade + auto take/fade (Phase 6), event memory + special modes (Phase 7).
 
-Known deferrals: **golden-image pixel tests** (no headless-WebGPU runner in this
-environment); **Compression/Slide/Blinds are domain-modelled but not yet in the wipe
-shader** (it renders base families + edges + direction + aspect + Multi/Pairing); the
-underivable Pattern-Table parts stay `@wip`; and **real browser-input binding**
-(camera/video/image live textures) is still open from Phase 1. See the [ROADMAP](ROADMAP.md).
+Known deferrals: **golden-image pixel tests** (no headless-WebGPU runner here);
+Compression/Slide/Blinds not yet in the wipe shader; underivable Pattern-Table parts `@wip`;
+**real browser-input binding** (camera/video/image live textures) still open from Phase 1.
+See the [ROADMAP](ROADMAP.md).
 
-The domain is verified headlessly: **60 `node:test` units** and **176 Gherkin scenarios
-(1237 steps)** across source-selection, program-output, transition-mix-nam,
-matte-generator, wipe-patterns, and wipe-edge-and-direction.
+The domain is verified headlessly: **68 `node:test` units** and **218 Gherkin scenarios
+(1516 steps)** across the source, program-out, mix/nam, matte, wipe, colour-correction, and
+digital-effects-filters features.

@@ -7,6 +7,7 @@ import type { ResolveContext } from '../../src/core/resolve.js';
 const bus = (source: BusState['source'], substituteSource: 1 | 2 | 3 | 4 = 1): BusState => ({
   source,
   substituteSource,
+  colourCorrect: { mode: 'off', chroma: 0.5, joystickX: 0, joystickY: 0 },
 });
 
 const CONTEXTS: ResolveContext[] = ['mixWipe', 'key', 'dsk', 'fade', 'directOut'];

@@ -6,8 +6,15 @@
 
 import { MATTE_COLOR_COUNT } from './state.js';
 import { blindsLegal, pressBorder, pressSoft, VARIANT_COUNT } from '../core/wipe.js';
-import type { PanelState, WipeState } from './state.js';
+import type { BusId } from '../core/types.js';
+import type { ColourCorrectMode, ColourCorrectState, DigitalEffectState, PanelState, WipeState } from './state.js';
 import type { Command } from './commands.js';
+
+const CC_CYCLE: Record<ColourCorrectMode, ColourCorrectMode> = {
+  off: 'chroma-only',
+  'chroma-only': 'chroma-plus-joystick',
+  'chroma-plus-joystick': 'off',
+};
 
 /** Clamp a value into [min, max]. */
 export function clamp(value: number, min: number, max: number): number {
@@ -25,6 +32,17 @@ function withWipe(state: PanelState, wipe: WipeState): PanelState {
   return { ...state, transition: { ...state.transition, wipe } };
 }
 
+/** Return a new state with a bus's colour correction replaced. */
+function withBusCC(state: PanelState, bus: BusId, cc: ColourCorrectState): PanelState {
+  const key = bus === 'A' ? 'busA' : 'busB';
+  return { ...state, [key]: { ...state[key], colourCorrect: cc } };
+}
+
+/** Return a new state with the digital-effect block replaced. */
+function withEffect(state: PanelState, digitalEffect: DigitalEffectState): PanelState {
+  return { ...state, digitalEffect };
+}
+
 export function reduce(state: PanelState, command: Command): PanelState {
   switch (command.type) {
     case 'ASSIGN_SOURCE': {
@@ -36,7 +54,8 @@ export function reduce(state: PanelState, command: Command): PanelState {
       if (bus.source === command.source && bus.substituteSource === substituteSource) {
         return state;
       }
-      return { ...state, [busKey]: { source: command.source, substituteSource } };
+      // Spread the existing bus so other per-bus fields (e.g. colourCorrect) are preserved.
+      return { ...state, [busKey]: { ...bus, source: command.source, substituteSource } };
     }
 
     case 'SET_LEVER': {
@@ -167,6 +186,67 @@ export function reduce(state: PanelState, command: Command): PanelState {
       const aspect = clamp(command.value, -1, 1);
       if (aspect === w.aspect) return state;
       return withWipe(state, { ...w, aspect });
+    }
+
+    // --- colour correction (reference §6) ---
+
+    case 'PRESS_COLOUR_CORRECT': {
+      const cc = command.bus === 'A' ? state.busA.colourCorrect : state.busB.colourCorrect;
+      return withBusCC(state, command.bus, { ...cc, mode: CC_CYCLE[cc.mode] });
+    }
+
+    case 'SET_CHROMA': {
+      const cc = command.bus === 'A' ? state.busA.colourCorrect : state.busB.colourCorrect;
+      const chroma = clamp(command.value, 0, 1);
+      if (chroma === cc.chroma) return state;
+      return withBusCC(state, command.bus, { ...cc, chroma });
+    }
+
+    case 'SET_CC_JOYSTICK': {
+      const cc = command.bus === 'A' ? state.busA.colourCorrect : state.busB.colourCorrect;
+      return withBusCC(state, command.bus, {
+        ...cc,
+        joystickX: clamp(command.x, -1, 1),
+        joystickY: clamp(command.y, -1, 1),
+      });
+    }
+
+    // --- digital effect: filters (reference §8) ---
+
+    case 'SELECT_EFFECT_BUS': {
+      const de = state.digitalEffect;
+      if (de.bus === command.bus) return state;
+      // The block targets one bus at a time; moving it leaves the old bus clean.
+      return withEffect(state, {
+        ...de,
+        bus: command.bus,
+        active: { nega: false, mosaic: false, mono: false, paint: false },
+      });
+    }
+
+    case 'CHOOSE_EFFECT':
+      if (state.digitalEffect.armed === command.effect) return state;
+      return withEffect(state, { ...state.digitalEffect, armed: command.effect });
+
+    case 'PRESS_EFFECT_ON': {
+      const de = state.digitalEffect;
+      if (!de.armed) return state;
+      return withEffect(state, {
+        ...de,
+        active: { ...de.active, [de.armed]: !de.active[de.armed] },
+      });
+    }
+
+    case 'SET_MOSAIC_SIZE': {
+      const step = clamp(Math.round(command.step), 1, 31);
+      if (step === state.digitalEffect.mosaicSize) return state;
+      return withEffect(state, { ...state.digitalEffect, mosaicSize: step });
+    }
+
+    case 'SET_PAINT_LEVEL': {
+      const level = clamp(command.level, 0, 1);
+      if (level === state.digitalEffect.paintLevel) return state;
+      return withEffect(state, { ...state.digitalEffect, paintLevel: level });
     }
 
     case 'LOAD_STATE':

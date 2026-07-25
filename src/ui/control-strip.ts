@@ -10,7 +10,7 @@
 import { matteColorName } from '../core/matte.js';
 import type { PanelStore } from '../state/store.js';
 import type { BusId, BusSource } from '../core/types.js';
-import type { PanelState, ProgramOut, TransitionType, WipeFamily } from '../state/state.js';
+import type { FilterEffect, PanelState, ProgramOut, TransitionType, WipeFamily } from '../state/state.js';
 
 const SOURCE_CHOICES: { label: string; value: BusSource }[] = [
   { label: '1', value: 1 },
@@ -210,6 +210,67 @@ export class MxControlStrip extends HTMLElement {
       if (document.activeElement !== aspect) aspect.value = String(s.transition.wipe.aspect);
     });
     this.appendRow(dirGroup);
+
+    // Colour correction (per bus): tri-state button + CHROMA.
+    const ccGroup = this.group('Colour correct');
+    for (const bus of ['A', 'B'] as BusId[]) {
+      const button = this.button(`CC ${bus}`, () => store.dispatch({ type: 'PRESS_COLOUR_CORRECT', bus }));
+      this.refresh.push((s) =>
+        button.setAttribute('aria-pressed', String((bus === 'A' ? s.busA : s.busB).colourCorrect.mode !== 'off')),
+      );
+      ccGroup.appendChild(button);
+      const chroma = document.createElement('input');
+      chroma.type = 'range';
+      chroma.min = '0';
+      chroma.max = '1';
+      chroma.step = '0.01';
+      chroma.setAttribute('aria-label', `${bus}-bus CHROMA`);
+      chroma.addEventListener('input', () => store.dispatch({ type: 'SET_CHROMA', bus, value: Number(chroma.value) }));
+      this.refresh.push((s) => {
+        if (document.activeElement !== chroma) chroma.value = String((bus === 'A' ? s.busA : s.busB).colourCorrect.chroma);
+      });
+      ccGroup.append(`${bus}`, chroma);
+    }
+    this.appendRow(ccGroup);
+
+    // Digital effect (filters; targets one bus).
+    const fxGroup = this.group('Digital FX');
+    for (const bus of ['A', 'B'] as BusId[]) {
+      const button = this.button(`bus ${bus}`, () => store.dispatch({ type: 'SELECT_EFFECT_BUS', bus }));
+      this.refresh.push((s) => button.setAttribute('aria-pressed', String(s.digitalEffect.bus === bus)));
+      fxGroup.appendChild(button);
+    }
+    for (const effect of ['nega', 'mosaic', 'mono', 'paint'] as FilterEffect[]) {
+      const button = this.button(effect, () => store.dispatch({ type: 'CHOOSE_EFFECT', effect }));
+      this.refresh.push((s) => {
+        button.setAttribute('aria-pressed', String(s.digitalEffect.active[effect]));
+        button.style.outline = s.digitalEffect.armed === effect ? '2px solid #e6b800' : 'none';
+      });
+      fxGroup.appendChild(button);
+    }
+    fxGroup.appendChild(this.button('ON', () => store.dispatch({ type: 'PRESS_EFFECT_ON' })));
+    const mosaicSize = document.createElement('input');
+    mosaicSize.type = 'range';
+    mosaicSize.min = '1';
+    mosaicSize.max = '31';
+    mosaicSize.step = '1';
+    mosaicSize.setAttribute('aria-label', 'Mosaic SIZE');
+    mosaicSize.addEventListener('input', () => store.dispatch({ type: 'SET_MOSAIC_SIZE', step: Number(mosaicSize.value) }));
+    this.refresh.push((s) => {
+      if (document.activeElement !== mosaicSize) mosaicSize.value = String(s.digitalEffect.mosaicSize);
+    });
+    const paintLevel = document.createElement('input');
+    paintLevel.type = 'range';
+    paintLevel.min = '0';
+    paintLevel.max = '1';
+    paintLevel.step = '0.01';
+    paintLevel.setAttribute('aria-label', 'Paint LEVEL');
+    paintLevel.addEventListener('input', () => store.dispatch({ type: 'SET_PAINT_LEVEL', level: Number(paintLevel.value) }));
+    this.refresh.push((s) => {
+      if (document.activeElement !== paintLevel) paintLevel.value = String(s.digitalEffect.paintLevel);
+    });
+    fxGroup.append('Size', mosaicSize, 'Paint', paintLevel);
+    this.appendRow(fxGroup);
 
     // Subscribe + initial reflect.
     this.unsubscribe?.();

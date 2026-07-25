@@ -26,6 +26,9 @@ export class MixerWorld extends World {
   /** Minimal bus-fader gains, standing in for the Audio Mix engine (Phase 5, ADR-0010). */
   readonly busGain: { A: number; B: number } = { A: 0.5, B: 0.5 };
 
+  /** Whether a colour-correction press has occurred (distinguishes precondition from assertion). */
+  ccPressed = false;
+
   // --- wipe scratch state (Phase 2) ---
   wipeFamily: WipeFamily = 'straight';
   readonly num: { base: number; reversed: number } = { base: 0, reversed: 0 };
