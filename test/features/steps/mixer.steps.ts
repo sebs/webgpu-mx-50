@@ -17,6 +17,7 @@ import {
   directOutSource,
   PREVIEW_IS_ALWAYS_EFFECTED,
 } from '../../../src/core/program.js';
+import { programFadeAudioMix } from '../../../src/core/fade.js';
 import {
   MATTE_PALETTE,
   matteColorName,
@@ -221,14 +222,16 @@ Then('the Master fader governs the program audio level', function (this: MixerWo
   assert.equal(programAudio(this.snapshot()).masterGoverns, true);
 });
 
+// Fade-aware (Phase 6): asserts against the post-Fade program mix so it is meaningful for the
+// fade-to-bus scenarios too. With no fade active this reduces to the plain mixer output.
 Then(/^the (A-bus|B-bus) audio is present in the program output$/, function (this: MixerWorld, bus: string) {
-  const busKey = busId(bus) === 'A' ? 'busA' : 'busB';
-  assert.ok(programAudio(this.snapshot()).contributors.includes(busKey as 'busA' | 'busB'));
+  const gains = programFadeAudioMix(this.snapshot()).gains;
+  assert.ok((busId(bus) === 'A' ? gains.busA : gains.busB) > 0);
 });
 
 Then(/^Aux 1 and Aux 2\/Mic audio are present in the program output$/, function (this: MixerWorld) {
-  const audio = programAudio(this.snapshot());
-  assert.ok(audio.contributors.includes('aux1') && audio.contributors.includes('aux2mic'));
+  const gains = programFadeAudioMix(this.snapshot()).gains;
+  assert.ok(gains.aux1 > 0 && gains.aux2mic > 0);
 });
 
 Then('the opposite bus audio is not present in the program output', function (this: MixerWorld) {

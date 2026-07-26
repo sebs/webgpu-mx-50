@@ -8,7 +8,8 @@
 // distinct pitch; the fader / Mic-Aux2 switch / master topology is the faithful part. The
 // context starts suspended (browsers require a gesture) — call resume() from a user gesture.
 
-import { programAudioMix, micAux2Active } from '../core/audio.js';
+import { micAux2Active } from '../core/audio.js';
+import { programFadeAudioMix } from '../core/fade.js';
 import type { PanelStore, Unsubscribe } from '../state/store.js';
 import type { PanelState } from '../state/state.js';
 
@@ -79,9 +80,9 @@ export class AudioEngine {
     param.setTargetAtTime(value, this.ctx.currentTime, RAMP);
   }
 
-  /** Push the panel state's routing + fader gains onto the graph (reference §2, §5, §12). */
+  /** Push the panel state's routing + fader gains (post-Fade) onto the graph (reference §2, §5, §11, §12). */
   private sync(state: PanelState): void {
-    const { gains, master } = programAudioMix(state);
+    const { gains, master } = programFadeAudioMix(state);
     this.ramp(this.gBusA.gain, gains.busA);
     this.ramp(this.gBusB.gain, gains.busB);
     this.ramp(this.gAux1.gain, gains.aux1);

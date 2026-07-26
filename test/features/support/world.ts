@@ -58,6 +58,10 @@ export class MixerWorld extends World {
   avSelected: string[] = [];
   avLastEffect = '';
 
+  // --- transition-timeline scratch (Phase 6: Auto Take/Fade, ADR-0012) ---
+  /** Frames advanced since the last Auto Take/Fade press, so a later step can advance the remainder. */
+  framesSincePress = 0;
+
   get bindings(): SourceBindingRegistry {
     return this.engine.bindings;
   }
@@ -68,6 +72,40 @@ export class MixerWorld extends World {
 
   dispatch(command: Command): void {
     this.engine.store.dispatch(command);
+  }
+
+  /** The current logical tick (the World's clock starts at 0 per scenario). */
+  get now(): number {
+    return this.engine.clock.tick;
+  }
+
+  setTransitionTime(frames: number): void {
+    this.dispatch({ type: 'SET_TRANSITION_TIME', frames });
+  }
+
+  pressAutoTake(): void {
+    this.dispatch({ type: 'PRESS_AUTO_TAKE', tick: this.now });
+    this.framesSincePress = 0;
+  }
+
+  pressAutoFade(): void {
+    this.dispatch({ type: 'PRESS_AUTO_FADE', tick: this.now });
+    this.framesSincePress = 0;
+  }
+
+  /** Step the logical clock n whole frames, dispatching ADVANCE_TIMELINE each tick (no rAF). */
+  advanceFrames(n: number): void {
+    for (let i = 0; i < n; i++) {
+      this.engine.clock.advanceOneTick();
+      this.dispatch({ type: 'ADVANCE_TIMELINE', tick: this.engine.clock.tick });
+    }
+    this.framesSincePress += n;
+  }
+
+  /** Advance so that framesSincePress reaches `target` (robust to step order). */
+  advanceToFrame(target: number): void {
+    const remaining = target - this.framesSincePress;
+    if (remaining > 0) this.advanceFrames(remaining);
   }
 }
 

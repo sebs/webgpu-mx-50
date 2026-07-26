@@ -12,7 +12,14 @@ import { dskEdgeStyleLabel } from '../core/dsk.js';
 import { AV_SYNCHRO_EFFECTS } from '../core/av-synchro.js';
 import type { PanelStore } from '../state/store.js';
 import type { BusId, BusSource } from '../core/types.js';
-import type { DskFill, DskKeySource, FilterEffect, MicAux2Input, PanelState, ProgramOut, TransitionType, WipeFamily } from '../state/state.js';
+import type { DskFill, DskKeySource, FadeElement, FadeTarget, FilterEffect, MicAux2Input, PanelState, ProgramOut, TransitionType, WipeFamily } from '../state/state.js';
+
+const FADE_ELEMENTS: { key: FadeElement; label: string }[] = [
+  { key: 'video', label: 'Video' },
+  { key: 'dsk', label: 'DSK' },
+  { key: 'audio', label: 'Audio' },
+];
+const FADE_TARGETS: FadeTarget[] = ['matte', 'white', 'black', 'A', 'B'];
 
 type AudioFaderKey = 'a' | 'b' | 'aux1' | 'micAux2' | 'master';
 const AUDIO_FADERS: { key: AudioFaderKey; label: string }[] = [
@@ -69,9 +76,12 @@ export class MxControlStrip extends HTMLElement {
   private store: PanelStore | null = null;
   private unsubscribe: (() => void) | null = null;
   private readonly refresh: Array<(state: PanelState) => void> = [];
+  /** Current logical tick, so AUTO TAKE/FADE presses anchor their runner (ADR-0012). */
+  private tickNow: () => number = () => 0;
 
-  bind(store: PanelStore): void {
+  bind(store: PanelStore, tickNow: () => number = () => 0): void {
     this.store = store;
+    this.tickNow = tickNow;
     if (this.isConnected) this.build();
   }
 
@@ -481,6 +491,55 @@ export class MxControlStrip extends HTMLElement {
     avGroup.append('Level', avLevel);
     this.appendRow(avGroup);
 
+    // Fade control (reference §11): enables, target, manual lever, and Auto Take / Auto Fade.
+    const fadeGroup = this.group('Fade');
+    for (const { key, label } of FADE_ELEMENTS) {
+      const b = this.button(label, () => store.dispatch({ type: 'SET_FADE_ENABLE', element: key, on: !store.getSnapshot().fade[key] }));
+      this.refresh.push((s) => b.setAttribute('aria-pressed', String(s.fade[key])));
+      fadeGroup.appendChild(b);
+    }
+    for (const target of FADE_TARGETS) {
+      const b = this.button(target === 'matte' ? 'Matte' : target === 'white' ? 'White' : target === 'black' ? 'Black' : target, () =>
+        store.dispatch({ type: 'SET_FADE_TARGET', target }),
+      );
+      this.refresh.push((s) => b.setAttribute('aria-pressed', String(s.fade.target === target)));
+      fadeGroup.appendChild(b);
+    }
+    const fadeLever = document.createElement('input');
+    fadeLever.type = 'range';
+    fadeLever.min = '0';
+    fadeLever.max = '1';
+    fadeLever.step = '0.01';
+    fadeLever.setAttribute('aria-label', 'Fade Control lever, IN to OUT');
+    fadeLever.addEventListener('input', () => store.dispatch({ type: 'SET_FADE_LEVER', position: Number(fadeLever.value) }));
+    this.refresh.push((s) => {
+      if (document.activeElement !== fadeLever) fadeLever.value = String(s.fade.lever);
+    });
+    fadeGroup.append('IN', fadeLever, 'OUT');
+    this.appendRow(fadeGroup);
+
+    // Shared TRANSITION control + the two automatic transitions (reference §11/§15, ADR-0012).
+    const autoGroup = this.group('Auto');
+    const frames = document.createElement('input');
+    frames.type = 'range';
+    frames.min = '0';
+    frames.max = '510';
+    frames.step = '2';
+    frames.setAttribute('aria-label', 'TRANSITION time, frames');
+    frames.addEventListener('input', () => store.dispatch({ type: 'SET_TRANSITION_TIME', frames: Number(frames.value) }));
+    const framesLabel = document.createElement('span');
+    framesLabel.className = 'label';
+    this.refresh.push((s) => {
+      if (document.activeElement !== frames) frames.value = String(s.transitionFrames);
+      framesLabel.textContent = `${s.transitionFrames}f`;
+    });
+    const autoTake = this.button('Auto Take', () => store.dispatch({ type: 'PRESS_AUTO_TAKE', tick: this.tickNow() }));
+    this.refresh.push((s) => autoTake.setAttribute('aria-pressed', String(s.transition.auto.phase === 'running' || s.transition.auto.phase === 'paused')));
+    const autoFade = this.button('Auto Fade', () => store.dispatch({ type: 'PRESS_AUTO_FADE', tick: this.tickNow() }));
+    this.refresh.push((s) => autoFade.setAttribute('aria-pressed', String(s.fade.auto.phase === 'running' || s.fade.auto.phase === 'paused')));
+    autoGroup.append('Time', frames, framesLabel, autoTake, autoFade);
+    this.appendRow(autoGroup);
+
     // Subscribe + initial reflect.
     this.unsubscribe?.();
     this.unsubscribe = store.subscribe((next) => this.reflect(next));
@@ -531,12 +590,12 @@ export class MxControlStrip extends HTMLElement {
 let defined = false;
 
 /** Define the element (once) and return a bound instance for the given store. */
-export function createControlStrip(store: PanelStore): MxControlStrip {
+export function createControlStrip(store: PanelStore, tickNow: () => number = () => 0): MxControlStrip {
   if (!defined) {
     customElements.define('mx-control-strip', MxControlStrip);
     defined = true;
   }
   const strip = document.createElement('mx-control-strip') as MxControlStrip;
-  strip.bind(store);
+  strip.bind(store, tickNow);
   return strip;
 }

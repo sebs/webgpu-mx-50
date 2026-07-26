@@ -8,6 +8,7 @@ import { MATTE_COLOR_COUNT } from './state.js';
 import { blindsLegal, pressBorder, pressSoft, VARIANT_COUNT } from '../core/wipe.js';
 import { wrapUnit } from '../core/key.js';
 import { nextDskEdgeStyle } from '../core/dsk.js';
+import { quantizeTransitionFrames, startRunner, advanceRunner, runnerLever } from '../core/timeline.js';
 import type { BusId } from '../core/types.js';
 import type {
   AudioState,
@@ -15,9 +16,11 @@ import type {
   ColourCorrectState,
   DigitalEffectState,
   DskState,
+  FadeState,
   FreezeEffect,
   FreezeState,
   PanelState,
+  TransitionRunner,
   WipeState,
 } from './state.js';
 import type { Command } from './commands.js';
@@ -109,6 +112,21 @@ function withDsk(state: PanelState, dsk: DskState): PanelState {
 /** Return a new state with the audio block replaced. */
 function withAudio(state: PanelState, audio: AudioState): PanelState {
   return { ...state, audio };
+}
+
+/** Return a new state with the fade block replaced. */
+function withFade(state: PanelState, fade: FadeState): PanelState {
+  return { ...state, fade };
+}
+
+/** Return a new state with the Auto Take runner replaced (drives transition.lever). */
+function withTakeRunner(state: PanelState, auto: TransitionRunner): PanelState {
+  return { ...state, transition: { ...state.transition, auto } };
+}
+
+/** Return a new state with the Auto Fade runner replaced (drives fade.lever). */
+function withFadeRunner(state: PanelState, auto: TransitionRunner): PanelState {
+  return withFade(state, { ...state.fade, auto });
 }
 
 export function reduce(state: PanelState, command: Command): PanelState {
@@ -508,6 +526,64 @@ export function reduce(state: PanelState, command: Command): PanelState {
         ...de,
         avSynchroEffects: { ...de.avSynchroEffects, [command.effect]: command.on },
       });
+    }
+
+    // --- fade control (reference §11) ---
+
+    case 'SET_FADE_ENABLE':
+      if (state.fade[command.element] === command.on) return state;
+      return withFade(state, { ...state.fade, [command.element]: command.on });
+
+    case 'SET_FADE_TARGET':
+      if (state.fade.target === command.target) return state;
+      return withFade(state, { ...state.fade, target: command.target });
+
+    case 'SET_FADE_LEVER': {
+      const lever = clamp(command.position, 0, 1);
+      if (lever === state.fade.lever) return state;
+      return withFade(state, { ...state.fade, lever });
+    }
+
+    // --- shared transition timing (reference §11/§15, ADR-0012) ---
+
+    case 'SET_TRANSITION_TIME': {
+      const frames = quantizeTransitionFrames(command.frames);
+      if (frames === state.transitionFrames) return state;
+      return { ...state, transitionFrames: frames };
+    }
+
+    case 'PRESS_AUTO_TAKE': {
+      const r = state.transition.auto;
+      if (r.phase === 'running') return withTakeRunner(state, { ...r, phase: 'paused' });
+      if (r.phase === 'paused') return withTakeRunner(state, { ...r, phase: 'running' });
+      // idle | complete → start a fresh take from the lever's rest toward the far end.
+      const from = state.transition.lever;
+      const to = from < 1 ? 1 : 0;
+      return withTakeRunner(state, startRunner(from, to, state.transitionFrames, command.tick));
+    }
+
+    case 'PRESS_AUTO_FADE': {
+      const r = state.fade.auto;
+      if (r.phase === 'running') return withFadeRunner(state, { ...r, phase: 'paused' });
+      if (r.phase === 'paused') return withFadeRunner(state, { ...r, phase: 'running' });
+      // idle | complete → start a fresh fade from the current lever toward OUT.
+      return withFadeRunner(state, startRunner(state.fade.lever, 1, state.transitionFrames, command.tick));
+    }
+
+    case 'ADVANCE_TIMELINE': {
+      // Per-present-frame advance (ADR-0012). Both runners no-op to the same ref when idle,
+      // so the common every-frame case returns `state` unchanged (store skips notification).
+      const take = advanceRunner(state.transition.auto, command.tick);
+      const fade = advanceRunner(state.fade.auto, command.tick);
+      if (take === state.transition.auto && fade === state.fade.auto) return state;
+      let next = state;
+      if (take !== state.transition.auto) {
+        next = { ...next, transition: { ...next.transition, auto: take, lever: runnerLever(take) } };
+      }
+      if (fade !== state.fade.auto) {
+        next = { ...next, fade: { ...next.fade, auto: fade, lever: runnerLever(fade) } };
+      }
+      return next;
     }
 
     case 'LOAD_STATE':

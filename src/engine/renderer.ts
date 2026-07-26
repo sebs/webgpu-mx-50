@@ -5,16 +5,16 @@
 //
 // It reads the store snapshot but never calls into the UI (ADR-0011/0012).
 
-import { createDownstreamGraph } from '../core/signal-graph.js';
 import { resolveBusSource } from '../core/resolve.js';
 import { compositeRule } from '../core/transition.js';
 import { directOutSource } from '../core/program.js';
+import { isFading, fadeVideoTarget } from '../core/fade.js';
 import { BusProcessor } from '../gpu/bus-processor.js';
 import { CombinePass } from '../gpu/combine.js';
 import { WipePass } from '../gpu/wipe.js';
 import { DskPass } from '../gpu/dsk.js';
+import { FadePass } from '../gpu/fade.js';
 import { PresentPass } from '../gpu/present.js';
-import type { SignalGraph } from '../core/signal-graph.js';
 import type { Size } from '../core/types.js';
 import type { GpuContext } from '../gpu/device.js';
 import type { SourceRegistry } from '../sources/registry.js';
@@ -36,19 +36,19 @@ export class Renderer {
   // The per-bus stages (Colour Correction + Digital Effect) are realised by BusProcessor.
   private readonly busProcA: BusProcessor;
   private readonly busProcB: BusProcessor;
-  private readonly downstream: SignalGraph<GPUTexture>;
   private readonly combine: CombinePass;
   private readonly wipe: WipePass;
   private readonly dsk: DskPass;
+  private readonly fade: FadePass;
   private readonly present: PresentPass;
 
   constructor(private readonly deps: RendererDeps) {
     this.busProcA = new BusProcessor(deps.gpu.device, deps.size);
     this.busProcB = new BusProcessor(deps.gpu.device, deps.size);
-    this.downstream = createDownstreamGraph<GPUTexture>();
     this.combine = new CombinePass(deps.gpu.device, deps.size);
     this.wipe = new WipePass(deps.gpu.device, deps.size);
     this.dsk = new DskPass(deps.gpu.device, deps.size);
+    this.fade = new FadePass(deps.gpu.device, deps.size);
     this.present = new PresentPass(deps.gpu.device, deps.gpu.srgbView);
   }
 
@@ -92,7 +92,17 @@ export class Renderer {
       keyed = this.dsk.render(composite, keyTex, state);
     }
 
-    const out = this.downstream.run(keyed); // Fade stage is still pass-through (Phase 6)
+    // Fade (reference §11): the final stage, mixing the post-DSK composite toward the target.
+    // Fade-to-A/B binds the RAW (uneffected) source texture, bypassing effects and Mix/Wipe.
+    let out = keyed;
+    if (isFading(state.fade)) {
+      const target = fadeVideoTarget(state);
+      const targetTex =
+        target.kind === 'bus'
+          ? registry.get(target.source).getFrameTexture(device)
+          : matte.getFrameTexture(device); // flat-colour path ignores the texture; matte is a valid bind
+      out = this.fade.render(keyed, targetTex, state);
+    }
     this.present.render(gpu.context, out, gpu.srgbView);
   }
 }

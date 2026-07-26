@@ -326,6 +326,27 @@ transition, and audio-triggered effects.
 
 ### Phase 6 — Fade, Auto Take/Fade, and transition timing
 
+> **Status: ✅ done.** The **Fade stage** is the real last stage (after DSK): independent
+> VIDEO/DSK/AUDIO enables fade together from one lever move toward a target (MATTE/WHITE/
+> BLACK, or the uneffected A/B bus), with IN/OUT LED states (solid at the extremes, blinking
+> while incomplete). Fade-to-a-card silences the programme audio; fade-to-A/B retargets it to
+> that bus + Aux/Mic (`programFadeAudioMix`, now also driving the browser audio engine); the
+> headphone monitor is pre-fade. A **fade GPU pass** (`gpu/fade.ts`) mixes the post-DSK
+> composite toward a flat colour or the raw bus texture and is wired as the renderer's final
+> pass. **Auto Take** and **Auto Fade** share one pure **transition runner** (`core/timeline.ts`):
+> the TRANSITION control is quantised to 0..510 frames in 2-frame steps (floor-to-even); a run
+> advances `progress = clamp((tick − startTick − pausedTicks)/durationTicks, 0, 1)` written to
+> `transition.lever` / `fade.lever` by a per-frame `ADVANCE_TIMELINE` command (dispatched from
+> the present loop); duration 0 snaps on the next frame; re-pressing pauses (LEDs blink) and
+> resumes drift-free; catch-up (k ticks in one present frame) is frame-exact. The clock stays
+> the single source of truth and the store stays authoritative (ADR-0011): idle `ADVANCE_TIMELINE`
+> is a same-ref no-op. 46 more Gherkin scenarios green (**454 total, 3300 steps**), **159 units**.
+> **Deferred:** the two selective VIDEO-only / DSK-only fade scenarios (need a pre-DSK +
+> key-mask GPU refinement, deferred with the fade pass's pixel verification); Memory Auto Take
+> (needs Event Memory, Phase 7); and the GPI/RS422/mapped-control Auto-Take triggers (need the
+> Phase 8 control-mapping layer). The AUTO TAKE/FADE UI buttons stamp their press with the
+> current clock tick via a tick provider threaded into the control strip.
+
 Close out the tail of the signal chain and the automation timeline: the final
 whole-composite Fade, and the two automatic, pausable, frame-counted transitions.
 

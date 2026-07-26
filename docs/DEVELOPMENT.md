@@ -73,6 +73,8 @@ src/
     dsk.ts              Downstream Key: edge ring, window, fill/edge colour, key source (reference §10)
     audio.ts            Audio mixer: fader law, follow crossfade, program-mix gains, LED map (reference §5, §12)
     av-synchro.ts       A/V Synchro: LEVEL threshold, trigger/hold rules, pulse train (reference §8.9)
+    timeline.ts         Auto Take/Fade runner: TRANSITION quantise, progress/pause/resume (reference §11/§15, ADR-0012)
+    fade.ts             Fade stage: video target, IN/OUT LEDs, fade-aware program audio (reference §11)
   state/
     state.ts            PanelState + FACTORY_PRESET + fieldPreset (ADR-0011, ref §18)
     commands.ts         Typed command union
@@ -96,7 +98,8 @@ src/
     wipe.ts             Compositional wipe pass (reference §9.4)
     bus-processor.ts    Per-bus colour correction + filter effects pass (reference §6, §8.1-§8.4)
     dsk.ts              Downstream Key pass — keyed title over the composite (reference §10)
-    shaders/*.wgsl.ts   WGSL string modules (present/test-pattern/matte/combine/wipe/bus-effect/dsk)
+    fade.ts             Fade pass — mixes the post-DSK composite toward the target (reference §11)
+    shaders/*.wgsl.ts   WGSL string modules (present/test-pattern/matte/combine/wipe/bus-effect/dsk/fade)
   audio/
     engine.ts           Browser Web Audio graph, gains driven by the store (ADR-0010)
     av-synchro-tap.ts   Runtime envelope tap → A/V-Synchro effect gate (browser-only)
@@ -111,7 +114,7 @@ test/
   cucumber.mjs          cucumber-js configuration
 ```
 
-## Status (Phases 0–5 complete)
+## Status (Phases 0–6 complete)
 
 Implemented and rendering: **two buses** + Matte substitution, **Program Out** A/B/EFFECT,
 **Mix/NAM** + the **compositional wipe engine**, the **Matte generator**, per-bus **Colour
@@ -130,18 +133,27 @@ Timer). The **Web Audio engine** (`src/audio/`) builds the real node graph and p
 from the store; it is served but excluded from CI (no headless `AudioContext`), with
 stand-in oscillator inputs.
 
-Next: fade + auto take/fade (Phase 6), event memory + special modes (Phase 7), control
-mapping + polish (Phase 8).
+**Fade + automation (Phase 6):** the **Fade stage** (the real last stage after DSK) with
+independent VIDEO/DSK/AUDIO enables, MATTE/WHITE/BLACK/A/B targets, IN/OUT LEDs, and
+fade-aware program audio (card→silence, bus→that bus + Aux/Mic); a **fade GPU pass** wired as
+the renderer's final pass; and **Auto Take / Auto Fade** on one deterministic, pausable,
+frame-counted **transition runner** (TRANSITION 0–510 in 2-frame steps, driven each present
+frame by an `ADVANCE_TIMELINE` command against the canonical clock).
+
+Next: event memory + special modes (Phase 7), control mapping + polish (Phase 8).
 
 Known deferrals: **golden-image pixel tests** (no headless-WebGPU runner here); **Trail's
 ping-pong accumulator**, **Scene-Grabber freeze-in-place**, the **five non-Normal DSK edge
 styles**, and the **EXT.CAMERA GPU binding** — all domain-complete, GPU held back as the
 riskiest/blocked-on-device pieces; Compression/Slide/Blinds not yet in the wipe shader;
 **A/V-Synchro per-frame GPU picture-gating** and **real audio-input capture** are browser-only
-follow-ons (the tap surfaces the gated-effect set today); underivable Pattern-Table parts
-`@wip`; **real browser-input binding** still open from Phase 1. See the [ROADMAP](ROADMAP.md).
+follow-ons (the tap surfaces the gated-effect set today); the **selective VIDEO-only / DSK-only
+fade** (a pre-DSK + key-mask GPU refinement); **Memory Auto Take** (awaits Phase 7 Event Memory)
+and **GPI/RS422 Auto-Take triggers** (await the Phase 8 control-mapping layer); underivable
+Pattern-Table parts `@wip`; **real browser-input binding** still open from Phase 1. See the
+[ROADMAP](ROADMAP.md).
 
-The domain is verified headlessly: **134 `node:test` units** and **408 Gherkin scenarios
-(2931 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five
-digital-effect features, position/scene-grabber, the three key features, and the three audio
-features (mixer, follow, A/V Synchro).
+The domain is verified headlessly: **159 `node:test` units** and **454 Gherkin scenarios
+(3300 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five
+digital-effect features, position/scene-grabber, the three key features, the three audio
+features (mixer, follow, A/V Synchro), and fade control + Auto Take.

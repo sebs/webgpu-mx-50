@@ -17,11 +17,12 @@ npm test        # typecheck + unit + cucumber features + golden scaffolding
 ```
 
 Stack: vanilla TypeScript + WebGPU + [banira](https://github.com/sebs/banira), no UI
-framework (ADR-0003). Current status: **Phases 0–5 complete** — two buses + Matte
+framework (ADR-0003). Current status: **Phases 0–6 complete** — two buses + Matte
 substitution, Program Out (A/B/EFFECT), Mix/NAM + the compositional wipe engine, the Matte
 generator, per-bus colour correction, the four filter effects, the freeze family
 (Still/Strobe/Multi/Trail), position control + Scene Grabber, the Luminance/Chroma keyers,
-the Downstream Key, and the **audio engine** (mixer + Audio Follow + A/V Synchro on the Web
-Audio API). Next: fade + auto take/fade (Phase 6). See
+the Downstream Key, the **audio engine** (mixer + Audio Follow + A/V Synchro on the Web
+Audio API), and the **Fade stage + Auto Take/Auto Fade** (frame-counted, pausable
+transitions on the canonical clock). Next: event memory + special modes (Phase 7). See
 [docs/ROADMAP.md](docs/ROADMAP.md) for the build plan and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 for how to run and test.

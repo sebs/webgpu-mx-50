@@ -62,8 +62,9 @@ async function boot(): Promise<void> {
 
   const renderer = new Renderer({ gpu, registry, generated, matte, size });
 
-  // First control surface, bound to the single store (ADR-0013).
-  const controls = createControlStrip(engine.store);
+  // First control surface, bound to the single store (ADR-0013). The tick provider lets the
+  // AUTO TAKE / AUTO FADE buttons stamp their press with the current logical tick (ADR-0012).
+  const controls = createControlStrip(engine.store, () => engine.clock.tick);
   document.getElementById('app')?.appendChild(controls);
 
   // Audio engine (ADR-0010): the Web Audio graph, driven live by the store. It starts
@@ -78,6 +79,9 @@ async function boot(): Promise<void> {
 
   let lastAvSynchro = '';
   const loop = new RenderLoop(engine.clock, (_alpha, tick) => {
+    // Advance the Auto Take / Auto Fade runners for this logical tick (ADR-0012). Idle is a
+    // no-op: the reducer returns the same snapshot and the store skips notification.
+    engine.store.dispatch({ type: 'ADVANCE_TIMELINE', tick });
     const snapshot = engine.store.getSnapshot();
     renderer.render(snapshot, tick);
     // A/V Synchro (§8.9): reflect the audio-gated effects as a transient per-frame signal.

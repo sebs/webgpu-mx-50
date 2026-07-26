@@ -170,6 +170,39 @@ export interface PositionerState {
   sceneGrabber: boolean;
 }
 
+/** Automatic-transition runner lifecycle (ADR-0012): idle → running → (paused ⇄ running) → complete. */
+export type RunnerPhase = 'idle' | 'running' | 'paused' | 'complete';
+
+/**
+ * The single transition-runner abstraction (ADR-0012), shared by Auto Take and Auto Fade.
+ * Plain JSON — no handles (ADR-0011). All ticks are absolute LogicalClock ticks; the math
+ * lives in core/timeline.ts. `progress` is cached (0..1) so the snapshot is self-describing.
+ * A duration of 0 completes on the next advance (an instant snap). Pause accumulates
+ * `pausedTicks` so `elapsed = tick - startTick - pausedTicks` freezes and resumes drift-free.
+ */
+export interface TransitionRunner {
+  phase: RunnerPhase;
+  durationTicks: number; // frozen at press (== transitionFrames; 1 frame = 1 tick)
+  startTick: number;
+  lastTick: number;
+  pausedTicks: number;
+  from: number; // lever/fade position at start, 0..1
+  to: number; // target position, 0..1
+  progress: number; // 0..1
+}
+
+/** A runner at rest: no take/fade in flight. */
+export const IDLE_RUNNER: TransitionRunner = {
+  phase: 'idle',
+  durationTicks: 0,
+  startTick: 0,
+  lastTick: 0,
+  pausedTicks: 0,
+  from: 0,
+  to: 0,
+  progress: 0,
+};
+
 export interface TransitionState {
   type: TransitionType;
   /** Mix/Wipe lever position, 0 = fully A-bus, 1 = fully B-bus. */
@@ -179,6 +212,8 @@ export interface TransitionState {
   /** HUE knob, 0..1 around the colour wheel — the B-bus colour removed by Chroma Key (§9.6). */
   hue: number;
   wipe: WipeState;
+  /** Auto Take runner (reference §15) — when running it drives `lever` each frame (ADR-0012). */
+  auto: TransitionRunner;
 }
 
 /** Downstream Key edge styles (reference §10): the EDGE button cycles this ring. */
@@ -211,6 +246,28 @@ export interface DskState {
   reverse: boolean;
 }
 
+/** What the video fades TO at the Fade stage (reference §11). */
+export type FadeTarget = 'matte' | 'white' | 'black' | 'A' | 'B';
+
+/** The three independent Fade enables (reference §11, buttons VIDEO 80 / DSK 82 / AUDIO 84). */
+export type FadeElement = 'video' | 'dsk' | 'audio';
+
+/**
+ * The Fade block (reference §11) — the LAST signal-graph stage, after the Downstream Key
+ * (ADR-0004). Whichever of Video/DSK/Audio are enabled fade together from one lever move
+ * toward the chosen target. `lever` (IN=0 → OUT=1) is written by `auto` during an Auto Fade.
+ */
+export interface FadeState {
+  video: boolean; // VIDEO enable — distinct from dsk.on (the key itself)
+  dsk: boolean; // DSK enable
+  audio: boolean; // AUDIO enable
+  target: FadeTarget;
+  /** Manual Fade lever: 0 = IN (no fade), 1 = OUT (fully faded). */
+  lever: number;
+  /** Auto Fade runner (reference §11) — when running it drives `lever` toward OUT (ADR-0012). */
+  auto: TransitionRunner;
+}
+
 /** What leaves the unit (reference §2): A/B direct-out, or the full EFFECT composite. */
 export type ProgramOut = 'A' | 'B' | 'effect';
 
@@ -229,7 +286,11 @@ export interface PanelState {
   positioner: PositionerState;
   dsk: DskState;
   audio: AudioState;
+  fade: FadeState;
   programOut: ProgramOut;
+  /** Shared TRANSITION control (reference §11/§15): Auto Take / Auto Fade duration in frames,
+   * quantized to 0..510 in 2-frame steps. One physical knob, one field (ADR-0012). */
+  transitionFrames: number;
   system: SystemState;
 }
 
@@ -277,6 +338,7 @@ export const FACTORY_PRESET: PanelState = {
       aspect: 0,
       aspectOn: false,
     },
+    auto: { ...IDLE_RUNNER },
   },
   positioner: { on: false, x: 0, y: 0, size: 0.2, sceneGrabber: false },
   dsk: {
@@ -294,7 +356,9 @@ export const FACTORY_PRESET: PanelState = {
     micAux2: 'mic',
     audioFollow: false,
   },
+  fade: { video: false, dsk: false, audio: false, target: 'black', lever: 0, auto: { ...IDLE_RUNNER } },
   programOut: 'effect',
+  transitionFrames: 60,
   system: { reset: 'on' },
 };
 
@@ -304,13 +368,15 @@ export function clonePanelState(state: PanelState): PanelState {
 }
 
 /**
- * Field-preset transform (reference §18, Reset OFF): restore the saved snapshot but
- * force the volatile Still/Strobe/Special-function state to cleared. Phase 1 has none
- * of those fields yet, so this is a pure clone — the seam is here so later phases add
- * the sanitising without touching the boot path (ADR-0011).
+ * Field-preset transform (reference §18, Reset OFF): restore the saved snapshot but force
+ * the volatile in-flight state to rest. A power-fault snapshot must never resume a
+ * half-finished Auto Take / Auto Fade, so both transition runners are reset to idle;
+ * everything else (fade enables/target/levers, transitionFrames) is preserved (ADR-0011).
  */
 export function fieldPreset(saved: PanelState): PanelState {
   const next = clonePanelState(saved);
-  // TODO(phase>=3): clear next.<bus>.digitalEffect Still/Strobe and system.specialMode.
+  next.transition = { ...next.transition, auto: { ...IDLE_RUNNER } };
+  next.fade = { ...next.fade, auto: { ...IDLE_RUNNER } };
+  // TODO(phase>=7): clear volatile Still/Strobe and Special-Mode state on field preset.
   return next;
 }

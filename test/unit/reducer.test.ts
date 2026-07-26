@@ -85,3 +85,75 @@ test('SET_MATTE_LEVEL clamps and SET_GRADATION toggles', () => {
   assert.equal(reduce(s, { type: 'SET_MATTE_LEVEL', level: 1.5 }).matte.level, 1);
   assert.equal(reduce(s, { type: 'SET_GRADATION', on: true }).matte.gradation, true);
 });
+
+// --- Phase 6: fade control + automatic transitions (reference §11/§15, ADR-0012) ---
+
+test('fade enable / target / lever no-op on an unchanged value and otherwise update', () => {
+  const s = structuredClone(FACTORY_PRESET);
+  assert.equal(reduce(s, { type: 'SET_FADE_ENABLE', element: 'video', on: false }), s); // already off
+  assert.equal(reduce(s, { type: 'SET_FADE_ENABLE', element: 'video', on: true }).fade.video, true);
+  assert.equal(reduce(s, { type: 'SET_FADE_TARGET', target: 'black' }), s); // factory default
+  assert.equal(reduce(s, { type: 'SET_FADE_TARGET', target: 'matte' }).fade.target, 'matte');
+  assert.equal(reduce(s, { type: 'SET_FADE_LEVER', position: 1.5 }).fade.lever, 1);
+  assert.equal(reduce(s, { type: 'SET_FADE_LEVER', position: 0 }), s); // already at IN
+});
+
+test('SET_TRANSITION_TIME quantises to a 2-frame step and no-ops when unchanged', () => {
+  const s = structuredClone(FACTORY_PRESET);
+  assert.equal(reduce(s, { type: 'SET_TRANSITION_TIME', frames: 61 }).transitionFrames, 60);
+  assert.equal(reduce(s, { type: 'SET_TRANSITION_TIME', frames: 600 }).transitionFrames, 510);
+  assert.equal(reduce(s, { type: 'SET_TRANSITION_TIME', frames: 60 }), s); // factory default is 60
+});
+
+test('PRESS_AUTO_TAKE starts a run toward B, then pauses and resumes', () => {
+  const s = structuredClone(FACTORY_PRESET); // lever at 0, frames 60
+  const started = reduce(s, { type: 'PRESS_AUTO_TAKE', tick: 5 });
+  const r = started.transition.auto;
+  assert.equal(r.phase, 'running');
+  assert.equal(r.startTick, 5);
+  assert.equal(r.durationTicks, 60);
+  assert.equal(r.from, 0);
+  assert.equal(r.to, 1);
+  const paused = reduce(started, { type: 'PRESS_AUTO_TAKE', tick: 20 });
+  assert.equal(paused.transition.auto.phase, 'paused');
+  assert.equal(reduce(paused, { type: 'PRESS_AUTO_TAKE', tick: 25 }).transition.auto.phase, 'running');
+});
+
+test('PRESS_AUTO_FADE starts an Auto Fade toward OUT', () => {
+  const s = structuredClone(FACTORY_PRESET);
+  const r = reduce(s, { type: 'PRESS_AUTO_FADE', tick: 0 }).fade.auto;
+  assert.equal(r.phase, 'running');
+  assert.equal(r.from, 0);
+  assert.equal(r.to, 1);
+});
+
+test('ADVANCE_TIMELINE is a same-ref no-op while both runners are idle', () => {
+  const s = structuredClone(FACTORY_PRESET);
+  assert.equal(reduce(s, { type: 'ADVANCE_TIMELINE', tick: 10 }), s);
+});
+
+test('ADVANCE_TIMELINE drives the lever from the runner and lands exactly at B', () => {
+  let s = structuredClone(FACTORY_PRESET);
+  s.transitionFrames = 60;
+  s = reduce(s, { type: 'PRESS_AUTO_TAKE', tick: 0 });
+  s = reduce(s, { type: 'ADVANCE_TIMELINE', tick: 30 });
+  assert.equal(s.transition.lever, 0.5);
+  s = reduce(s, { type: 'ADVANCE_TIMELINE', tick: 60 });
+  assert.equal(s.transition.lever, 1);
+  assert.equal(s.transition.auto.phase, 'complete');
+});
+
+test('fieldPreset resets both runners to idle while preserving fade settings and frames', () => {
+  let s = structuredClone(FACTORY_PRESET);
+  s.fade = { ...s.fade, video: true, target: 'matte', lever: 0.5 };
+  s.transitionFrames = 120;
+  s = reduce(s, { type: 'PRESS_AUTO_TAKE', tick: 3 });
+  s = reduce(s, { type: 'PRESS_AUTO_FADE', tick: 3 });
+  const restored = fieldPreset(s);
+  assert.equal(restored.transition.auto.phase, 'idle');
+  assert.equal(restored.fade.auto.phase, 'idle');
+  assert.equal(restored.fade.video, true);
+  assert.equal(restored.fade.target, 'matte');
+  assert.equal(restored.fade.lever, 0.5);
+  assert.equal(restored.transitionFrames, 120);
+});

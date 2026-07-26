@@ -10,6 +10,8 @@ import type {
   DskEdgeStyle,
   DskFill,
   DskKeySource,
+  FadeElement,
+  FadeTarget,
   FreezeEffect,
   MicAux2Input,
   PanelState,
@@ -89,6 +91,15 @@ export type Command =
   // --- A/V Synchro (reference §8.9) ---
   | { type: 'SET_AV_SYNCHRO_LEVEL'; level: number } // 0..1 threshold
   | { type: 'SET_AV_SYNCHRO_EFFECT'; effect: AvSynchroEffect; on: boolean }
+  // --- fade control (reference §11) ---
+  | { type: 'SET_FADE_ENABLE'; element: FadeElement; on: boolean }
+  | { type: 'SET_FADE_TARGET'; target: FadeTarget }
+  | { type: 'SET_FADE_LEVER'; position: number } // 0..1, IN..OUT
+  // --- shared transition timing (reference §11/§15, ADR-0012) ---
+  | { type: 'SET_TRANSITION_TIME'; frames: number } // TRANSITION control; quantized in the reducer
+  | { type: 'PRESS_AUTO_TAKE'; tick: number } // start | pause | resume — carries the current clock tick
+  | { type: 'PRESS_AUTO_FADE'; tick: number } // start | pause | resume — carries the current clock tick
+  | { type: 'ADVANCE_TIMELINE'; tick: number } // per-present-frame runner advance (ADR-0012)
   | { type: 'LOAD_STATE'; state: PanelState };
 
 /** Discriminant union of all command type tags, handy for exhaustiveness. */
