@@ -32,6 +32,9 @@ export class MixerWorld extends World {
   /** Whether a Multi-button press has occurred (distinguishes precondition from assertion). */
   multiPressed = false;
 
+  /** The chroma-key backdrop hue for the current scenario (default green). */
+  chromaBackdropHue = 1 / 3;
+
   // --- wipe scratch state (Phase 2) ---
   wipeFamily: WipeFamily = 'straight';
   readonly num: { base: number; reversed: number } = { base: 0, reversed: 0 };

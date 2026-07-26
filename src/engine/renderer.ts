@@ -12,6 +12,7 @@ import { directOutSource } from '../core/program.js';
 import { BusProcessor } from '../gpu/bus-processor.js';
 import { CombinePass } from '../gpu/combine.js';
 import { WipePass } from '../gpu/wipe.js';
+import { DskPass } from '../gpu/dsk.js';
 import { PresentPass } from '../gpu/present.js';
 import type { SignalGraph } from '../core/signal-graph.js';
 import type { Size } from '../core/types.js';
@@ -38,6 +39,7 @@ export class Renderer {
   private readonly downstream: SignalGraph<GPUTexture>;
   private readonly combine: CombinePass;
   private readonly wipe: WipePass;
+  private readonly dsk: DskPass;
   private readonly present: PresentPass;
 
   constructor(private readonly deps: RendererDeps) {
@@ -46,6 +48,7 @@ export class Renderer {
     this.downstream = createDownstreamGraph<GPUTexture>();
     this.combine = new CombinePass(deps.gpu.device, deps.size);
     this.wipe = new WipePass(deps.gpu.device, deps.size);
+    this.dsk = new DskPass(deps.gpu.device, deps.size);
     this.present = new PresentPass(deps.gpu.device, deps.gpu.srgbView);
   }
 
@@ -72,8 +75,24 @@ export class Renderer {
     const composite =
       state.transition.type === 'wipe'
         ? this.wipe.render(aTex, bTex, state)
-        : this.combine.render(aTex, bTex, compositeRule(state.transition.type), state.transition.lever);
-    const out = this.downstream.run(composite);
+        : this.combine.render(
+            aTex,
+            bTex,
+            compositeRule(state.transition.type),
+            state.transition.lever,
+            state.transition.slice,
+            state.transition.hue,
+          );
+
+    // Downstream Key (reference §10): key a title over the composite. Key source is the
+    // External Camera (not yet bound — falls back to the composite) or the A/B bus texture.
+    let keyed = composite;
+    if (state.dsk.on) {
+      const keyTex = state.dsk.keySource === 'A' ? aTex : state.dsk.keySource === 'B' ? bTex : composite;
+      keyed = this.dsk.render(composite, keyTex, state);
+    }
+
+    const out = this.downstream.run(keyed); // Fade stage is still pass-through (Phase 6)
     this.present.render(gpu.context, out, gpu.srgbView);
   }
 }

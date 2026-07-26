@@ -249,6 +249,18 @@ frame memory.
 
 ### Phase 4 — Luminance/Chroma keys and Downstream Key
 
+> **Status: ✅ done.** **Luminance Key** (B over A by SLICE luminance threshold, lever =
+> foreground opacity) and **Chroma Key** (HUE colour removal, SLICE tolerance, lever blends
+> keyed↔unkeyed B) are selectable Mix/Wipe transition modes rendering through the combine
+> pass (modes 2/3); the B-bus is always the key source (Matte→substitute). The **Downstream
+> Key** is a real downstream stage (after Mix/Wipe, before Fade): ON, WHITE/MATTE fill,
+> EXT.CAMERA / A / B key source, Low/High luminance window, 6-state EDGE cycle, REVERSE
+> polarity, white-key edge colour + GRADATION vs matte-key edge-always-black. 62 more
+> Gherkin scenarios green (364 total, 2590 steps), 98 units. **Deferred rendering:** the
+> five non-Normal DSK edge styles (border/shadow geometry) and the EXT.CAMERA GPU binding
+> (needs the Phase-1 device layer) — domain complete; anti-aliased key edges and exact
+> chroma constants likewise await a golden-image runner.
+
 Add the keyers: the two bus-combining keys at the Mix/Wipe stage, and the downstream
 title keyer that sits after every effect.
 

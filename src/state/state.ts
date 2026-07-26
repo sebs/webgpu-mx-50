@@ -125,7 +125,41 @@ export interface TransitionState {
   type: TransitionType;
   /** Mix/Wipe lever position, 0 = fully A-bus, 1 = fully B-bus. */
   lever: number;
+  /** SLICE knob, 0..1 (0.5 = centre). Lum Key = luminance threshold; Chroma Key = tolerance (§9.5/§9.6). */
+  slice: number;
+  /** HUE knob, 0..1 around the colour wheel — the B-bus colour removed by Chroma Key (§9.6). */
+  hue: number;
   wipe: WipeState;
+}
+
+/** Downstream Key edge styles (reference §10): the EDGE button cycles this ring. */
+export type DskEdgeStyle =
+  | 'normal'
+  | 'narrow-border'
+  | 'wide-border'
+  | 'narrow-shadow'
+  | 'wide-shadow'
+  | 'drop-shadow';
+
+/** DSK fill for the keyed characters (reference §10). */
+export type DskFill = 'matte' | 'white';
+
+/** DSK key source: the dedicated External Camera, or the A/B bus (reference §10). */
+export type DskKeySource = 'ext-camera' | 'A' | 'B';
+
+/**
+ * The Downstream Key (reference §10). It sits after Mix/Wipe and before Fade, keying a
+ * title/character source over the finished composite so titles stay sharp over any effect.
+ */
+export interface DskState {
+  on: boolean;
+  fill: DskFill;
+  keySource: DskKeySource;
+  low: number; // Low Level Key slider, 0..1
+  high: number; // High Level Key slider, 0..1
+  edge: DskEdgeStyle;
+  edgeColorIndex: number; // edge colour (white fill only); matte fill forces black
+  reverse: boolean;
 }
 
 /** What leaves the unit (reference §2): A/B direct-out, or the full EFFECT composite. */
@@ -144,6 +178,7 @@ export interface PanelState {
   digitalEffect: DigitalEffectState;
   transition: TransitionState;
   positioner: PositionerState;
+  dsk: DskState;
   programOut: ProgramOut;
   system: SystemState;
 }
@@ -178,6 +213,8 @@ export const FACTORY_PRESET: PanelState = {
   transition: {
     type: 'mix',
     lever: 0,
+    slice: 0.5,
+    hue: 0,
     wipe: {
       family: 'straight',
       variant: 0,
@@ -190,6 +227,16 @@ export const FACTORY_PRESET: PanelState = {
     },
   },
   positioner: { on: false, x: 0, y: 0, size: 0.2, sceneGrabber: false },
+  dsk: {
+    on: false,
+    fill: 'white',
+    keySource: 'ext-camera',
+    low: 0,
+    high: 1,
+    edge: 'normal',
+    edgeColorIndex: 1,
+    reverse: false,
+  },
   programOut: 'effect',
   system: { reset: 'on' },
 };

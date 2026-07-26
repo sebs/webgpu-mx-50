@@ -8,9 +8,10 @@
 // button/range/checkbox controls, which are accessible out of the box.
 
 import { matteColorName } from '../core/matte.js';
+import { dskEdgeStyleLabel } from '../core/dsk.js';
 import type { PanelStore } from '../state/store.js';
 import type { BusId, BusSource } from '../core/types.js';
-import type { FilterEffect, PanelState, ProgramOut, TransitionType, WipeFamily } from '../state/state.js';
+import type { DskFill, DskKeySource, FilterEffect, PanelState, ProgramOut, TransitionType, WipeFamily } from '../state/state.js';
 
 const SOURCE_CHOICES: { label: string; value: BusSource }[] = [
   { label: '1', value: 1 },
@@ -346,6 +347,77 @@ export class MxControlStrip extends HTMLElement {
     });
     freezeGroup.append(still, strobe, multi, multiLabel, trail, 'Strobe TIME', strobeTime);
     this.appendRow(freezeGroup);
+
+    // Keys (Mix/Wipe-stage): Luminance / Chroma + SLICE + HUE.
+    const keysGroup = this.group('Keys');
+    const lumBtn = this.button('LUM KEY', () => store.dispatch({ type: 'PRESS_LUM_KEY' }));
+    this.refresh.push((s) => lumBtn.setAttribute('aria-pressed', String(s.transition.type === 'lum-key')));
+    const chromaBtn = this.button('CHROMA', () => store.dispatch({ type: 'PRESS_CHROMA_KEY' }));
+    this.refresh.push((s) => chromaBtn.setAttribute('aria-pressed', String(s.transition.type === 'chroma-key')));
+    const slice = document.createElement('input');
+    slice.type = 'range';
+    slice.min = '0';
+    slice.max = '1';
+    slice.step = '0.01';
+    slice.setAttribute('aria-label', 'Key SLICE');
+    slice.addEventListener('input', () => store.dispatch({ type: 'SET_SLICE', value: Number(slice.value) }));
+    this.refresh.push((s) => {
+      if (document.activeElement !== slice) slice.value = String(s.transition.slice);
+    });
+    const hue = document.createElement('input');
+    hue.type = 'range';
+    hue.min = '0';
+    hue.max = '1';
+    hue.step = '0.01';
+    hue.setAttribute('aria-label', 'Chroma HUE');
+    hue.addEventListener('input', () => store.dispatch({ type: 'SET_HUE', angle: Number(hue.value) }));
+    this.refresh.push((s) => {
+      if (document.activeElement !== hue) hue.value = String(s.transition.hue);
+    });
+    keysGroup.append(lumBtn, chromaBtn, 'Slice', slice, 'Hue', hue);
+    this.appendRow(keysGroup);
+
+    // Downstream Key panel.
+    const dskGroup = this.group('DSK');
+    const dskOn = this.button('DSK ON', () => store.dispatch({ type: 'SET_DSK_ON', on: !store.getSnapshot().dsk.on }));
+    this.refresh.push((s) => dskOn.setAttribute('aria-pressed', String(s.dsk.on)));
+    dskGroup.appendChild(dskOn);
+    for (const fill of ['white', 'matte'] as DskFill[]) {
+      const b = this.button(fill, () => store.dispatch({ type: 'SET_DSK_FILL', fill }));
+      this.refresh.push((s) => b.setAttribute('aria-pressed', String(s.dsk.fill === fill)));
+      dskGroup.appendChild(b);
+    }
+    for (const src of ['ext-camera', 'A', 'B'] as DskKeySource[]) {
+      const b = this.button(src === 'ext-camera' ? 'Ext' : src, () => store.dispatch({ type: 'SET_DSK_KEY_SOURCE', source: src }));
+      this.refresh.push((s) => b.setAttribute('aria-pressed', String(s.dsk.keySource === src)));
+      dskGroup.appendChild(b);
+    }
+    const low = document.createElement('input');
+    low.type = 'range';
+    low.min = '0';
+    low.max = '1';
+    low.step = '0.01';
+    low.setAttribute('aria-label', 'DSK Low Level');
+    low.addEventListener('input', () => store.dispatch({ type: 'SET_DSK_LOW', level: Number(low.value) }));
+    const high = document.createElement('input');
+    high.type = 'range';
+    high.min = '0';
+    high.max = '1';
+    high.step = '0.01';
+    high.setAttribute('aria-label', 'DSK High Level');
+    high.addEventListener('input', () => store.dispatch({ type: 'SET_DSK_HIGH', level: Number(high.value) }));
+    const dskEdge = this.button('Edge', () => store.dispatch({ type: 'PRESS_DSK_EDGE' }));
+    const dskEdgeLabel = document.createElement('span');
+    dskEdgeLabel.className = 'label';
+    const dskReverse = this.button('Reverse', () => store.dispatch({ type: 'PRESS_DSK_REVERSE' }));
+    this.refresh.push((s) => {
+      if (document.activeElement !== low) low.value = String(s.dsk.low);
+      if (document.activeElement !== high) high.value = String(s.dsk.high);
+      dskEdgeLabel.textContent = dskEdgeStyleLabel(s.dsk.edge);
+      dskReverse.setAttribute('aria-pressed', String(s.dsk.reverse));
+    });
+    dskGroup.append('Lo', low, 'Hi', high, dskEdge, dskEdgeLabel, dskReverse);
+    this.appendRow(dskGroup);
 
     // Subscribe + initial reflect.
     this.unsubscribe?.();

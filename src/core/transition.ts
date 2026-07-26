@@ -46,3 +46,19 @@ export function namDominant(lever: number): 'A' | 'B' | 'balanced' {
   if (lever > 0.5) return 'B';
   return 'balanced';
 }
+
+/** The combine shader's numeric mode for a composite rule (host and shader must agree). */
+export function combineMode(rule: CompositeRule): number {
+  switch (rule) {
+    case 'cross-dissolve':
+      return 0;
+    case 'nam-brighter':
+      return 1;
+    case 'lum-key':
+      return 2;
+    case 'chroma-key':
+      return 3;
+    case 'wipe':
+      return 0; // Wipe uses its own pass, not the combine mode.
+  }
+}

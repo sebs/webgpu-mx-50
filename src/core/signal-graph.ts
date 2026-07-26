@@ -39,6 +39,11 @@ export const STAGE_ORDER = [...PER_BUS_STAGES, COMBINE_STAGE, ...DOWNSTREAM_STAG
 
 export type StageName = (typeof STAGE_ORDER)[number];
 
+/** Whether stage `a` runs strictly before stage `b` in the fixed flow (ADR-0004). */
+export function stageIsBefore(a: StageName, b: StageName): boolean {
+  return STAGE_ORDER.indexOf(a) < STAGE_ORDER.indexOf(b);
+}
+
 /** An ordered chain of stages folded from source frame to Program Out frame. */
 export class SignalGraph<F> {
   constructor(public readonly stages: readonly Stage<F>[]) {}

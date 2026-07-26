@@ -4,7 +4,17 @@
 // (reducer.ts) maps (state, command) -> next state as a pure function.
 
 import type { BusId, BusSource } from '../core/types.js';
-import type { DigitalEffectName, FreezeEffect, PanelState, ProgramOut, TransitionType, WipeFamily } from './state.js';
+import type {
+  DigitalEffectName,
+  DskEdgeStyle,
+  DskFill,
+  DskKeySource,
+  FreezeEffect,
+  PanelState,
+  ProgramOut,
+  TransitionType,
+  WipeFamily,
+} from './state.js';
 
 export type Command =
   | { type: 'ASSIGN_SOURCE'; bus: BusId; source: BusSource }
@@ -55,6 +65,21 @@ export type Command =
   | { type: 'SET_POSITIONER_SIZE'; value: number } // 0..1
   | { type: 'SET_POSITIONER_JOYSTICK'; x: number; y: number } // -1..1
   | { type: 'PRESS_SCENE_GRABBER' } // toggle; only when the Positioner is active
+  // --- keys (reference §9.5–§9.6) ---
+  | { type: 'PRESS_LUM_KEY' } // toggle mix <-> lum-key
+  | { type: 'PRESS_CHROMA_KEY' } // toggle mix <-> chroma-key
+  | { type: 'SET_SLICE'; value: number } // 0..1 SLICE knob (shared lum/chroma)
+  | { type: 'SET_HUE'; angle: number } // 0..1 HUE knob (chroma), wraps
+  // --- downstream key (reference §10) ---
+  | { type: 'SET_DSK_ON'; on: boolean }
+  | { type: 'SET_DSK_FILL'; fill: DskFill }
+  | { type: 'SET_DSK_KEY_SOURCE'; source: DskKeySource }
+  | { type: 'SET_DSK_LOW'; level: number } // 0..1
+  | { type: 'SET_DSK_HIGH'; level: number } // 0..1
+  | { type: 'PRESS_DSK_EDGE' } // cycle the 6-style ring
+  | { type: 'SET_DSK_EDGE'; edge: DskEdgeStyle }
+  | { type: 'SET_DSK_EDGE_COLOR'; colorIndex: number } // ignored when fill === 'matte'
+  | { type: 'PRESS_DSK_REVERSE' }
   | { type: 'LOAD_STATE'; state: PanelState };
 
 /** Discriminant union of all command type tags, handy for exhaustiveness. */

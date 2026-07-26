@@ -6,11 +6,14 @@
 
 import { MATTE_COLOR_COUNT } from './state.js';
 import { blindsLegal, pressBorder, pressSoft, VARIANT_COUNT } from '../core/wipe.js';
+import { wrapUnit } from '../core/key.js';
+import { nextDskEdgeStyle } from '../core/dsk.js';
 import type { BusId } from '../core/types.js';
 import type {
   ColourCorrectMode,
   ColourCorrectState,
   DigitalEffectState,
+  DskState,
   FreezeEffect,
   FreezeState,
   PanelState,
@@ -95,6 +98,11 @@ function withBusCC(state: PanelState, bus: BusId, cc: ColourCorrectState): Panel
 /** Return a new state with the digital-effect block replaced. */
 function withEffect(state: PanelState, digitalEffect: DigitalEffectState): PanelState {
   return { ...state, digitalEffect };
+}
+
+/** Return a new state with the DSK block replaced. */
+function withDsk(state: PanelState, dsk: DskState): PanelState {
+  return { ...state, dsk };
 }
 
 export function reduce(state: PanelState, command: Command): PanelState {
@@ -284,6 +292,73 @@ export function reduce(state: PanelState, command: Command): PanelState {
       if (!p.on) return state; // Scene Grabber needs the Positioner active
       return { ...state, positioner: { ...p, sceneGrabber: !p.sceneGrabber } };
     }
+
+    // --- keys (reference §9.5–§9.6) ---
+
+    case 'PRESS_LUM_KEY': {
+      const type = state.transition.type === 'lum-key' ? 'mix' : 'lum-key';
+      return { ...state, transition: { ...state.transition, type } };
+    }
+
+    case 'PRESS_CHROMA_KEY': {
+      const type = state.transition.type === 'chroma-key' ? 'mix' : 'chroma-key';
+      return { ...state, transition: { ...state.transition, type } };
+    }
+
+    case 'SET_SLICE': {
+      const slice = clamp(command.value, 0, 1);
+      if (slice === state.transition.slice) return state;
+      return { ...state, transition: { ...state.transition, slice } };
+    }
+
+    case 'SET_HUE': {
+      const hue = wrapUnit(command.angle);
+      if (hue === state.transition.hue) return state;
+      return { ...state, transition: { ...state.transition, hue } };
+    }
+
+    // --- downstream key (reference §10) ---
+
+    case 'SET_DSK_ON':
+      if (state.dsk.on === command.on) return state;
+      return withDsk(state, { ...state.dsk, on: command.on });
+
+    case 'SET_DSK_FILL':
+      if (state.dsk.fill === command.fill) return state;
+      return withDsk(state, { ...state.dsk, fill: command.fill });
+
+    case 'SET_DSK_KEY_SOURCE':
+      if (state.dsk.keySource === command.source) return state;
+      return withDsk(state, { ...state.dsk, keySource: command.source });
+
+    case 'SET_DSK_LOW': {
+      const low = clamp(command.level, 0, 1);
+      if (low === state.dsk.low) return state;
+      return withDsk(state, { ...state.dsk, low });
+    }
+
+    case 'SET_DSK_HIGH': {
+      const high = clamp(command.level, 0, 1);
+      if (high === state.dsk.high) return state;
+      return withDsk(state, { ...state.dsk, high });
+    }
+
+    case 'PRESS_DSK_EDGE':
+      return withDsk(state, { ...state.dsk, edge: nextDskEdgeStyle(state.dsk.edge) });
+
+    case 'SET_DSK_EDGE':
+      if (state.dsk.edge === command.edge) return state;
+      return withDsk(state, { ...state.dsk, edge: command.edge });
+
+    case 'SET_DSK_EDGE_COLOR': {
+      if (state.dsk.fill === 'matte') return state; // matte fill forces a black edge (§10)
+      const edgeColorIndex = wrapColor(command.colorIndex);
+      if (edgeColorIndex === state.dsk.edgeColorIndex) return state;
+      return withDsk(state, { ...state.dsk, edgeColorIndex });
+    }
+
+    case 'PRESS_DSK_REVERSE':
+      return withDsk(state, { ...state.dsk, reverse: !state.dsk.reverse });
 
     // --- colour correction (reference §6) ---
 

@@ -1,24 +1,25 @@
-// The Mix/Wipe combine pass (ADR-0004 combine stage): composites the A-bus and B-bus
-// textures into one, as a cross-dissolve (Mix) or per-pixel brighter (NAM), by the lever
-// position. Owns its output texture so it never overwrites the source textures.
+// The Downstream Key pass (ADR-0004 `downstream-key` stage, reference §10): composites a
+// keyed title over the finished composite. Sits after Mix/Wipe, before present. Owns its
+// output texture. Normal fill only in Phase 4 (edge styles deferred).
 
 import { WORKING_FORMAT } from '../constants.js';
-import { combineWGSL } from './shaders/combine.wgsl.js';
-import { combineMode } from '../core/transition.js';
+import { dskWGSL } from './shaders/dsk.wgsl.js';
+import { dskFillColour, dskKeyWindow } from '../core/dsk.js';
 import type { Size } from '../core/types.js';
-import type { CompositeRule } from '../core/transition.js';
+import type { PanelState } from '../state/state.js';
 
-export class CombinePass {
+export class DskPass {
   private readonly pipeline: GPURenderPipeline;
   private readonly sampler: GPUSampler;
   private readonly uniform: GPUBuffer;
   private readonly output: GPUTexture;
+  private readonly scratch = new Float32Array(8);
 
   constructor(
     private readonly device: GPUDevice,
     size: Size,
   ) {
-    const module = device.createShaderModule({ code: combineWGSL });
+    const module = device.createShaderModule({ code: dskWGSL });
     this.pipeline = device.createRenderPipeline({
       layout: 'auto',
       vertex: { module, entryPoint: 'vs' },
@@ -26,7 +27,7 @@ export class CombinePass {
       primitive: { topology: 'triangle-list' },
     });
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
-    this.uniform = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.uniform = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.output = device.createTexture({
       size: { width: size.width, height: size.height },
       format: WORKING_FORMAT,
@@ -34,17 +35,28 @@ export class CombinePass {
     });
   }
 
-  /** Composite A and B by the given rule, lever, and key controls; returns the composite. */
-  render(texA: GPUTexture, texB: GPUTexture, rule: CompositeRule, lever: number, slice: number, hue: number): GPUTexture {
+  /** Key the title (from `keyTex`) over `composite`; returns the owned output texture. */
+  render(composite: GPUTexture, keyTex: GPUTexture, state: PanelState): GPUTexture {
     const { device } = this;
-    device.queue.writeBuffer(this.uniform, 0, new Float32Array([combineMode(rule), lever, slice, hue]));
+    const dsk = state.dsk;
+    const { lo, hi } = dskKeyWindow(dsk);
+    const [r, g, b] = dskFillColour(dsk, state.matte);
+    const s = this.scratch;
+    s[0] = dsk.on ? 1 : 0;
+    s[1] = lo;
+    s[2] = hi;
+    s[3] = dsk.reverse ? 1 : 0;
+    s[4] = r;
+    s[5] = g;
+    s[6] = b;
+    device.queue.writeBuffer(this.uniform, 0, s);
 
     const bindGroup = device.createBindGroup({
       layout: this.pipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: this.sampler },
-        { binding: 1, resource: texA.createView() },
-        { binding: 2, resource: texB.createView() },
+        { binding: 1, resource: composite.createView() },
+        { binding: 2, resource: keyTex.createView() },
         { binding: 3, resource: { buffer: this.uniform } },
       ],
     });
