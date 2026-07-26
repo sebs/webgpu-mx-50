@@ -283,6 +283,27 @@ title keyer that sits after every effect.
 
 ### Phase 5 — Audio engine, Audio Follow, and A/V Synchro
 
+> **Status: ✅ done.** The **audio mixer** models five faders (A/B/Aux1/Mic-Aux2/Master) on
+> a real fader law (0 = off, 0.5 = 0 dB, top = +12 dB), the front-panel **Mic/Aux2 switch**,
+> and Program-Out-aware routing: `programAudioMix` layers fader gains onto the existing
+> `programAudio` contributor list — EFFECT routes all seven inputs and Master governs; direct
+> A/B routes that bus + Aux + Mic and bypasses Master; a Matte bus contributes no audio. The
+> **Audio Level Indicator** dB↔LED/clip mapping is pure. **Audio Follow** ties the A/B bus
+> gains to the Mix/Wipe lever as an equal-power crossfade (`effectiveBusGains`), leaving Aux
+> 1 and Mic/Aux 2 on their own faders; the standing faders are never mutated, so disengaging
+> restores them. **A/V Synchro** gates the six eligible effects (Nega/Mosaic/Mono/Paint/
+> Still/Strobe) on a LEVEL threshold vs the audio envelope — hold = time-above-threshold
+> except Strobe, which uses the Effect Interval Timer; the shipped Trail⊥A/V-Synchro mutual
+> refusal is kept. 44 more Gherkin scenarios green (**408 total, 2931 steps**), **134 units**.
+> The **Web Audio engine** (`src/audio/engine.ts` + `av-synchro-tap.ts`) builds the real node
+> graph and pushes gains from the store; it is typechecked and served but excluded from CI
+> (no headless `AudioContext`). **Deferred (browser-only):** per-frame GPU picture-gating of
+> the A/V-Synchro effects (the tap surfaces the active set as a transient signal today), and
+> real media-input capture — inputs are stand-in oscillators. The one av-synchro scenario
+> demanding Trail-wins ("Arming A/V Synchro is unavailable once Trail is engaged") and Auto
+> Take's audio crossfade (@integration) are deferred to keep the shipped invariant / await
+> Phase 6.
+
 Bring up sound: the audio mixer on the Web Audio API, audio that can follow the video
 transition, and audio-triggered effects.
 

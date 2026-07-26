@@ -40,6 +40,24 @@ export class MixerWorld extends World {
   readonly num: { base: number; reversed: number } = { base: 0, reversed: 0 };
   readonly travel: { ab: number; ba: number; after: number; noted: number } = { ab: 0, ba: 0, after: 0, noted: 0 };
 
+  // --- audio scratch state (Phase 5: mixer §5 / follow §12 / A/V Synchro §8.9) ---
+  /** Which program-mix gain a "raise the … Fader" step touched, and its value before. */
+  raisedGainKey: 'busA' | 'busB' | 'aux1' | 'aux2mic' = 'busA';
+  beforeRaiseGain = 0;
+  /** Master fader position/gain captured before pulling it to minimum, to restore/compare. */
+  prevMasterPos = 0;
+  prevMasterGain = 0;
+  /** Level-indicator scratch: the balanced programme peak and a representative brief peak. */
+  programmePeakDb = 0;
+  briefPeakDb = 0;
+  /** Sampled Audio-Follow bus gains across a lever sweep. */
+  sweepGains: { a: number; b: number }[] = [];
+  /** The current A/V-Synchro audio envelope (0..1) and a beat sequence, plus armed selection. */
+  avEnvelope = 0;
+  avBeats: number[] = [];
+  avSelected: string[] = [];
+  avLastEffect = '';
+
   get bindings(): SourceBindingRegistry {
     return this.engine.bindings;
   }

@@ -34,8 +34,50 @@ export interface BusState {
   colourCorrect: ColourCorrectState;
 }
 
+/**
+ * The audio mixer (reference §5). Every fader is 0..1 travel (0 = off, 0.5 = 0 dB /
+ * unity, 1 = full boost — see core/audio.ts). Program-Out routing (which faders reach
+ * the mix, and whether Master governs) is derived by programAudio()/programAudioMix(),
+ * never stored here.
+ */
+export interface AudioFaders {
+  a: number;
+  b: number;
+  aux1: number;
+  micAux2: number;
+  master: number;
+}
+
+/** The front-panel MIC/AUX2 switch: one shared fader feeds either Mic or Aux 2 (reference §2, §5). */
+export type MicAux2Input = 'mic' | 'aux2';
+
+/**
+ * The audio block (reference §5, §12). Holds the standing fader positions, the MIC/AUX2
+ * switch, and the AUDIO FOLLOW toggle. When AUDIO FOLLOW is engaged the A/B bus gains are
+ * driven by the Mix/Wipe lever at read time (effectiveBusGains) — the stored faders are
+ * never mutated, so disengaging restores them for free.
+ */
+export interface AudioState {
+  faders: AudioFaders;
+  micAux2: MicAux2Input;
+  audioFollow: boolean;
+}
+
 /** The filter-family digital effects (reference §8.1–§8.4). */
 export type FilterEffect = 'nega' | 'mosaic' | 'mono' | 'paint';
+
+/** An effect A/V Synchro can pulse in time with the audio (reference §8.9). */
+export type AvSynchroEffect = FilterEffect | 'still' | 'strobe';
+
+/** Which effects A/V Synchro drives when armed (reference §8.9). */
+export interface AvSynchroEffects {
+  nega: boolean;
+  mosaic: boolean;
+  mono: boolean;
+  paint: boolean;
+  still: boolean;
+  strobe: boolean;
+}
 
 /** The freeze-family digital effects backed by GPU frame memory (reference §8.5–§8.8, ADR-0007). */
 export type FreezeEffect = 'still' | 'strobe' | 'multi' | 'trail';
@@ -67,8 +109,15 @@ export interface DigitalEffectState {
   trailTime: number; // 0..1 (reference §8.8)
   multiMode: 'once' | 'repeat'; // reference §8.7
   trailCorner: 'upper-left' | 'upper-right'; // reference §8.8
-  /** A/V Synchro active (full effect is Phase 5); tracked here for the Trail exclusion (§8.8). */
+  /** A/V Synchro armed; also gates the Trail exclusion (§8.8). */
   avSynchro: boolean;
+  /**
+   * A/V Synchro LEVEL threshold, 0..1 (reference §8.9). Toward MAX = loud-only (high
+   * threshold), toward MIN = quiet also triggers (low threshold). See core/av-synchro.ts.
+   */
+  avSynchroLevel: number;
+  /** Which effects A/V Synchro pulses when armed (reference §8.9). */
+  avSynchroEffects: AvSynchroEffects;
 }
 
 /** The internal Matte generator (reference §4). `colorIndex` steps the 9 colours. */
@@ -179,6 +228,7 @@ export interface PanelState {
   transition: TransitionState;
   positioner: PositionerState;
   dsk: DskState;
+  audio: AudioState;
   programOut: ProgramOut;
   system: SystemState;
 }
@@ -209,6 +259,8 @@ export const FACTORY_PRESET: PanelState = {
     multiMode: 'repeat',
     trailCorner: 'upper-left',
     avSynchro: false,
+    avSynchroLevel: 0.5,
+    avSynchroEffects: { nega: false, mosaic: false, mono: false, paint: false, still: false, strobe: false },
   },
   transition: {
     type: 'mix',
@@ -236,6 +288,11 @@ export const FACTORY_PRESET: PanelState = {
     edge: 'normal',
     edgeColorIndex: 1,
     reverse: false,
+  },
+  audio: {
+    faders: { a: 0.7, b: 0.4, aux1: 0.6, micAux2: 0.6, master: 0.75 },
+    micAux2: 'mic',
+    audioFollow: false,
   },
   programOut: 'effect',
   system: { reset: 'on' },

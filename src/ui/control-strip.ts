@@ -9,9 +9,19 @@
 
 import { matteColorName } from '../core/matte.js';
 import { dskEdgeStyleLabel } from '../core/dsk.js';
+import { AV_SYNCHRO_EFFECTS } from '../core/av-synchro.js';
 import type { PanelStore } from '../state/store.js';
 import type { BusId, BusSource } from '../core/types.js';
-import type { DskFill, DskKeySource, FilterEffect, PanelState, ProgramOut, TransitionType, WipeFamily } from '../state/state.js';
+import type { DskFill, DskKeySource, FilterEffect, MicAux2Input, PanelState, ProgramOut, TransitionType, WipeFamily } from '../state/state.js';
+
+type AudioFaderKey = 'a' | 'b' | 'aux1' | 'micAux2' | 'master';
+const AUDIO_FADERS: { key: AudioFaderKey; label: string }[] = [
+  { key: 'a', label: 'A' },
+  { key: 'b', label: 'B' },
+  { key: 'aux1', label: 'Aux1' },
+  { key: 'micAux2', label: 'Mic/Aux2' },
+  { key: 'master', label: 'Master' },
+];
 
 const SOURCE_CHOICES: { label: string; value: BusSource }[] = [
   { label: '1', value: 1 },
@@ -418,6 +428,58 @@ export class MxControlStrip extends HTMLElement {
     });
     dskGroup.append('Lo', low, 'Hi', high, dskEdge, dskEdgeLabel, dskReverse);
     this.appendRow(dskGroup);
+
+    // Audio mixer (reference §5, §12): five faders, the Mic/Aux2 switch, AUDIO FOLLOW.
+    const audioGroup = this.group('Audio');
+    for (const { key, label } of AUDIO_FADERS) {
+      const fader = document.createElement('input');
+      fader.type = 'range';
+      fader.min = '0';
+      fader.max = '1';
+      fader.step = '0.01';
+      fader.setAttribute('aria-label', `${label} audio fader`);
+      fader.addEventListener('input', () => store.dispatch({ type: 'SET_AUDIO_FADER', fader: key, level: Number(fader.value) }));
+      this.refresh.push((s) => {
+        if (document.activeElement !== fader) fader.value = String(s.audio.faders[key]);
+      });
+      audioGroup.append(label, fader);
+    }
+    for (const pos of ['mic', 'aux2'] as MicAux2Input[]) {
+      const b = this.button(pos === 'mic' ? 'Mic' : 'Aux2', () => store.dispatch({ type: 'SET_MIC_AUX2_SWITCH', position: pos }));
+      this.refresh.push((s) => b.setAttribute('aria-pressed', String(s.audio.micAux2 === pos)));
+      audioGroup.appendChild(b);
+    }
+    const follow = this.button('Follow', () => store.dispatch({ type: 'PRESS_AUDIO_FOLLOW' }));
+    this.refresh.push((s) => follow.setAttribute('aria-pressed', String(s.audio.audioFollow)));
+    audioGroup.appendChild(follow);
+    this.appendRow(audioGroup);
+
+    // A/V Synchro (reference §8.9): arm, per-effect selection, LEVEL threshold.
+    const avGroup = this.group('A/V Synchro');
+    const avArm = this.button('Arm', () =>
+      store.dispatch({ type: 'ATTEMPT_AV_SYNCHRO', on: !store.getSnapshot().digitalEffect.avSynchro }),
+    );
+    this.refresh.push((s) => avArm.setAttribute('aria-pressed', String(s.digitalEffect.avSynchro)));
+    avGroup.appendChild(avArm);
+    for (const effect of AV_SYNCHRO_EFFECTS) {
+      const b = this.button(effect, () =>
+        store.dispatch({ type: 'SET_AV_SYNCHRO_EFFECT', effect, on: !store.getSnapshot().digitalEffect.avSynchroEffects[effect] }),
+      );
+      this.refresh.push((s) => b.setAttribute('aria-pressed', String(s.digitalEffect.avSynchroEffects[effect])));
+      avGroup.appendChild(b);
+    }
+    const avLevel = document.createElement('input');
+    avLevel.type = 'range';
+    avLevel.min = '0';
+    avLevel.max = '1';
+    avLevel.step = '0.01';
+    avLevel.setAttribute('aria-label', 'A/V Synchro LEVEL threshold');
+    avLevel.addEventListener('input', () => store.dispatch({ type: 'SET_AV_SYNCHRO_LEVEL', level: Number(avLevel.value) }));
+    this.refresh.push((s) => {
+      if (document.activeElement !== avLevel) avLevel.value = String(s.digitalEffect.avSynchroLevel);
+    });
+    avGroup.append('Level', avLevel);
+    this.appendRow(avGroup);
 
     // Subscribe + initial reflect.
     this.unsubscribe?.();

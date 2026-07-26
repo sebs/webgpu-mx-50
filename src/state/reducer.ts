@@ -10,6 +10,7 @@ import { wrapUnit } from '../core/key.js';
 import { nextDskEdgeStyle } from '../core/dsk.js';
 import type { BusId } from '../core/types.js';
 import type {
+  AudioState,
   ColourCorrectMode,
   ColourCorrectState,
   DigitalEffectState,
@@ -103,6 +104,11 @@ function withEffect(state: PanelState, digitalEffect: DigitalEffectState): Panel
 /** Return a new state with the DSK block replaced. */
 function withDsk(state: PanelState, dsk: DskState): PanelState {
   return { ...state, dsk };
+}
+
+/** Return a new state with the audio block replaced. */
+function withAudio(state: PanelState, audio: AudioState): PanelState {
+  return { ...state, audio };
 }
 
 export function reduce(state: PanelState, command: Command): PanelState {
@@ -465,6 +471,43 @@ export function reduce(state: PanelState, command: Command): PanelState {
       const de = state.digitalEffect;
       if (command.on && de.freeze.trail) return state; // Trail ⊥ A/V Synchro (§8.8)
       return withEffect(state, { ...de, avSynchro: command.on });
+    }
+
+    // --- audio mixer / follow (reference §5, §12) ---
+
+    case 'SET_AUDIO_FADER': {
+      const level = clamp(command.level, 0, 1);
+      if (level === state.audio.faders[command.fader]) return state;
+      return withAudio(state, {
+        ...state.audio,
+        faders: { ...state.audio.faders, [command.fader]: level },
+      });
+    }
+
+    case 'SET_MIC_AUX2_SWITCH':
+      if (state.audio.micAux2 === command.position) return state;
+      return withAudio(state, { ...state.audio, micAux2: command.position });
+
+    case 'PRESS_AUDIO_FOLLOW':
+      // AUDIO FOLLOW toggle (§12). The lever→bus-gain override lives in effectiveBusGains();
+      // the standing A/B faders are never mutated, so disengaging restores them.
+      return withAudio(state, { ...state.audio, audioFollow: !state.audio.audioFollow });
+
+    // --- A/V Synchro (reference §8.9) ---
+
+    case 'SET_AV_SYNCHRO_LEVEL': {
+      const level = clamp(command.level, 0, 1);
+      if (level === state.digitalEffect.avSynchroLevel) return state;
+      return withEffect(state, { ...state.digitalEffect, avSynchroLevel: level });
+    }
+
+    case 'SET_AV_SYNCHRO_EFFECT': {
+      const de = state.digitalEffect;
+      if (de.avSynchroEffects[command.effect] === command.on) return state;
+      return withEffect(state, {
+        ...de,
+        avSynchroEffects: { ...de.avSynchroEffects, [command.effect]: command.on },
+      });
     }
 
     case 'LOAD_STATE':

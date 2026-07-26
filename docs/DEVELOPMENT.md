@@ -71,6 +71,8 @@ src/
     positioner.ts       Positioner availability + ASPECT-ON gating (reference §7)
     key.ts              Shared luminance/chroma keying: masks, opacity, tolerance (reference §9.5/§9.6)
     dsk.ts              Downstream Key: edge ring, window, fill/edge colour, key source (reference §10)
+    audio.ts            Audio mixer: fader law, follow crossfade, program-mix gains, LED map (reference §5, §12)
+    av-synchro.ts       A/V Synchro: LEVEL threshold, trigger/hold rules, pulse train (reference §8.9)
   state/
     state.ts            PanelState + FACTORY_PRESET + fieldPreset (ADR-0011, ref §18)
     commands.ts         Typed command union
@@ -95,6 +97,9 @@ src/
     bus-processor.ts    Per-bus colour correction + filter effects pass (reference §6, §8.1-§8.4)
     dsk.ts              Downstream Key pass — keyed title over the composite (reference §10)
     shaders/*.wgsl.ts   WGSL string modules (present/test-pattern/matte/combine/wipe/bus-effect/dsk)
+  audio/
+    engine.ts           Browser Web Audio graph, gains driven by the store (ADR-0010)
+    av-synchro-tap.ts   Runtime envelope tap → A/V-Synchro effect gate (browser-only)
   ui/
     control-strip.ts    First Web Component control surface, store-bound (ADR-0013)
   app.ts                Headless engine assembly (store + clock + bindings)
@@ -106,7 +111,7 @@ test/
   cucumber.mjs          cucumber-js configuration
 ```
 
-## Status (Phases 0–4 complete)
+## Status (Phases 0–5 complete)
 
 Implemented and rendering: **two buses** + Matte substitution, **Program Out** A/B/EFFECT,
 **Mix/NAM** + the **compositional wipe engine**, the **Matte generator**, per-bus **Colour
@@ -117,16 +122,26 @@ the ADR-0007 exclusion state machine), **Position control + Scene Grabber**, the
 covers all of the above plus Still/Strobe (freeze texture), Multi (grid tiling), the
 Positioner PiP, the two keys (combine modes 2/3), and the DSK Normal fill.
 
-Next: audio (Phase 5), fade + auto take/fade (Phase 6), event memory + special modes
-(Phase 7), control mapping + polish (Phase 8).
+**Audio (Phase 5):** the **audio mixer** (five faders on a real fader law, Mic/Aux2 switch,
+Program-Out-aware routing with Master governance and Matte→silence), **Audio Follow** (an
+equal-power A/B crossfade tied to the Mix/Wipe lever, Aux/Mic excluded), and **A/V Synchro**
+(LEVEL-thresholded gating of the six eligible effects, Strobe held by the Effect Interval
+Timer). The **Web Audio engine** (`src/audio/`) builds the real node graph and pushes gains
+from the store; it is served but excluded from CI (no headless `AudioContext`), with
+stand-in oscillator inputs.
+
+Next: fade + auto take/fade (Phase 6), event memory + special modes (Phase 7), control
+mapping + polish (Phase 8).
 
 Known deferrals: **golden-image pixel tests** (no headless-WebGPU runner here); **Trail's
 ping-pong accumulator**, **Scene-Grabber freeze-in-place**, the **five non-Normal DSK edge
 styles**, and the **EXT.CAMERA GPU binding** — all domain-complete, GPU held back as the
 riskiest/blocked-on-device pieces; Compression/Slide/Blinds not yet in the wipe shader;
-underivable Pattern-Table parts `@wip`; **real browser-input binding** still open from Phase 1.
-See the [ROADMAP](ROADMAP.md).
+**A/V-Synchro per-frame GPU picture-gating** and **real audio-input capture** are browser-only
+follow-ons (the tap surfaces the gated-effect set today); underivable Pattern-Table parts
+`@wip`; **real browser-input binding** still open from Phase 1. See the [ROADMAP](ROADMAP.md).
 
-The domain is verified headlessly: **98 `node:test` units** and **364 Gherkin scenarios
-(2590 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five
-digital-effect features, position/scene-grabber, and the three key features.
+The domain is verified headlessly: **134 `node:test` units** and **408 Gherkin scenarios
+(2931 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five
+digital-effect features, position/scene-grabber, the three key features, and the three audio
+features (mixer, follow, A/V Synchro).

@@ -5,11 +5,13 @@
 
 import type { BusId, BusSource } from '../core/types.js';
 import type {
+  AvSynchroEffect,
   DigitalEffectName,
   DskEdgeStyle,
   DskFill,
   DskKeySource,
   FreezeEffect,
+  MicAux2Input,
   PanelState,
   ProgramOut,
   TransitionType,
@@ -80,6 +82,13 @@ export type Command =
   | { type: 'SET_DSK_EDGE'; edge: DskEdgeStyle }
   | { type: 'SET_DSK_EDGE_COLOR'; colorIndex: number } // ignored when fill === 'matte'
   | { type: 'PRESS_DSK_REVERSE' }
+  // --- audio mixer / follow (reference §5, §12) ---
+  | { type: 'SET_AUDIO_FADER'; fader: 'a' | 'b' | 'aux1' | 'micAux2' | 'master'; level: number } // 0..1 travel
+  | { type: 'SET_MIC_AUX2_SWITCH'; position: MicAux2Input }
+  | { type: 'PRESS_AUDIO_FOLLOW' } // toggle
+  // --- A/V Synchro (reference §8.9) ---
+  | { type: 'SET_AV_SYNCHRO_LEVEL'; level: number } // 0..1 threshold
+  | { type: 'SET_AV_SYNCHRO_EFFECT'; effect: AvSynchroEffect; on: boolean }
   | { type: 'LOAD_STATE'; state: PanelState };
 
 /** Discriminant union of all command type tags, handy for exhaustiveness. */

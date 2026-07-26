@@ -13,6 +13,8 @@ import { Renderer } from './engine/renderer.js';
 import { RenderLoop } from './engine/loop.js';
 import { createEngine } from './app.js';
 import { createControlStrip } from './ui/control-strip.js';
+import { AudioEngine } from './audio/engine.js';
+import { AvSynchroTap } from './audio/av-synchro-tap.js';
 import type { Size } from './core/types.js';
 import type { SourceSlot } from './core/types.js';
 
@@ -64,8 +66,27 @@ async function boot(): Promise<void> {
   const controls = createControlStrip(engine.store);
   document.getElementById('app')?.appendChild(controls);
 
+  // Audio engine (ADR-0010): the Web Audio graph, driven live by the store. It starts
+  // suspended — browsers only let audio run after a user gesture, so resume on first click.
+  const audio = new AudioEngine(engine.store);
+  const tap = new AvSynchroTap(audio);
+  const resumeAudio = (): void => {
+    void audio.resume();
+    window.removeEventListener('pointerdown', resumeAudio);
+  };
+  window.addEventListener('pointerdown', resumeAudio);
+
+  let lastAvSynchro = '';
   const loop = new RenderLoop(engine.clock, (_alpha, tick) => {
-    renderer.render(engine.store.getSnapshot(), tick);
+    const snapshot = engine.store.getSnapshot();
+    renderer.render(snapshot, tick);
+    // A/V Synchro (§8.9): reflect the audio-gated effects as a transient per-frame signal.
+    // Full per-frame GPU picture-gating is a deferred browser-only integration (see ROADMAP).
+    const active = tap.activeEffects(snapshot.digitalEffect).join(' ');
+    if (active !== lastAvSynchro) {
+      controls.dataset.avSynchroActive = active;
+      lastAvSynchro = active;
+    }
   });
   loop.start();
 }
