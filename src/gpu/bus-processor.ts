@@ -6,7 +6,7 @@
 import { WORKING_FORMAT } from '../constants.js';
 import { busEffectWGSL } from './shaders/bus-effect.wgsl.js';
 import { ccActive, joystickActive } from '../core/colour-correct.js';
-import { effectActiveOn } from '../core/digital-effect.js';
+import { effectActiveOn, freezeActiveOn, intervalTicks, multiTilesPerAxis, strobeInterval } from '../core/digital-effect.js';
 import type { Size } from '../core/types.js';
 import type { BusId } from '../core/types.js';
 import type { PanelState } from '../state/state.js';
@@ -16,6 +16,10 @@ export class BusProcessor {
   private readonly sampler: GPUSampler;
   private readonly uniform: GPUBuffer;
   private readonly output: GPUTexture;
+  /** Held frame for Still/Strobe (the freeze texture, ADR-0007). */
+  private readonly freeze: GPUTexture;
+  private captured = false;
+  private lastStrobeTick = Number.NEGATIVE_INFINITY;
   private readonly scratch = new Float32Array(16);
 
   constructor(
@@ -34,12 +38,21 @@ export class BusProcessor {
     this.output = device.createTexture({
       size: { width: size.width, height: size.height },
       format: WORKING_FORMAT,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+    });
+    this.freeze = device.createTexture({
+      size: { width: size.width, height: size.height },
+      format: WORKING_FORMAT,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
   }
 
-  /** Apply this bus's colour correction + active filters to `sourceTex`; returns the result. */
-  render(sourceTex: GPUTexture, state: PanelState, bus: BusId): GPUTexture {
+  /**
+   * Apply this bus's colour correction + active filters to `sourceTex`, then hold the
+   * frame if Still/Strobe is engaged (ADR-0007). Multi/Trail GPU is deferred; they render
+   * live for now. Returns the frame to composite for this bus.
+   */
+  render(sourceTex: GPUTexture, state: PanelState, bus: BusId, tick: number): GPUTexture {
     const { device } = this;
     const cc = bus === 'A' ? state.busA.colourCorrect : state.busB.colourCorrect;
     const de = state.digitalEffect;
@@ -57,6 +70,7 @@ export class BusProcessor {
     s[10] = effectActiveOn(de, bus, 'paint') ? 1 : 0;
     s[11] = de.mosaicSize;
     s[12] = de.paintLevel;
+    s[13] = de.bus === bus && de.freeze.multi > 0 ? multiTilesPerAxis(de.freeze.multi) : 1;
     device.queue.writeBuffer(this.uniform, 0, s);
 
     const bindGroup = device.createBindGroup({
@@ -80,6 +94,36 @@ export class BusProcessor {
     pass.end();
     device.queue.submit([encoder.finish()]);
 
-    return this.output;
+    // Freeze family: Still holds one captured frame; Strobe re-captures on its interval
+    // (ADR-0007). Both sample the freeze texture between captures.
+    const still = freezeActiveOn(de, bus, 'still');
+    const strobe = freezeActiveOn(de, bus, 'strobe');
+    if (!still && !strobe) {
+      this.captured = false;
+      this.lastStrobeTick = Number.NEGATIVE_INFINITY;
+      return this.output;
+    }
+
+    let capture = false;
+    if (still) {
+      capture = !this.captured;
+    } else {
+      const period = intervalTicks(strobeInterval(de.strobeTime));
+      if (tick - this.lastStrobeTick >= period) {
+        capture = true;
+        this.lastStrobeTick = tick;
+      }
+    }
+    if (capture) {
+      this.captured = true;
+      const copy = device.createCommandEncoder();
+      copy.copyTextureToTexture(
+        { texture: this.output },
+        { texture: this.freeze },
+        { width: this.size.width, height: this.size.height },
+      );
+      device.queue.submit([copy.finish()]);
+    }
+    return this.freeze;
   }
 }

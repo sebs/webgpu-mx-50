@@ -7,8 +7,62 @@
 import { MATTE_COLOR_COUNT } from './state.js';
 import { blindsLegal, pressBorder, pressSoft, VARIANT_COUNT } from '../core/wipe.js';
 import type { BusId } from '../core/types.js';
-import type { ColourCorrectMode, ColourCorrectState, DigitalEffectState, PanelState, WipeState } from './state.js';
+import type {
+  ColourCorrectMode,
+  ColourCorrectState,
+  DigitalEffectState,
+  FreezeEffect,
+  FreezeState,
+  PanelState,
+  WipeState,
+} from './state.js';
 import type { Command } from './commands.js';
+
+const FILTER_SET: ReadonlySet<string> = new Set(['nega', 'mosaic', 'mono', 'paint']);
+
+/** Clear the wipe Compression modifier (freeze effects exclude it, reference §8.5/§8.6). */
+function compressionCleared(state: PanelState): PanelState {
+  const w = state.transition.wipe;
+  if (w.modifiers.compression === 0) return state;
+  return { ...state, transition: { ...state.transition, wipe: { ...w, modifiers: { ...w.modifiers, compression: 0 } } } };
+}
+
+/**
+ * Engage or disengage a freeze-family effect, enforcing the single-owner exclusion rules
+ * (ADR-0007, reference §8.5–§8.8): Still ⊥ Strobe/Multi/Compression; Trail may run with
+ * Still; Trail ⊥ A/V Synchro. The newly-engaged effect wins and disables its conflicts.
+ */
+function engageFreeze(state: PanelState, effect: FreezeEffect, on: boolean): PanelState {
+  const de = state.digitalEffect;
+  if (effect === 'trail' && on && de.avSynchro) return state; // Trail ⊥ A/V Synchro
+  const freeze: FreezeState = { ...de.freeze };
+  let next = state;
+  switch (effect) {
+    case 'still':
+      freeze.still = on;
+      if (on) {
+        freeze.strobe = false;
+        freeze.multi = 0;
+        next = compressionCleared(state);
+      }
+      break;
+    case 'strobe':
+      freeze.strobe = on;
+      if (on) {
+        freeze.still = false;
+        next = compressionCleared(state);
+      }
+      break;
+    case 'multi':
+      freeze.multi = on ? 4 : 0;
+      if (on) freeze.still = false;
+      break;
+    case 'trail':
+      freeze.trail = on;
+      break;
+  }
+  return { ...next, digitalEffect: { ...next.digitalEffect, freeze } };
+}
 
 const CC_CYCLE: Record<ColourCorrectMode, ColourCorrectMode> = {
   off: 'chroma-only',
@@ -103,12 +157,17 @@ export function reduce(state: PanelState, command: Command): PanelState {
       }
       // Switching family drops Blinds if it is illegal on the new family.
       const blinds = w.modifiers.blinds && blindsLegal(command.family);
-      return withWipe(state, {
+      let next = withWipe(state, {
         ...w,
         family: command.family,
         variant: 0,
         modifiers: { ...w.modifiers, blinds },
       });
+      // The Positioner requires a Square-family wipe; leaving Square disengages it (§7).
+      if (command.family !== 'square' && state.positioner.on) {
+        next = { ...next, positioner: { ...state.positioner, on: false, sceneGrabber: false } };
+      }
+      return next;
     }
 
     case 'SET_WIPE_VARIANT': {
@@ -120,8 +179,15 @@ export function reduce(state: PanelState, command: Command): PanelState {
 
     case 'PRESS_COMPRESSION': {
       const w = state.transition.wipe;
+      const de = state.digitalEffect;
+      if (de.freeze.strobe) return state; // Compression is disabled during Strobe (§8.6)
       const compression = (((w.modifiers.compression + 1) % 3) as 0 | 1 | 2);
-      return withWipe(state, { ...w, modifiers: { ...w.modifiers, compression } });
+      let next = withWipe(state, { ...w, modifiers: { ...w.modifiers, compression } });
+      if (compression > 0 && de.freeze.still) {
+        // Engaging Compression switches Still off (§8.5).
+        next = { ...next, digitalEffect: { ...de, freeze: { ...de.freeze, still: false } } };
+      }
+      return next;
     }
 
     case 'PRESS_SLIDE': {
@@ -188,6 +254,37 @@ export function reduce(state: PanelState, command: Command): PanelState {
       return withWipe(state, { ...w, aspect });
     }
 
+    case 'SET_ASPECT_ON':
+      if (state.transition.wipe.aspectOn === command.on) return state;
+      return withWipe(state, { ...state.transition.wipe, aspectOn: command.on });
+
+    // --- positioner & scene grabber (reference §7) ---
+
+    case 'PRESS_POSITIONER': {
+      const p = state.positioner;
+      if (p.on) {
+        // Turning the Positioner off cancels any Scene Grabber (§7).
+        return { ...state, positioner: { ...p, on: false, sceneGrabber: false } };
+      }
+      if (state.transition.wipe.family !== 'square') return state; // unavailable off Square
+      return { ...state, positioner: { ...p, on: true, size: clamp(p.size * 2, 0, 1) } };
+    }
+
+    case 'SET_POSITIONER_SIZE':
+      return { ...state, positioner: { ...state.positioner, size: clamp(command.value, 0, 1) } };
+
+    case 'SET_POSITIONER_JOYSTICK':
+      return {
+        ...state,
+        positioner: { ...state.positioner, x: clamp(command.x, -1, 1), y: clamp(command.y, -1, 1) },
+      };
+
+    case 'PRESS_SCENE_GRABBER': {
+      const p = state.positioner;
+      if (!p.on) return state; // Scene Grabber needs the Positioner active
+      return { ...state, positioner: { ...p, sceneGrabber: !p.sceneGrabber } };
+    }
+
     // --- colour correction (reference §6) ---
 
     case 'PRESS_COLOUR_CORRECT': {
@@ -221,6 +318,7 @@ export function reduce(state: PanelState, command: Command): PanelState {
         ...de,
         bus: command.bus,
         active: { nega: false, mosaic: false, mono: false, paint: false },
+        freeze: { still: false, strobe: false, multi: 0, trail: false },
       });
     }
 
@@ -231,10 +329,13 @@ export function reduce(state: PanelState, command: Command): PanelState {
     case 'PRESS_EFFECT_ON': {
       const de = state.digitalEffect;
       if (!de.armed) return state;
-      return withEffect(state, {
-        ...de,
-        active: { ...de.active, [de.armed]: !de.active[de.armed] },
-      });
+      if (FILTER_SET.has(de.armed)) {
+        const armed = de.armed as 'nega' | 'mosaic' | 'mono' | 'paint';
+        return withEffect(state, { ...de, active: { ...de.active, [armed]: !de.active[armed] } });
+      }
+      const freezeName = de.armed as FreezeEffect;
+      const currentlyOn = freezeName === 'multi' ? de.freeze.multi > 0 : de.freeze[freezeName];
+      return engageFreeze(state, freezeName, !currentlyOn);
     }
 
     case 'SET_MOSAIC_SIZE': {
@@ -247,6 +348,48 @@ export function reduce(state: PanelState, command: Command): PanelState {
       const level = clamp(command.level, 0, 1);
       if (level === state.digitalEffect.paintLevel) return state;
       return withEffect(state, { ...state.digitalEffect, paintLevel: level });
+    }
+
+    // --- digital effect: freeze family (reference §8.5–§8.8, ADR-0007) ---
+
+    case 'ENGAGE_FREEZE':
+      return engageFreeze(state, command.effect, command.on);
+
+    case 'PRESS_MULTI': {
+      const de = state.digitalEffect;
+      const next = de.freeze.multi === 0 ? 4 : de.freeze.multi === 4 ? 9 : de.freeze.multi === 9 ? 16 : 0;
+      const freeze = { ...de.freeze, multi: next };
+      if (next > 0) freeze.still = false; // engaging Multi switches Still off (§8.5)
+      return withEffect(state, { ...de, freeze });
+    }
+
+    case 'SET_MULTI_GRID': {
+      const de = state.digitalEffect;
+      const count = command.count === 4 || command.count === 9 || command.count === 16 ? command.count : 0;
+      const freeze = { ...de.freeze, multi: count };
+      if (count > 0) freeze.still = false;
+      return withEffect(state, { ...de, freeze });
+    }
+
+    case 'SET_MULTI_MODE':
+      return withEffect(state, { ...state.digitalEffect, multiMode: command.mode });
+
+    case 'SET_TRAIL_CORNER':
+      return withEffect(state, { ...state.digitalEffect, trailCorner: command.corner });
+
+    case 'SET_STROBE_TIME':
+      return withEffect(state, { ...state.digitalEffect, strobeTime: clamp(command.position, 0, 1) });
+
+    case 'SET_MULTI_TIME':
+      return withEffect(state, { ...state.digitalEffect, multiTime: clamp(command.position, 0, 1) });
+
+    case 'SET_TRAIL_TIME':
+      return withEffect(state, { ...state.digitalEffect, trailTime: clamp(command.position, 0, 1) });
+
+    case 'ATTEMPT_AV_SYNCHRO': {
+      const de = state.digitalEffect;
+      if (command.on && de.freeze.trail) return state; // Trail ⊥ A/V Synchro (§8.8)
+      return withEffect(state, { ...de, avSynchro: command.on });
     }
 
     case 'LOAD_STATE':

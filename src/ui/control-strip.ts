@@ -203,13 +203,54 @@ export class MxControlStrip extends HTMLElement {
     aspect.step = '0.01';
     aspect.setAttribute('aria-label', 'Wipe aspect (Square family)');
     aspect.addEventListener('input', () => store.dispatch({ type: 'SET_WIPE_ASPECT', value: Number(aspect.value) }));
-    dirGroup.append(reverse.label, oneWay.label, 'Aspect', aspect);
+    const aspectOn = this.checkbox('Aspect ON', (on) => store.dispatch({ type: 'SET_ASPECT_ON', on }));
+    dirGroup.append(reverse.label, oneWay.label, aspectOn.label, 'Aspect', aspect);
     this.refresh.push((s) => {
       reverse.input.checked = s.transition.wipe.reverse;
       oneWay.input.checked = s.transition.wipe.oneWay;
+      aspectOn.input.checked = s.transition.wipe.aspectOn;
       if (document.activeElement !== aspect) aspect.value = String(s.transition.wipe.aspect);
     });
     this.appendRow(dirGroup);
+
+    // Positioner & Scene Grabber (Square-family wipe only).
+    const posGroup = this.group('Positioner');
+    const posOn = this.button('Pos ON', () => store.dispatch({ type: 'PRESS_POSITIONER' }));
+    this.refresh.push((s) => posOn.setAttribute('aria-pressed', String(s.positioner.on)));
+    const posX = document.createElement('input');
+    posX.type = 'range';
+    posX.min = '-1';
+    posX.max = '1';
+    posX.step = '0.01';
+    posX.setAttribute('aria-label', 'Positioner joystick X');
+    posX.addEventListener('input', () =>
+      store.dispatch({ type: 'SET_POSITIONER_JOYSTICK', x: Number(posX.value), y: store.getSnapshot().positioner.y }),
+    );
+    const posY = document.createElement('input');
+    posY.type = 'range';
+    posY.min = '-1';
+    posY.max = '1';
+    posY.step = '0.01';
+    posY.setAttribute('aria-label', 'Positioner joystick Y');
+    posY.addEventListener('input', () =>
+      store.dispatch({ type: 'SET_POSITIONER_JOYSTICK', x: store.getSnapshot().positioner.x, y: Number(posY.value) }),
+    );
+    const posSize = document.createElement('input');
+    posSize.type = 'range';
+    posSize.min = '0';
+    posSize.max = '1';
+    posSize.step = '0.01';
+    posSize.setAttribute('aria-label', 'Positioner inset size');
+    posSize.addEventListener('input', () => store.dispatch({ type: 'SET_POSITIONER_SIZE', value: Number(posSize.value) }));
+    const grab = this.button('Grab', () => store.dispatch({ type: 'PRESS_SCENE_GRABBER' }));
+    this.refresh.push((s) => grab.setAttribute('aria-pressed', String(s.positioner.sceneGrabber)));
+    this.refresh.push((s) => {
+      if (document.activeElement !== posX) posX.value = String(s.positioner.x);
+      if (document.activeElement !== posY) posY.value = String(s.positioner.y);
+      if (document.activeElement !== posSize) posSize.value = String(s.positioner.size);
+    });
+    posGroup.append(posOn, 'X', posX, 'Y', posY, 'Size', posSize, grab);
+    this.appendRow(posGroup);
 
     // Colour correction (per bus): tri-state button + CHROMA.
     const ccGroup = this.group('Colour correct');
@@ -271,6 +312,40 @@ export class MxControlStrip extends HTMLElement {
     });
     fxGroup.append('Size', mosaicSize, 'Paint', paintLevel);
     this.appendRow(fxGroup);
+
+    // Freeze family (targets the selected Digital-FX bus). Multi/Trail GPU is deferred.
+    const freezeGroup = this.group('Freeze FX');
+    const still = this.button('Still', () =>
+      store.dispatch({ type: 'ENGAGE_FREEZE', effect: 'still', on: !store.getSnapshot().digitalEffect.freeze.still }),
+    );
+    this.refresh.push((s) => still.setAttribute('aria-pressed', String(s.digitalEffect.freeze.still)));
+    const strobe = this.button('Strobe', () =>
+      store.dispatch({ type: 'ENGAGE_FREEZE', effect: 'strobe', on: !store.getSnapshot().digitalEffect.freeze.strobe }),
+    );
+    this.refresh.push((s) => strobe.setAttribute('aria-pressed', String(s.digitalEffect.freeze.strobe)));
+    const multi = this.button('Multi', () => store.dispatch({ type: 'PRESS_MULTI' }));
+    const multiLabel = document.createElement('span');
+    multiLabel.className = 'label';
+    this.refresh.push((s) => {
+      multi.setAttribute('aria-pressed', String(s.digitalEffect.freeze.multi > 0));
+      multiLabel.textContent = s.digitalEffect.freeze.multi === 0 ? '—' : String(s.digitalEffect.freeze.multi);
+    });
+    const trail = this.button('Trail', () =>
+      store.dispatch({ type: 'ENGAGE_FREEZE', effect: 'trail', on: !store.getSnapshot().digitalEffect.freeze.trail }),
+    );
+    this.refresh.push((s) => trail.setAttribute('aria-pressed', String(s.digitalEffect.freeze.trail)));
+    const strobeTime = document.createElement('input');
+    strobeTime.type = 'range';
+    strobeTime.min = '0';
+    strobeTime.max = '1';
+    strobeTime.step = '0.01';
+    strobeTime.setAttribute('aria-label', 'Strobe TIME');
+    strobeTime.addEventListener('input', () => store.dispatch({ type: 'SET_STROBE_TIME', position: Number(strobeTime.value) }));
+    this.refresh.push((s) => {
+      if (document.activeElement !== strobeTime) strobeTime.value = String(s.digitalEffect.strobeTime);
+    });
+    freezeGroup.append(still, strobe, multi, multiLabel, trail, 'Strobe TIME', strobeTime);
+    this.appendRow(freezeGroup);
 
     // Subscribe + initial reflect.
     this.unsubscribe?.();

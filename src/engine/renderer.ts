@@ -67,8 +67,8 @@ export class Renderer {
     // EFFECT: full composite through the signal graph.
     const aSrc = registry.get(resolveBusSource(state.busA, 'mixWipe')).getFrameTexture(device);
     const bSrc = registry.get(resolveBusSource(state.busB, 'mixWipe')).getFrameTexture(device);
-    const aTex = this.busProcA.render(aSrc, state, 'A');
-    const bTex = this.busProcB.render(bSrc, state, 'B');
+    const aTex = this.busProcA.render(aSrc, state, 'A', tick);
+    const bTex = this.busProcB.render(bSrc, state, 'B', tick);
     const composite =
       state.transition.type === 'wipe'
         ? this.wipe.render(aTex, bTex, state)

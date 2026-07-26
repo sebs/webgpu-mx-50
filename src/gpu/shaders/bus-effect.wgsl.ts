@@ -17,7 +17,7 @@ struct Uniforms {
   paint : f32,
   mosaicSize : f32,   // 1..31
   paintLevel : f32,   // 0..1
-  _p0 : f32,
+  multiTiles : f32,   // 1 = off; 2/3/4 = Multi grid tiles per axis (reference §8.7)
   _p1 : f32,
   _p2 : f32,
 };
@@ -45,8 +45,14 @@ const LUMA = vec3f(0.299, 0.587, 0.114);
 
 @fragment
 fn fs(in : VSOut) -> @location(0) vec4f {
-  // Mosaic quantises the sample coordinate: step 1 = fine, step 31 = coarse blocks.
   var uv = in.uv;
+
+  // Multi tiles the frame into an N×N grid of copies (reference §8.7).
+  if (u.multiTiles > 1.5) {
+    uv = fract(uv * u.multiTiles);
+  }
+
+  // Mosaic quantises the sample coordinate: step 1 = fine, step 31 = coarse blocks.
   if (u.mosaic > 0.5) {
     let t = (u.mosaicSize - 1.0) / 30.0;
     let blocks = mix(140.0, 6.0, t);

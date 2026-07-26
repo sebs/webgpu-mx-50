@@ -29,6 +29,9 @@ export class MixerWorld extends World {
   /** Whether a colour-correction press has occurred (distinguishes precondition from assertion). */
   ccPressed = false;
 
+  /** Whether a Multi-button press has occurred (distinguishes precondition from assertion). */
+  multiPressed = false;
+
   // --- wipe scratch state (Phase 2) ---
   wipeFamily: WipeFamily = 'straight';
   readonly num: { base: number; reversed: number } = { base: 0, reversed: 0 };

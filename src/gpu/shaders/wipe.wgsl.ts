@@ -17,11 +17,11 @@ struct Uniforms {
   aspect : f32,
   multi : f32,
   pairing : f32,
-  _p0 : f32,
-  _p1 : f32,
-  _p2 : f32,
+  posOn : f32,   // Positioner active (PiP mode, reference §7)
+  posX : f32,    // joystick, -1..1
+  posY : f32,
   borderColor : vec3f,
-  _p3 : f32,
+  posSize : f32, // wiped inset size 0..1
 };
 
 @group(0) @binding(0) var samp : sampler;
@@ -117,6 +117,24 @@ fn fieldValue(fam : u32, variant : u32, uv : vec2f, p : f32, aspect : f32) -> f3
 
 @fragment
 fn fs(in : VSOut) -> @location(0) vec4f {
+  let a = textureSample(texA, samp, in.uv).rgb;
+  let b = textureSample(texB, samp, in.uv).rgb;
+
+  // Positioner (reference §7): a movable, sizable Square inset showing B over A.
+  if (u.posOn > 0.5) {
+    let center = vec2f(0.5 + u.posX * 0.4, 0.5 + u.posY * 0.4);
+    let half = max(u.posSize, 0.02) * 0.5;
+    let dd = abs(in.uv - center);
+    let dist = max(dd.x, dd.y);
+    let e = max(u.softWidth, 0.004);
+    let m = 1.0 - smoothstep(half - e, half + e, dist);
+    var col = mix(a, b, m);
+    if (u.borderWidth > 0.0 && abs(dist - half) < u.borderWidth) {
+      col = u.borderColor;
+    }
+    return vec4f(col, 1.0);
+  }
+
   var uv = in.uv;
   if (u.reverse > 0.5) { uv = vec2f(1.0 - uv.x, 1.0 - uv.y); } // mirror travel
   if (u.pairing > 0.5) { uv = vec2f(abs(uv.x - 0.5) * 2.0, uv.y); } // mirror about centre
@@ -129,8 +147,6 @@ fn fs(in : VSOut) -> @location(0) vec4f {
   let w = max(u.softWidth, 0.0025); // a hair of feather for anti-aliasing even on hard edges
   let mask = smoothstep(-w, w, f);
 
-  let a = textureSample(texA, samp, in.uv).rgb;
-  let b = textureSample(texB, samp, in.uv).rgb;
   var col = mix(a, b, mask);
 
   // Border: a coloured band straddling the boundary (|f| < borderWidth).

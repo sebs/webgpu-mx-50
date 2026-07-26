@@ -37,17 +37,38 @@ export interface BusState {
 /** The filter-family digital effects (reference §8.1–§8.4). */
 export type FilterEffect = 'nega' | 'mosaic' | 'mono' | 'paint';
 
+/** The freeze-family digital effects backed by GPU frame memory (reference §8.5–§8.8, ADR-0007). */
+export type FreezeEffect = 'still' | 'strobe' | 'multi' | 'trail';
+
+/** Any digital effect the block can arm. */
+export type DigitalEffectName = FilterEffect | FreezeEffect;
+
+/** The freeze-family state (reference §8.5–§8.8). `multi` is 0 (off) or a grid count 4/9/16. */
+export interface FreezeState {
+  still: boolean;
+  strobe: boolean;
+  multi: number; // 0 | 4 | 9 | 16
+  trail: boolean;
+}
+
 /**
  * The Digital Effect block (reference §8). It targets exactly one bus at a time; `armed`
- * is the chosen-but-not-yet-ON effect. Phase 3 (this slice) covers the four filters; the
- * freeze family (Still/Strobe/Multi/Trail) lands next.
+ * is the chosen-but-not-yet-ON effect. Covers the four filters and the freeze family.
  */
 export interface DigitalEffectState {
   bus: BusId;
-  armed: FilterEffect | null;
+  armed: DigitalEffectName | null;
   active: { nega: boolean; mosaic: boolean; mono: boolean; paint: boolean };
+  freeze: FreezeState;
   mosaicSize: number; // 1..31 (reference §8.2)
   paintLevel: number; // 0..1, MIN..MAX (reference §8.4)
+  strobeTime: number; // TIME control position 0..1 (reference §8.6)
+  multiTime: number; // 0..1 (reference §8.7)
+  trailTime: number; // 0..1 (reference §8.8)
+  multiMode: 'once' | 'repeat'; // reference §8.7
+  trailCorner: 'upper-left' | 'upper-right'; // reference §8.8
+  /** A/V Synchro active (full effect is Phase 5); tracked here for the Trail exclusion (§8.8). */
+  avSynchro: boolean;
 }
 
 /** The internal Matte generator (reference §4). `colorIndex` steps the 9 colours. */
@@ -84,6 +105,20 @@ export interface WipeState {
   reverse: boolean;
   oneWay: boolean;
   aspect: number; // -1..1, 0 = centre; Square family only
+  aspectOn: boolean; // ASPECT ON button — aspect applies only when lit (reference §7, §9.4)
+}
+
+/**
+ * The Positioner and Scene Grabber (reference §7). Works only with Square-family wipes:
+ * the ON button doubles the wiped size, the lever sizes the inset, the joystick places it,
+ * and Scene Grabber freezes the image inside the inset so the joystick moves the still.
+ */
+export interface PositionerState {
+  on: boolean;
+  x: number; // joystick, -1..1
+  y: number;
+  size: number; // wiped/inset size 0..1
+  sceneGrabber: boolean;
 }
 
 export interface TransitionState {
@@ -108,6 +143,7 @@ export interface PanelState {
   matte: MatteState;
   digitalEffect: DigitalEffectState;
   transition: TransitionState;
+  positioner: PositionerState;
   programOut: ProgramOut;
   system: SystemState;
 }
@@ -129,8 +165,15 @@ export const FACTORY_PRESET: PanelState = {
     bus: 'A',
     armed: null,
     active: { nega: false, mosaic: false, mono: false, paint: false },
+    freeze: { still: false, strobe: false, multi: 0, trail: false },
     mosaicSize: 16,
     paintLevel: 0.5,
+    strobeTime: 0.5,
+    multiTime: 0.5,
+    trailTime: 0.5,
+    multiMode: 'repeat',
+    trailCorner: 'upper-left',
+    avSynchro: false,
   },
   transition: {
     type: 'mix',
@@ -143,8 +186,10 @@ export const FACTORY_PRESET: PanelState = {
       reverse: false,
       oneWay: false,
       aspect: 0,
+      aspectOn: false,
     },
   },
+  positioner: { on: false, x: 0, y: 0, size: 0.2, sceneGrabber: false },
   programOut: 'effect',
   system: { reset: 'on' },
 };

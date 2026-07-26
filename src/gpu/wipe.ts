@@ -7,6 +7,7 @@ import { WORKING_FORMAT } from '../constants.js';
 import { wipeWGSL } from './shaders/wipe.wgsl.js';
 import { WIPE_FAMILIES, hasBorder, hasSoft, isWideEdge } from '../core/wipe.js';
 import { complementaryMatteIndex } from '../core/wipe.js';
+import { aspectEffective } from '../core/positioner.js';
 import { matteFlatColor } from '../core/matte.js';
 import type { Size } from '../core/types.js';
 import type { PanelState, WipeState } from '../state/state.js';
@@ -65,13 +66,16 @@ export class WipePass {
     s[3] = softWidth(wipe);
     s[4] = borderWidth(wipe);
     s[5] = wipe.reverse ? 1 : 0;
-    s[6] = wipe.family === 'square' ? wipe.aspect : 0;
+    s[6] = aspectEffective(wipe) ? wipe.aspect : 0; // ASPECT applies only when its ON button is lit (§7)
     s[7] = wipe.modifiers.multi;
     s[8] = wipe.modifiers.pairing ? 1 : 0;
-    // 9,10,11 pad
+    s[9] = state.positioner.on ? 1 : 0;
+    s[10] = state.positioner.x;
+    s[11] = state.positioner.y;
     s[12] = br;
     s[13] = bg;
     s[14] = bb;
+    s[15] = state.positioner.size;
     device.queue.writeBuffer(this.uniform, 0, s);
 
     const bindGroup = device.createBindGroup({

@@ -4,7 +4,7 @@
 // (reducer.ts) maps (state, command) -> next state as a pure function.
 
 import type { BusId, BusSource } from '../core/types.js';
-import type { FilterEffect, PanelState, ProgramOut, TransitionType, WipeFamily } from './state.js';
+import type { DigitalEffectName, FreezeEffect, PanelState, ProgramOut, TransitionType, WipeFamily } from './state.js';
 
 export type Command =
   | { type: 'ASSIGN_SOURCE'; bus: BusId; source: BusSource }
@@ -21,10 +21,20 @@ export type Command =
   | { type: 'SET_CC_JOYSTICK'; bus: BusId; x: number; y: number }
   // --- digital effect: filters (reference §8.1–§8.4) ---
   | { type: 'SELECT_EFFECT_BUS'; bus: BusId }
-  | { type: 'CHOOSE_EFFECT'; effect: FilterEffect }
+  | { type: 'CHOOSE_EFFECT'; effect: DigitalEffectName }
   | { type: 'PRESS_EFFECT_ON' } // toggle the armed effect on the target bus
   | { type: 'SET_MOSAIC_SIZE'; step: number } // 1..31
   | { type: 'SET_PAINT_LEVEL'; level: number } // 0..1
+  // --- digital effect: freeze family (reference §8.5–§8.8, ADR-0007) ---
+  | { type: 'ENGAGE_FREEZE'; effect: FreezeEffect; on: boolean }
+  | { type: 'PRESS_MULTI' } // cycle single → 4 → 9 → 16 → single
+  | { type: 'SET_MULTI_GRID'; count: number } // 0 | 4 | 9 | 16 (direct set)
+  | { type: 'SET_MULTI_MODE'; mode: 'once' | 'repeat' }
+  | { type: 'SET_TRAIL_CORNER'; corner: 'upper-left' | 'upper-right' }
+  | { type: 'SET_STROBE_TIME'; position: number } // 0..1
+  | { type: 'SET_MULTI_TIME'; position: number }
+  | { type: 'SET_TRAIL_TIME'; position: number }
+  | { type: 'ATTEMPT_AV_SYNCHRO'; on: boolean }
   // --- wipe (reference §9.4, ADR-0009) ---
   | { type: 'PRESS_WIPE_FAMILY'; family: WipeFamily } // select family, or cycle its variant
   | { type: 'SET_WIPE_VARIANT'; variant: number }
@@ -39,6 +49,12 @@ export type Command =
   | { type: 'SET_REVERSE'; on: boolean }
   | { type: 'SET_ONE_WAY'; on: boolean }
   | { type: 'SET_WIPE_ASPECT'; value: number } // -1..1, Square family only
+  | { type: 'SET_ASPECT_ON'; on: boolean } // ASPECT ON button (reference §7)
+  // --- positioner & scene grabber (reference §7) ---
+  | { type: 'PRESS_POSITIONER' } // toggle; ON only on Square, doubles size; OFF cancels grab
+  | { type: 'SET_POSITIONER_SIZE'; value: number } // 0..1
+  | { type: 'SET_POSITIONER_JOYSTICK'; x: number; y: number } // -1..1
+  | { type: 'PRESS_SCENE_GRABBER' } // toggle; only when the Positioner is active
   | { type: 'LOAD_STATE'; state: PanelState };
 
 /** Discriminant union of all command type tags, handy for exhaustiveness. */

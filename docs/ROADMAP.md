@@ -206,13 +206,17 @@ wipe matrix built compositionally, not hand-authored.
 
 ### Phase 3 — Digital effects and GPU frame memory
 
-> **Status: 🟡 in progress (filters + colour correction done).** Per-bus **Colour
-> Correction** (tri-state off/CHROMA/+joystick, saturation, B&W at MIN, mono tint) and the
-> four **filter effects** (Nega, Mosaic w/ 31-step SIZE, Mono, Paint w/ LEVEL) render
-> through a per-bus BusProcessor pass, with per-bus/ON selection, the one-bus-at-a-time
-> rule, and Mono-overrides-colour-correction. 42 more Gherkin scenarios green (218 total).
-> **Still to come this phase:** the freeze family (Still/Strobe/Multi/Trail) with GPU frame
-> memory and the exclusion state machine (ADR-0007), and position control + Scene Grabber.
+> **Status: ✅ done.** Per-bus **Colour Correction** (tri-state, CHROMA/B&W, mono tint), the
+> four **filter effects** (Nega, Mosaic, Mono, Paint), the **freeze family**
+> (Still/Strobe/Multi/Trail with the full exclusion state machine — Still ⊥
+> Strobe/Multi/Compression, Trail ∥ Still w/ blinking LED, Trail ⊥ A/V Synchro — and
+> clock-driven TIME intervals), and **Position control + Scene Grabber** (Square-only,
+> size-doubling, joystick placement, ASPECT-ON gating, grab/cancel). Rendering: colour
+> correction + all four filters + Still/Strobe (freeze texture) + Multi (grid tiling) +
+> the Positioner PiP + aspect stretch. 302 Gherkin scenarios green (2059 steps), 84 units.
+> **Deferred rendering (domain complete):** Trail's ping-pong accumulator and the
+> Scene-Grabber freeze-in-place — the two highest-risk-unverifiable GPU pieces, held back
+> until a headless-WebGPU golden runner exists.
 
 Build the per-bus image-processing block: colour correction, geometric position, and
 the full Digital Effect block including the four freeze-family effects that share GPU

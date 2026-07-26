@@ -67,7 +67,8 @@ src/
     matte.ts            Matte palette, LEVEL/GRADATION semantics, GPU colour (reference §4)
     wipe.ts             Wipe families/variants, numbering oracle, legality, edges, direction (reference §9.4/§9.7)
     colour-correct.ts   Colour-correction tri-state, CHROMA/saturation, mono tint (reference §6)
-    digital-effect.ts   Filter selection, one-bus rule, Mono override, Paint coarseness (reference §8)
+    digital-effect.ts   Filters + freeze family: selection, exclusions, TIME intervals (reference §8)
+    positioner.ts       Positioner availability + ASPECT-ON gating (reference §7)
   state/
     state.ts            PanelState + FACTORY_PRESET + fieldPreset (ADR-0011, ref §18)
     commands.ts         Typed command union
@@ -102,26 +103,25 @@ test/
   cucumber.mjs          cucumber-js configuration
 ```
 
-## Status (Phase 3, in progress)
+## Status (Phases 0–3 complete)
 
 Implemented and rendering: **two buses** + Matte substitution, **Program Out** A/B/EFFECT,
-**Mix/NAM** transitions, the **Matte generator**, the full **compositional wipe engine**
-(7 families, modifiers, border/soft, direction, aspect, +128 numbering oracle), and — new
-this slice — per-bus **Colour Correction** (tri-state, CHROMA/B&W, RGB-joystick mono tint)
-and the four **filter Digital Effects** (Nega, Mosaic + 31-step SIZE, Mono, Paint + LEVEL),
-applied per bus through the BusProcessor pass with the one-bus-at-a-time and
-Mono-overrides-correction rules. Open the app, pick a Digital-FX bus, choose an effect,
-press ON; or turn on CC and pull CHROMA to MIN for black & white.
+**Mix/NAM** + the **compositional wipe engine**, the **Matte generator**, per-bus **Colour
+Correction**, the four **filter effects** (Nega, Mosaic, Mono, Paint), the **freeze family**
+(Still/Strobe/Multi/Trail with the full ADR-0007 exclusion state machine + clock-driven TIME
+intervals), and **Position control + Scene Grabber** (Square-only, size-doubling, joystick
+placement, ASPECT-ON gating). Rendering covers CC + all filters + Still/Strobe (freeze
+texture) + Multi (grid tiling) + the Positioner PiP + aspect stretch.
 
-Still to come: **freeze family** (Still/Strobe/Multi/Trail + GPU frame memory, ADR-0007)
-and **position/Scene-Grabber** (rest of Phase 3), then keys + DSK (Phase 4), audio
-(Phase 5), fade + auto take/fade (Phase 6), event memory + special modes (Phase 7).
+Next: keys + DSK (Phase 4), audio (Phase 5), fade + auto take/fade (Phase 6), event memory +
+special modes (Phase 7), control mapping + polish (Phase 8).
 
-Known deferrals: **golden-image pixel tests** (no headless-WebGPU runner here);
-Compression/Slide/Blinds not yet in the wipe shader; underivable Pattern-Table parts `@wip`;
-**real browser-input binding** (camera/video/image live textures) still open from Phase 1.
-See the [ROADMAP](ROADMAP.md).
+Known deferrals: **golden-image pixel tests** (no headless-WebGPU runner here); **Trail's
+ping-pong accumulator** and **Scene-Grabber freeze-in-place** rendering — domain complete,
+GPU held back as the riskiest unverifiable pieces; Compression/Slide/Blinds not yet in the
+wipe shader; underivable Pattern-Table parts `@wip`; **real browser-input binding** still
+open from Phase 1. See the [ROADMAP](ROADMAP.md).
 
-The domain is verified headlessly: **68 `node:test` units** and **218 Gherkin scenarios
-(1516 steps)** across the source, program-out, mix/nam, matte, wipe, colour-correction, and
-digital-effects-filters features.
+The domain is verified headlessly: **84 `node:test` units** and **302 Gherkin scenarios
+(2059 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five
+digital-effect features, and position/scene-grabber.
