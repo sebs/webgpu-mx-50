@@ -432,18 +432,17 @@ they survive a reload.
 > control adapters (gamepad/MIDI/serial + the DOM keyboard listener) are typechecked + served,
 > excluded from CI like the Web Audio engine.
 >
-> **Permanently deferred (documented, faithful):** all rendered-**pixel** outcomes — no headless
-> WebGPU runner, so golden tests stay stubbed (Multi tiles, Trail ping-pong, After-Image ghosts,
-> compressed-inset/PiP geometry, mosaic/border/spotlight/stretched-square pixels, Special-Mode
-> compressed-image macros, the two selective VIDEO/DSK fade-pixel scenarios); **browser-only**
-> surfaces (Web Audio engine, per-frame A/V-Synchro GPU gating, the control adapters, IndexedDB
-> still-blob tiers + file import/export, device-enumeration/camera-mic-permission scenarios);
-> **@deferred documentation** scenarios (the four frame-field interlace scenarios + the strobe
-> frame-mode duplicate — the v1 no-op contract itself is CI-green); and **model-constrained**
-> scenarios that are correctly not representable (auto-take:174 & recipes S1–S3 double-effect need
-> two live effects at once, which the single-bus Digital Effect model forbids; Recipe 4 Multi/Live
-> also hits the Compression⊥Strobe reducer invariant). Every deferral has a domain/config proxy
-> that *is* tested; only the pixels/browser/hardware-shape defer.
+> **Deferred work** is inventoried in full — with a **buildable-vs-out-of-scope split and a
+> file/line pointer for each item** — in **[docs/DEFERRED.md](DEFERRED.md)**. In brief: the
+> rendered-**pixel** outcomes (no headless-WebGPU runner) and the **browser-only** surfaces (Web
+> Audio capture, per-frame A/V-Synchro GPU gating, the control adapters, IndexedDB still tiers +
+> file import/export, device permissions) are **buildable** — deferred only for CI/environment
+> reasons, verifiable by browser smoke. Genuinely **not** buildable without breaking fidelity are
+> the **model-constrained** scenarios (auto-take:174 & recipes S1–S3 double-effect need two live
+> effects at once, forbidden by the single-bus Digital Effect model; Recipe 4 Multi/Live hits the
+> Compression⊥Strobe invariant) and the **out-of-scope** ones (the four `@deferred` frame-field
+> interlace scenarios — moot in clean-modern RGBA; `@wip` Pattern-Table parts; analog/genlock
+> timing). Every deferral has a domain/config proxy that *is* tested.
 
 Make the instrument performable and complete: remappable external control, end-to-end
 cross-feature recipes as integration tests, and the finished hybrid panel UI.

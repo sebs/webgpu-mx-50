@@ -171,19 +171,18 @@ previously-deferred cross-feature `@integration` scenarios composed at the domai
 what remains deferred is pixel-rendering, browser-only surfaces, and faithfully model-constrained
 scenarios (see the [ROADMAP](ROADMAP.md) Phase 8 note).
 
-Permanently deferred (the domain model is complete; these are faithful non-goals): **golden-image
-pixel tests** and every rendered-**pixel** outcome — no headless-WebGPU runner (Multi tiles,
-Trail ping-pong, After-Image ghosts, compressed-inset/PiP geometry, mosaic/border/spotlight and
-stretched-square pixels, Compression/Slide/Blinds wipe shaders, the five non-Normal DSK edge
-styles, Special-Mode compressed-image macros, the two selective VIDEO/DSK fade-pixel scenarios);
-**browser-only** surfaces (the Web Audio engine, per-frame A/V-Synchro GPU gating, the EXT.CAMERA
-GPU binding, the control adapters + DOM keyboard listener, IndexedDB still-blob tiers + file
-import/export, device-enumeration/camera-mic-permission scenarios); **@deferred documentation**
-(the four frame-field interlace scenarios + the strobe frame-mode duplicate — the v1 no-op
-contract is CI-green); underivable Pattern-Table parts `@wip`; and **model-constrained** scenarios
-correctly not representable (auto-take:174 & recipes S1–S3 need two live effects at once;
-Recipe 4 hits the Compression⊥Strobe invariant). Every deferral has a tested domain/config proxy.
-See the [ROADMAP](ROADMAP.md).
+Deferred work is inventoried in **[DEFERRED.md](DEFERRED.md)** — the single consolidated list,
+with a **buildable-vs-out-of-scope split and a file/line pointer for each item**. In short: the
+domain model is complete; what remains is **buildable** GPU-pixel rendering (Trail ping-pong,
+Compression/Slide/Blinds wipe, the five non-Normal DSK edge styles, A/V-Synchro picture gating,
+Special-Mode macro looks, selective VIDEO/DSK fade) and **buildable** browser I/O (real
+audio-input capture, EXT.CAMERA binding, IndexedDB still tiers + file import/export, real device
+binding — the gamepad/MIDI/serial adapters are already written and served), all deferred only for
+CI/environment reasons; plus a small set genuinely **not** buildable without breaking fidelity
+(the model-constrained double-effect / Multi+Strobe scenarios) or **out of scope** (the `@deferred`
+frame-field interlace scenarios, `@wip` Pattern-Table parts, analog/genlock timing). **Golden-image
+pixel tests** are stubbed for the whole renderer because this environment has no headless-WebGPU
+adapter — an environment limit, not a code limit. Every deferral has a tested domain/config proxy.
 
 The domain is verified headlessly: **208 `node:test` units** and **536 Gherkin scenarios
 (3921 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five

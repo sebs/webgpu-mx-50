@@ -27,6 +27,7 @@ Web Audio API), the **Fade stage + Auto Take/Auto Fade** (frame-counted, pausabl
 (remappable keyboard/gamepad/MIDI/GPI + a local automation API) with the combination recipes and
 cross-feature integration composed and asserted. Verified headlessly: **208 units, 536 Gherkin
 scenarios (3921 steps)**; what remains deferred is pixel-rendering, browser-only surfaces, and
-faithfully model-constrained scenarios. See
+faithfully model-constrained scenarios — inventoried with a buildable-vs-out-of-scope split in
+[docs/DEFERRED.md](docs/DEFERRED.md). See
 [docs/ROADMAP.md](docs/ROADMAP.md) for the build history and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 for how to run and test.
