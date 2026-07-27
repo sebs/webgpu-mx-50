@@ -10,6 +10,7 @@
 import { matteColorName } from '../core/matte.js';
 import { dskEdgeStyleLabel } from '../core/dsk.js';
 import { AV_SYNCHRO_EFFECTS } from '../core/av-synchro.js';
+import { SPECIAL_MACROS } from '../core/special-mode.js';
 import type { PanelStore } from '../state/store.js';
 import type { BusId, BusSource } from '../core/types.js';
 import type { DskFill, DskKeySource, FadeElement, FadeTarget, FilterEffect, MicAux2Input, PanelState, ProgramOut, TransitionType, WipeFamily } from '../state/state.js';
@@ -539,6 +540,38 @@ export class MxControlStrip extends HTMLElement {
     this.refresh.push((s) => autoFade.setAttribute('aria-pressed', String(s.fade.auto.phase === 'running' || s.fade.auto.phase === 'paused')));
     autoGroup.append('Time', frames, framesLabel, autoTake, autoFade);
     this.appendRow(autoGroup);
+
+    // Event Memory (reference §13): MEMORY latch, the 8 EVENT NO. slots, and a mass-clear.
+    const memGroup = this.group('Event Memory');
+    const memBtn = this.button('MEMORY', () => store.dispatch({ type: 'PRESS_MEMORY' }));
+    this.refresh.push((s) => memBtn.setAttribute('aria-pressed', String(s.memory.memoryArmed)));
+    memGroup.appendChild(memBtn);
+    for (let n = 1; n <= 8; n++) {
+      const button = (n - 1) % 4 + 1;
+      const shift = n > 4;
+      const b = this.button(String(n), () => store.dispatch({ type: 'PRESS_EVENT_NO', button, shift }));
+      this.refresh.push((s) => {
+        b.setAttribute('aria-pressed', String(s.memory.armedSlot === n));
+        b.style.outline = s.memory.slots[n - 1] ? '2px solid #2d8f4e' : 'none'; // occupied
+      });
+      memGroup.appendChild(b);
+    }
+    memGroup.appendChild(this.button('Clear', () => store.dispatch({ type: 'CLEAR_ALL_SLOTS' })));
+    this.appendRow(memGroup);
+
+    // Special Mode (reference §14): the MEMORY+SHIFT toggle and the 8 macros.
+    const spGroup = this.group('Special Mode');
+    const spToggle = this.button('MEM+SHIFT', () => store.dispatch({ type: 'PRESS_MEMORY_SHIFT' }));
+    this.refresh.push((s) => spToggle.setAttribute('aria-pressed', String(s.specialMode.active)));
+    spGroup.appendChild(spToggle);
+    for (const macro of SPECIAL_MACROS) {
+      const button = ((macro.ordinal - 1) % 4 + 1) as 1 | 2 | 3 | 4;
+      const shift = macro.ordinal > 4;
+      const b = this.button(macro.name, () => store.dispatch({ type: 'SELECT_SPECIAL_MACRO', button, shift }));
+      this.refresh.push((s) => b.setAttribute('aria-pressed', String(s.specialMode.armed === macro.id)));
+      spGroup.appendChild(b);
+    }
+    this.appendRow(spGroup);
 
     // Subscribe + initial reflect.
     this.unsubscribe?.();

@@ -372,6 +372,28 @@ whole-composite Fade, and the two automatic, pausable, frame-counted transitions
 
 ### Phase 7 — Event Memory, Special Modes, and persistence
 
+> **Status: ✅ done.** **Event Memory** stores and recalls **8 panel snapshots** as pure store
+> operations: STORE writes `panelSnapshot(state)` — a recursion-proof projection
+> (`Omit<PanelState,'memory'|'specialMode'>`, runners idled) — into the in-store bank; RECALL
+> (an armed EVENT NO. + AUTO TAKE) rehydrates the panel, PRESERVES the bank, and advances the
+> sequence cursor (skipping empty slots, ending past the last). AUTO TAKE is cleanly overloaded
+> — a lever-at-B Special macro, else an armed recall, else the Phase-6 take — gated off at
+> factory boot so no Phase-6 scenario changes. **Special Modes** model the **8 macros** as a
+> state machine (MEMORY+SHIFT enters; Event buttons ±SHIFT arm; the compressed-image visuals are
+> deferred GPU work) with lever-at-B preconditions and **Vibrate's 64-frame** run on the shared
+> transition runner; Satellite's indefinite orbit is a boolean (JSON-safe, not an Infinity
+> runner). **Persistence** (ADR-0015) is a tiered module behind an injectable `StorageBackend`
+> (localStorage in the browser, a Map in tests): schema-versioned, crash-proof reads (corrupt →
+> factory fallback), Reset ON/OFF boot, JSON import/export; the bank layers on regardless of
+> Reset policy so memories survive a normal power cycle. `fieldPreset` now strips Still/Strobe/
+> Special (reference §18) in one place. 54 more Gherkin scenarios green (**508 total, 3704
+> steps**), **191 units**. **Deferred:** the IndexedDB captured-still tier + its two @integration
+> scenarios (no headless IndexedDB/GPU) and the @deferred battery-decay non-behavior; the two
+> compressed-image-pixel Special-Mode scenarios (Stream-corner joystick, Flip/Shutter matte
+> reveal) join the existing GPU-visual deferrals; "Memory Auto Take runs the recalled event's
+> take over frames" is simplified to an instant recall (the asserted sequencing is exact; the
+> frame-timed take-after-recall is a documented refinement).
+
 Add recall: 8 stored panel snapshots, 8 preset effect macros, and durable storage so
 they survive a reload.
 

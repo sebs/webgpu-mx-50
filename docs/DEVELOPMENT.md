@@ -75,6 +75,8 @@ src/
     av-synchro.ts       A/V Synchro: LEVEL threshold, trigger/hold rules, pulse train (reference §8.9)
     timeline.ts         Auto Take/Fade runner: TRANSITION quantise, progress/pause/resume (reference §11/§15, ADR-0012)
     fade.ts             Fade stage: video target, IN/OUT LEDs, fade-aware program audio (reference §11)
+    event-memory.ts     Event Memory sequencing: occupied-slot set, next-armed cursor (reference §13)
+    special-mode.ts     Special Mode macro table, selection, lever-at-B preconditions (reference §14)
   state/
     state.ts            PanelState + FACTORY_PRESET + fieldPreset (ADR-0011, ref §18)
     commands.ts         Typed command union
@@ -103,6 +105,11 @@ src/
   audio/
     engine.ts           Browser Web Audio graph, gains driven by the store (ADR-0010)
     av-synchro-tap.ts   Runtime envelope tap → A/V-Synchro effect gate (browser-only)
+  persistence/
+    backend.ts          StorageBackend interface + localStorage / in-memory implementations (ADR-0015)
+    schema.ts           schemaVersion envelope, migration, crash-proof reads (ADR-0015)
+    persistence.ts      The single owner of storage: bank / field-preset / settings / import-export
+    subscriber.ts       Passive store→storage mirror (debounced field-preset capture)
   ui/
     control-strip.ts    First Web Component control surface, store-bound (ADR-0013)
   app.ts                Headless engine assembly (store + clock + bindings)
@@ -114,7 +121,7 @@ test/
   cucumber.mjs          cucumber-js configuration
 ```
 
-## Status (Phases 0–6 complete)
+## Status (Phases 0–7 complete)
 
 Implemented and rendering: **two buses** + Matte substitution, **Program Out** A/B/EFFECT,
 **Mix/NAM** + the **compositional wipe engine**, the **Matte generator**, per-bus **Colour
@@ -140,7 +147,15 @@ the renderer's final pass; and **Auto Take / Auto Fade** on one deterministic, p
 frame-counted **transition runner** (TRANSITION 0–510 in 2-frame steps, driven each present
 frame by an `ADVANCE_TIMELINE` command against the canonical clock).
 
-Next: event memory + special modes (Phase 7), control mapping + polish (Phase 8).
+**Event Memory + Special Modes + persistence (Phase 7):** **Event Memory** — 8 in-store panel
+snapshots, stored/recalled/sequenced (skipping empties) purely through the reducer, with AUTO
+TAKE overloaded for recall; **Special Modes** — the 8-macro state machine (lever-at-B
+preconditions, Vibrate's 64-frame run, Satellite orbit) with the compressed-image visuals
+deferred; and a tiered **persistence** module behind an injectable `StorageBackend`
+(schema-versioned, crash-proof, Reset ON/OFF boot, JSON import/export) that mirrors the bank and
+field preset to storage.
+
+Next: control mapping + integration recipes + UI polish (Phase 8).
 
 Known deferrals: **golden-image pixel tests** (no headless-WebGPU runner here); **Trail's
 ping-pong accumulator**, **Scene-Grabber freeze-in-place**, the **five non-Normal DSK edge
@@ -148,12 +163,13 @@ styles**, and the **EXT.CAMERA GPU binding** — all domain-complete, GPU held b
 riskiest/blocked-on-device pieces; Compression/Slide/Blinds not yet in the wipe shader;
 **A/V-Synchro per-frame GPU picture-gating** and **real audio-input capture** are browser-only
 follow-ons (the tap surfaces the gated-effect set today); the **selective VIDEO-only / DSK-only
-fade** (a pre-DSK + key-mask GPU refinement); **Memory Auto Take** (awaits Phase 7 Event Memory)
-and **GPI/RS422 Auto-Take triggers** (await the Phase 8 control-mapping layer); underivable
-Pattern-Table parts `@wip`; **real browser-input binding** still open from Phase 1. See the
-[ROADMAP](ROADMAP.md).
+fade** (a pre-DSK + key-mask GPU refinement); the **Special-Mode compressed-image visuals**
+(macro geometry) and the **IndexedDB captured-still tier** (@integration; no headless IndexedDB)
+join the GPU/blob deferrals; **GPI/RS422 external Auto-Take triggers** await the Phase 8
+control-mapping layer; underivable Pattern-Table parts `@wip`; **real browser-input binding**
+still open from Phase 1. See the [ROADMAP](ROADMAP.md).
 
-The domain is verified headlessly: **159 `node:test` units** and **454 Gherkin scenarios
-(3300 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five
+The domain is verified headlessly: **191 `node:test` units** and **508 Gherkin scenarios
+(3704 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five
 digital-effect features, position/scene-grabber, the three key features, the three audio
-features (mixer, follow, A/V Synchro), and fade control + Auto Take.
+features (mixer, follow, A/V Synchro), fade control + Auto Take, Event Memory, and Special Modes.

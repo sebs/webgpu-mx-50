@@ -8,6 +8,7 @@
 // phases extend this tree (colour correction, digital effects, DSK, fade, audio).
 
 import type { BusId, BusSource, SourceSlot } from '../core/types.js';
+import type { SpecialMacro } from '../core/special-mode.js';
 
 /** Rear Reset switch: ON = factory preset each power-up, OFF = field preset (reference §18). */
 export type ResetMode = 'on' | 'off';
@@ -276,6 +277,69 @@ export interface SystemState {
   reset: ResetMode;
 }
 
+/**
+ * A stored Event Memory slot / persistable panel snapshot (reference §13, ADR-0015): the whole
+ * panel MINUS the memory bank and Special Mode. Omitting those two keys makes recursion
+ * impossible by construction — a slot cannot transitively contain slots — and matches ADR-0015's
+ * "a slot is a frozen projection of the store". Volatile runtime (GPU frame memory, transition
+ * progress) is excluded too; `panelSnapshot()` idles the runners.
+ */
+export type PanelSnapshot = Omit<PanelState, 'memory' | 'specialMode'>;
+
+/**
+ * Event Memory (reference §13): the persistent 8-slot bank plus the transient interaction latches.
+ * The bank lives in-store so STORE/RECALL are pure reducer cases and recall flows through the
+ * normal notify path (ADR-0011); the persistence module mirrors `slots` to storage.
+ */
+export interface MemoryState {
+  slots: (PanelSnapshot | null)[]; // length 8; index 0 = slot 1; null = empty
+  memoryArmed: boolean; // MEMORY latched: the next EVENT NO. STORES instead of arming a recall
+  armedSlot: number | null; // slot (1..8) armed for recall by the next AUTO TAKE; doubles as the sequence cursor
+  lastStoredSlot: number | null; // most recently written — drives the 3-blink confirm LED (UI cue)
+}
+
+/** Store blinks the event LED this many times to confirm a successful store (reference §13). */
+export const EVENT_LED_STORE_BLINKS = 3;
+
+export const EMPTY_MEMORY: MemoryState = {
+  slots: [null, null, null, null, null, null, null, null],
+  memoryArmed: false,
+  armedSlot: null,
+  lastStoredSlot: null,
+};
+
+/** A fresh memory bank with its own arrays (never share EMPTY_MEMORY's mutable slots array). */
+export function freshMemory(): MemoryState {
+  return { slots: [null, null, null, null, null, null, null, null], memoryArmed: false, armedSlot: null, lastStoredSlot: null };
+}
+
+/**
+ * The Special Mode bank (reference §14): the eight compressed-image macros, entered with
+ * MEMORY+SHIFT. Field-preset restore always brings this up OFF (ADR-0015, reference §18).
+ * `run` is the finite frame-counted macro run (Vibrate 64f); `orbiting` is Satellite's
+ * indefinite orbit (a boolean, not an Infinity runner, so the state stays JSON-serializable).
+ */
+export interface SpecialModeState {
+  active: boolean;
+  armed: SpecialMacro | null;
+  orbiting: boolean;
+  leverPrompt: boolean; // a run was attempted with the lever off B → "move the lever to B first"
+  run: TransitionRunner;
+}
+
+export const SPECIAL_MODE_OFF: SpecialModeState = {
+  active: false,
+  armed: null,
+  orbiting: false,
+  leverPrompt: false,
+  run: { ...IDLE_RUNNER },
+};
+
+/** A fresh Special-Mode-off value with its own nested runner (never share the const's `run`). */
+export function freshSpecialMode(): SpecialModeState {
+  return { active: false, armed: null, orbiting: false, leverPrompt: false, run: { ...IDLE_RUNNER } };
+}
+
 /** The complete panel state. */
 export interface PanelState {
   busA: BusState;
@@ -292,6 +356,10 @@ export interface PanelState {
    * quantized to 0..510 in 2-frame steps. One physical knob, one field (ADR-0012). */
   transitionFrames: number;
   system: SystemState;
+  /** Event Memory bank + interaction latches (reference §13). Excluded from PanelSnapshot. */
+  memory: MemoryState;
+  /** Special Mode bank (reference §14). Excluded from PanelSnapshot; never field-preset-restored. */
+  specialMode: SpecialModeState;
 }
 
 /** Number of Matte colours (Colour Bar, White, Yellow, Cyan, Green, Magenta, Red, Blue, Black). */
@@ -360,6 +428,8 @@ export const FACTORY_PRESET: PanelState = {
   programOut: 'effect',
   transitionFrames: 60,
   system: { reset: 'on' },
+  memory: freshMemory(),
+  specialMode: freshSpecialMode(),
 };
 
 /** Deep structural clone of a panel state (plain JSON, so this is total and safe). */
@@ -367,16 +437,38 @@ export function clonePanelState(state: PanelState): PanelState {
   return structuredClone(state);
 }
 
+/** Reset both transition runners to idle in place — the single "no in-flight move" site. */
+function withRunnersIdle<T extends { transition: TransitionState; fade: FadeState }>(panel: T): T {
+  panel.transition = { ...panel.transition, auto: { ...IDLE_RUNNER } };
+  panel.fade = { ...panel.fade, auto: { ...IDLE_RUNNER } };
+  return panel;
+}
+
 /**
- * Field-preset transform (reference §18, Reset OFF): restore the saved snapshot but force
- * the volatile in-flight state to rest. A power-fault snapshot must never resume a
- * half-finished Auto Take / Auto Fade, so both transition runners are reset to idle;
- * everything else (fade enables/target/levers, transitionFrames) is preserved (ADR-0011).
+ * The single persistable projection (reference §13, ADR-0015): a deep clone of the panel with
+ * the transition runners idled and the memory bank + Special Mode stripped. Used by Event
+ * Memory STORE and by the persistence module's field-preset capture — one serialisation format.
+ * `delete` (not object-rest) keeps banira's pre-ES2016 lib happy.
+ */
+export function panelSnapshot(state: PanelState): PanelSnapshot {
+  const clone = withRunnersIdle(clonePanelState(state));
+  const bag = clone as PanelSnapshot & { memory?: MemoryState; specialMode?: SpecialModeState };
+  delete bag.memory;
+  delete bag.specialMode;
+  return bag as PanelSnapshot;
+}
+
+/**
+ * Field-preset transform (reference §18, Reset OFF): restore the saved snapshot but force the
+ * volatile in-flight state to rest. Both transition runners idle; Still and Strobe are never
+ * restored; Special Mode always comes up off; the memory interaction latches reset (the bank is
+ * kept). Everything else — filters, Multi/Trail, colour correction, wipe/DSK/fade setup,
+ * transitionFrames, the stored slots — is preserved (ADR-0011, ADR-0015).
  */
 export function fieldPreset(saved: PanelState): PanelState {
-  const next = clonePanelState(saved);
-  next.transition = { ...next.transition, auto: { ...IDLE_RUNNER } };
-  next.fade = { ...next.fade, auto: { ...IDLE_RUNNER } };
-  // TODO(phase>=7): clear volatile Still/Strobe and Special-Mode state on field preset.
+  const next = withRunnersIdle(clonePanelState(saved));
+  next.digitalEffect = { ...next.digitalEffect, freeze: { ...next.digitalEffect.freeze, still: false, strobe: false } };
+  next.specialMode = freshSpecialMode();
+  next.memory = { ...next.memory, memoryArmed: false, armedSlot: null, lastStoredSlot: null };
   return next;
 }

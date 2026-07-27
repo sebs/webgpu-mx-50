@@ -97,9 +97,16 @@ export type Command =
   | { type: 'SET_FADE_LEVER'; position: number } // 0..1, IN..OUT
   // --- shared transition timing (reference §11/§15, ADR-0012) ---
   | { type: 'SET_TRANSITION_TIME'; frames: number } // TRANSITION control; quantized in the reducer
-  | { type: 'PRESS_AUTO_TAKE'; tick: number } // start | pause | resume — carries the current clock tick
+  | { type: 'PRESS_AUTO_TAKE'; tick: number } // start | pause | resume — also recalls an armed Event Memory slot (§13)
   | { type: 'PRESS_AUTO_FADE'; tick: number } // start | pause | resume — carries the current clock tick
   | { type: 'ADVANCE_TIMELINE'; tick: number } // per-present-frame runner advance (ADR-0012)
+  // --- Event Memory (reference §13) ---
+  | { type: 'PRESS_MEMORY' } // latch store-mode: the next EVENT NO. stores the current snapshot
+  | { type: 'PRESS_EVENT_NO'; button: number; shift: boolean } // button 1..4; shift → slots 5..8 (store or arm-recall)
+  | { type: 'CLEAR_ALL_SLOTS' } // mass-clear (MEMORY+SHIFT held through a power cycle)
+  // --- Special Mode (reference §14) ---
+  | { type: 'PRESS_MEMORY_SHIFT' } // the MEMORY+SHIFT chord: toggle Special Mode
+  | { type: 'SELECT_SPECIAL_MACRO'; button: 1 | 2 | 3 | 4; shift: boolean } // arm a macro (button + shift×4)
   | { type: 'LOAD_STATE'; state: PanelState };
 
 /** Discriminant union of all command type tags, handy for exhaustiveness. */

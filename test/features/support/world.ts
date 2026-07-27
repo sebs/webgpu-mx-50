@@ -3,15 +3,25 @@
 // against real code (ADR-0016).
 
 import { setWorldConstructor, World } from '@cucumber/cucumber';
+import type { IWorldOptions } from '@cucumber/cucumber';
 import { createEngine } from '../../../src/app.js';
+import { panelSnapshot } from '../../../src/state/state.js';
+import { MemoryStorageBackend } from '../../../src/persistence/backend.js';
+import { createPersistence } from '../../../src/persistence/persistence.js';
 import type { Engine } from '../../../src/app.js';
 import type { SourceBindingRegistry } from '../../../src/sources/binding.js';
-import type { PanelState, WipeFamily } from '../../../src/state/state.js';
+import type { PanelSnapshot, PanelState, WipeFamily } from '../../../src/state/state.js';
 import type { Command } from '../../../src/state/commands.js';
 import type { ResolveContext } from '../../../src/core/resolve.js';
+import type { Persistence } from '../../../src/persistence/persistence.js';
 
 export class MixerWorld extends World {
-  readonly engine: Engine = createEngine();
+  engine: Engine = createEngine();
+
+  constructor(options: IWorldOptions) {
+    super(options);
+    this.wireNotifyCounter();
+  }
 
   // --- inputs-and-devices (Phase 0) ---
   enumeratedDevices: string[] = [];
@@ -61,6 +71,80 @@ export class MixerWorld extends World {
   // --- transition-timeline scratch (Phase 6: Auto Take/Fade, ADR-0012) ---
   /** Frames advanced since the last Auto Take/Fade press, so a later step can advance the remainder. */
   framesSincePress = 0;
+
+  // --- Event Memory + persistence scratch (Phase 7: §13, ADR-0015) ---
+  /** In-memory storage backend — survives a simulated reload while the Map lives. */
+  readonly storage = new MemoryStorageBackend();
+  persistence: Persistence = createPersistence(this.storage);
+  /** Store-notification counter, to prove recall dispatches through the normal update path. */
+  notifyCount = 0;
+  armNotifyMark = 0;
+  lastReloadSync = false;
+  /** The panel snapshot captured at scenario start, for "the panel state is unchanged" checks. */
+  memBaseline: PanelSnapshot | null = null;
+  /** Recall order (by the slot's distinctive marker) and the cursor after each sequential press. */
+  readonly recalledOrder: number[] = [];
+  readonly armedAfter: (number | null)[] = [];
+
+  /** Subscribe the notify counter to the current store (re-run after a reload swaps the engine). */
+  wireNotifyCounter(): void {
+    this.engine.store.subscribe(() => {
+      this.notifyCount++;
+    });
+  }
+
+  pressMemory(): void {
+    this.dispatch({ type: 'PRESS_MEMORY' });
+  }
+
+  pressEventNo(button: number, shift: boolean): void {
+    this.dispatch({ type: 'PRESS_EVENT_NO', button, shift });
+    this.armNotifyMark = this.notifyCount; // baseline: any later notify is from the recall
+  }
+
+  pressMemoryShift(): void {
+    this.dispatch({ type: 'PRESS_MEMORY_SHIFT' });
+  }
+
+  selectMacro(button: 1 | 2 | 3 | 4, shift: boolean): void {
+    this.dispatch({ type: 'SELECT_SPECIAL_MACRO', button, shift });
+  }
+
+  /** Store a distinctive, comparable snapshot into `slot` (matte.colorIndex = slot marker). */
+  storeDistinctiveSnapshot(slot: number): void {
+    const priorColor = this.snapshot().matte.colorIndex;
+    const priorType = this.snapshot().transition.type;
+    this.dispatch({ type: 'SET_MATTE_COLOR', colorIndex: slot });
+    this.dispatch({ type: 'SET_TRANSITION_TYPE', transition: 'wipe' });
+    this.pressMemory();
+    this.pressEventNo(((slot - 1) % 4) + 1, slot > 4);
+    // Reset the live panel with granular commands — never LOAD_STATE, which would clobber the bank.
+    this.dispatch({ type: 'SET_MATTE_COLOR', colorIndex: priorColor });
+    this.dispatch({ type: 'SET_TRANSITION_TYPE', transition: priorType });
+  }
+
+  /** Press AUTO TAKE and record what the recall landed on + the advanced cursor (sequential playback). */
+  pressAutoTakeCapturing(): void {
+    this.pressAutoTake();
+    this.recalledOrder.push(this.snapshot().matte.colorIndex);
+    this.armedAfter.push(this.snapshot().memory.armedSlot);
+  }
+
+  /** Simulate a reload: persist the bank, then re-boot a fresh engine from the SAME storage. */
+  reload(): void {
+    this.persistence.saveBank(this.snapshot().memory.slots);
+    this.lastReloadSync = !(this.persistence.loadBank() instanceof Promise); // read is synchronous
+    this.persistence = createPersistence(this.storage);
+    this.engine = createEngine(this.persistence.restoreOnBoot());
+    this.wireNotifyCounter();
+  }
+
+  /** Power-off + MEMORY+SHIFT-on-power mass-clear (reference §13). */
+  clearAllOnPowerUp(): void {
+    this.dispatch({ type: 'CLEAR_ALL_SLOTS' });
+    this.persistence.clearBank();
+    this.reload();
+  }
 
   get bindings(): SourceBindingRegistry {
     return this.engine.bindings;

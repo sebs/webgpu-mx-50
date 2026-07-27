@@ -4,11 +4,14 @@
 // here so they cannot drift. Because it is pure it is asserted directly by the domain
 // specs (ADR-0016), no GPU or DOM needed.
 
+import { EMPTY_MEMORY, freshSpecialMode, panelSnapshot, IDLE_RUNNER } from './state.js';
 import { MATTE_COLOR_COUNT } from './state.js';
 import { blindsLegal, pressBorder, pressSoft, VARIANT_COUNT } from '../core/wipe.js';
 import { wrapUnit } from '../core/key.js';
 import { nextDskEdgeStyle } from '../core/dsk.js';
-import { quantizeTransitionFrames, startRunner, advanceRunner, runnerLever } from '../core/timeline.js';
+import { quantizeTransitionFrames, startRunner, advanceRunner, runnerLever, runnerActive } from '../core/timeline.js';
+import { nextArmedSlot } from '../core/event-memory.js';
+import { macroFromButton, macroNeedsLeverAtB, canRunMacro, VIBRATE_FRAMES } from '../core/special-mode.js';
 import type { BusId } from '../core/types.js';
 import type {
   AudioState,
@@ -19,7 +22,9 @@ import type {
   FadeState,
   FreezeEffect,
   FreezeState,
+  PanelSnapshot,
   PanelState,
+  SpecialModeState,
   TransitionRunner,
   WipeState,
 } from './state.js';
@@ -112,6 +117,49 @@ function withDsk(state: PanelState, dsk: DskState): PanelState {
 /** Return a new state with the audio block replaced. */
 function withAudio(state: PanelState, audio: AudioState): PanelState {
   return { ...state, audio };
+}
+
+/** Return a new state with the Special Mode block replaced. */
+function withSpecialMode(state: PanelState, specialMode: SpecialModeState): PanelState {
+  return { ...state, specialMode };
+}
+
+/**
+ * Recall an Event Memory slot (reference §13): rehydrate the panel from the stored snapshot,
+ * PRESERVING the current bank (recall is not a blind LOAD_STATE), advancing the sequence cursor,
+ * and coming up with Special Mode off. Empty/invalid slot → same reference (no-op). The snapshot
+ * is deep-cloned so live state never aliases the stored slot.
+ */
+function recallSlot(state: PanelState, slot: number): PanelState {
+  const index = slot - 1;
+  const snap = index >= 0 && index < 8 ? state.memory.slots[index] : null;
+  if (!snap) return state;
+  const panel = structuredClone(snap) as PanelSnapshot;
+  return {
+    ...panel,
+    memory: { ...state.memory, armedSlot: nextArmedSlot(state.memory.slots, slot) },
+    specialMode: freshSpecialMode(),
+  };
+}
+
+/**
+ * Run the armed lever-at-B Special Mode macro (reference §14). Refuses (and raises the
+ * "move the lever to B" prompt) unless the lever is at B. Satellite toggles its indefinite
+ * orbit; Vibrate/Shutter start a finite frame-counted run (idempotent while running).
+ */
+function runSpecialMacro(state: PanelState, tick: number): PanelState {
+  const sm = state.specialMode;
+  const macro = sm.armed!;
+  if (!canRunMacro(macro, state.transition.lever)) {
+    if (sm.leverPrompt) return state;
+    return withSpecialMode(state, { ...sm, leverPrompt: true });
+  }
+  if (macro === 'satellite') {
+    return withSpecialMode(state, { ...sm, orbiting: !sm.orbiting, leverPrompt: false });
+  }
+  if (runnerActive(sm.run)) return state; // re-press while a finite macro runs
+  const frames = macro === 'vibrate' ? VIBRATE_FRAMES : state.transitionFrames;
+  return withSpecialMode(state, { ...sm, run: startRunner(0, macro === 'shutter' ? 1 : 0, frames, tick), leverPrompt: false });
 }
 
 /** Return a new state with the fade block replaced. */
@@ -553,6 +601,16 @@ export function reduce(state: PanelState, command: Command): PanelState {
     }
 
     case 'PRESS_AUTO_TAKE': {
+      // AUTO TAKE is overloaded (reference §13/§14/§15). Precedence: (1) a lever-at-B Special
+      // Mode macro intercepts; (2) an armed Event Memory slot recalls; (3) the standard take.
+      // Both overloads are gated off at FACTORY boot, so (3) is byte-identical to Phase 6.
+      const sm = state.specialMode;
+      if (sm.active && sm.armed !== null) {
+        if (macroNeedsLeverAtB(sm.armed)) return runSpecialMacro(state, command.tick);
+        // Compressed-image macros (Mosaic/Stream/Cork/Bounce/Flip) run as a standard take (visual only).
+      } else if (state.memory.armedSlot !== null && !runnerActive(state.transition.auto)) {
+        return recallSlot(state, state.memory.armedSlot);
+      }
       const r = state.transition.auto;
       if (r.phase === 'running') return withTakeRunner(state, { ...r, phase: 'paused' });
       if (r.phase === 'paused') return withTakeRunner(state, { ...r, phase: 'running' });
@@ -571,11 +629,12 @@ export function reduce(state: PanelState, command: Command): PanelState {
     }
 
     case 'ADVANCE_TIMELINE': {
-      // Per-present-frame advance (ADR-0012). Both runners no-op to the same ref when idle,
+      // Per-present-frame advance (ADR-0012). The three runners no-op to the same ref when idle,
       // so the common every-frame case returns `state` unchanged (store skips notification).
       const take = advanceRunner(state.transition.auto, command.tick);
       const fade = advanceRunner(state.fade.auto, command.tick);
-      if (take === state.transition.auto && fade === state.fade.auto) return state;
+      const special = advanceRunner(state.specialMode.run, command.tick);
+      if (take === state.transition.auto && fade === state.fade.auto && special === state.specialMode.run) return state;
       let next = state;
       if (take !== state.transition.auto) {
         next = { ...next, transition: { ...next.transition, auto: take, lever: runnerLever(take) } };
@@ -583,11 +642,63 @@ export function reduce(state: PanelState, command: Command): PanelState {
       if (fade !== state.fade.auto) {
         next = { ...next, fade: { ...next.fade, auto: fade, lever: runnerLever(fade) } };
       }
+      if (special !== state.specialMode.run) {
+        // A Special Mode macro run (Vibrate 64f, Shutter reveal) advances but drives no lever.
+        next = { ...next, specialMode: { ...next.specialMode, run: special } };
+      }
       return next;
     }
 
+    // --- Event Memory (reference §13) ---
+
+    case 'PRESS_MEMORY':
+      // Latch store-mode. Inert in Special Mode, and idempotent (already latched).
+      if (state.specialMode.active || state.memory.memoryArmed) return state;
+      return { ...state, memory: { ...state.memory, memoryArmed: true } };
+
+    case 'PRESS_EVENT_NO': {
+      if (state.specialMode.active) return state; // mode-exclusive: Event buttons address macros here
+      const slot = command.shift ? command.button + 4 : command.button;
+      if (slot < 1 || slot > 8) return state;
+      if (state.memory.memoryArmed) {
+        // STORE: write the current snapshot, consume the latch, remember it for the confirm LED.
+        const slots = state.memory.slots.slice();
+        slots[slot - 1] = panelSnapshot(state);
+        return { ...state, memory: { ...state.memory, slots, memoryArmed: false, lastStoredSlot: slot } };
+      }
+      // ARM the slot for recall by the next AUTO TAKE (arming an empty slot is allowed).
+      if (state.memory.armedSlot === slot) return state;
+      return { ...state, memory: { ...state.memory, armedSlot: slot } };
+    }
+
+    case 'CLEAR_ALL_SLOTS':
+      return { ...state, memory: { ...EMPTY_MEMORY, slots: [null, null, null, null, null, null, null, null] } };
+
+    // --- Special Mode (reference §14) ---
+
+    case 'PRESS_MEMORY_SHIFT':
+      // The MEMORY+SHIFT chord toggles Special Mode. Exit clears any orbit/run/prompt; entry also
+      // clears memory arming so the store/Special branches stay mutually exclusive.
+      return state.specialMode.active
+        ? withSpecialMode(state, freshSpecialMode())
+        : withSpecialMode(
+            { ...state, memory: { ...state.memory, memoryArmed: false, armedSlot: null } },
+            { ...freshSpecialMode(), active: true },
+          );
+
+    case 'SELECT_SPECIAL_MACRO': {
+      const sm = state.specialMode;
+      if (!sm.active) return state;
+      const macro = macroFromButton(command.button, command.shift);
+      // Clean re-arm of the same macro is a no-op; re-arming a different macro is a function
+      // change, so it stops any orbit / cancels a run / clears the prompt (reference §14).
+      if (sm.armed === macro && !sm.orbiting && sm.run.phase === 'idle' && !sm.leverPrompt) return state;
+      return withSpecialMode(state, { ...sm, armed: macro, orbiting: false, leverPrompt: false, run: { ...IDLE_RUNNER } });
+    }
+
     case 'LOAD_STATE':
-      // Whole-panel replace: Event Memory recall, Reset/field-preset boot, preset import.
+      // Whole-panel replace: Reset/field-preset boot, preset import. (Event Memory recall uses
+      // recallSlot to preserve the bank, not this.)
       return command.state;
 
     default: {

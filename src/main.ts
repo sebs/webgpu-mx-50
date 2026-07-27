@@ -15,6 +15,9 @@ import { createEngine } from './app.js';
 import { createControlStrip } from './ui/control-strip.js';
 import { AudioEngine } from './audio/engine.js';
 import { AvSynchroTap } from './audio/av-synchro-tap.js';
+import { createPersistence } from './persistence/persistence.js';
+import { LocalStorageBackend } from './persistence/backend.js';
+import { attachPersistence } from './persistence/subscriber.js';
 import type { Size } from './core/types.js';
 import type { SourceSlot } from './core/types.js';
 
@@ -46,7 +49,11 @@ async function boot(): Promise<void> {
     return;
   }
 
-  const engine = createEngine();
+  // Persistence (ADR-0015): boot the store from storage (Reset policy + saved bank/field
+  // preset), then mirror future changes back. The module owns all localStorage access.
+  const persistence = createPersistence(new LocalStorageBackend(window.localStorage));
+  const engine = createEngine(persistence.restoreOnBoot());
+  attachPersistence(engine.store, persistence);
   const size: Size = { width: canvas.width, height: canvas.height };
 
   // Four Source slots (distinct generated patterns) + the Matte generator.
