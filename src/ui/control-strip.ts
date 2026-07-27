@@ -366,7 +366,13 @@ export class MxControlStrip extends HTMLElement {
     this.refresh.push((s) => {
       if (document.activeElement !== strobeTime) strobeTime.value = String(s.digitalEffect.strobeTime);
     });
-    freezeGroup.append(still, strobe, multi, multiLabel, trail, 'Strobe TIME', strobeTime);
+    // Frame button (reference §8.10): a real, remembered control that is inert in v1 (ADR-0005 §6).
+    const frame = this.button('Frame', () =>
+      store.dispatch({ type: 'SET_FRAME_MODE', mode: store.getSnapshot().digitalEffect.frameMode === 'frame' ? 'field' : 'frame' }),
+    );
+    frame.setAttribute('aria-label', 'Frame field/frame mode (no-op in the clean-modern build)');
+    this.refresh.push((s) => frame.setAttribute('aria-pressed', String(s.digitalEffect.frameMode === 'field')));
+    freezeGroup.append(still, strobe, multi, multiLabel, trail, 'Strobe TIME', strobeTime, frame);
     this.appendRow(freezeGroup);
 
     // Keys (Mix/Wipe-stage): Luminance / Chroma + SLICE + HUE.
@@ -586,6 +592,9 @@ export class MxControlStrip extends HTMLElement {
   private group(label: string): HTMLDivElement {
     const group = document.createElement('div');
     group.className = 'group';
+    // Accessible grouping (ADR-0013): each control block is an ARIA group with the panel label.
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', label);
     const span = document.createElement('span');
     span.className = 'label';
     span.textContent = label;

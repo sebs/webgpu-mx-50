@@ -81,3 +81,29 @@ test('exportPreset / importPreset round-trip the bank and reject bad input', () 
     { ok: false, reason: 'unsupported-version' },
   );
 });
+
+// --- Phase 8: control-mapping binding table persistence (ADR-0014, own storage key) ---
+
+import { KEY_BINDINGS } from '../../src/persistence/schema.js';
+import { BindingTable, DEFAULT_BINDINGS } from '../../src/control/bindings.js';
+import type { BindingMap } from '../../src/control/bindings.js';
+
+test('a remapped binding table round-trips across a reload and corrupt payloads fall back to defaults', () => {
+  const storage = new MemoryStorageBackend();
+  const table = new BindingTable(DEFAULT_BINDINGS, (m) => createPersistence(storage).saveBindings(m));
+  table.rebind('key:KeyG', { control: 'autoFade.trigger', mode: 'trigger' });
+  const reloaded = createPersistence(storage).loadBindings();
+  assert.deepEqual((reloaded as BindingMap)['key:KeyG'], { control: 'autoFade.trigger', mode: 'trigger' });
+
+  storage.set(KEY_BINDINGS, '{ not json');
+  assert.equal(createPersistence(storage).loadBindings(), null);
+  assert.deepEqual(BindingTable.fromJSON(null).toJSON(), DEFAULT_BINDINGS);
+});
+
+test('clearBindings removes the persisted remap', () => {
+  const storage = new MemoryStorageBackend();
+  const p = createPersistence(storage);
+  p.saveBindings({ 'key:KeyG': { control: 'autoTake.trigger', mode: 'trigger' } });
+  p.clearBindings();
+  assert.equal(p.loadBindings(), null);
+});

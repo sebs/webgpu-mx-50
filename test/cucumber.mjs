@@ -31,6 +31,8 @@ export default {
     'features/auto-take.feature',
     'features/event-memory.feature',
     'features/special-modes.feature',
+    'features/combination-recipes.feature',
+    'features/frame-field-mode.feature',
   ],
   import: [
     'test/features/support/world.ts',
@@ -49,6 +51,9 @@ export default {
     'test/features/steps/auto-take.steps.ts',
     'test/features/steps/event-memory.steps.ts',
     'test/features/steps/special-modes.steps.ts',
+    'test/features/steps/control-mapping.steps.ts',
+    'test/features/steps/recipes.steps.ts',
+    'test/features/steps/frame-mode.steps.ts',
   ],
   name: [
     // inputs-and-devices (Rule 1)
@@ -383,5 +388,33 @@ export default {
     'Satellite can be started and stopped with Auto Take or GPI',
     'Satellite requires the lever at B before starting',
     'Special Mode macros are driven by the same run controls as normal transitions',
+    // Phase 8 — control mapping (auto-take @integration external triggers)
+    'A GPI contact pulse fires Auto Take',
+    'A GPI edge received mid-take pauses the take like a button press',
+    'Any mapped control source can fire Auto Take',
+    // Phase 8 — cross-feature @integration now unblocked by Auto Take + mapping
+    'Auto Take drives an automatic audio crossfade',
+    'Auto Take drives a MIX to completion over the transition duration',
+    'MIX and NAM composite the effected buses, not the raw sources',
+    'Chroma Key output feeds the downstream stages of the signal chain',
+    'Auto Take performs the Chroma Key transition automatically',
+    'Strobe can be triggered by audio via A/V Synchro',
+    'A soft-edged, one-way, aspect-stretched square wipe',
+    'Build a moving picture-in-picture inset then freeze it',
+    'A title keyed over a wipe transition stays sharp through the move',
+    'The DSK fade enable fades the title with the program',
+    // Phase 8 — frame-field-mode v1 no-op contract (the four intended-hardware scenarios stay @deferred)
+    'In the clean-modern v1 build the Frame toggle has no visible effect',
+    // Phase 8 — combination recipes (domain-composable; S1–S3 double-effect + Recipe 4 deferred)
+    'Mosaic Spotlight produces a movable censor block over a normal picture',
+    'Border outlines the mosaic censor block',
+    'Reverse and Mono highlight the spotlight region further',
+    'The spotlight square resizes with the wipe lever',
+    'A/V Synchro pulses the after image in time with the music',
+    'Picture-in-Picture insets a compressed B picture over the A picture',
+    'The wipe lever sets the size of the PiP inset',
+    'Scene Grabber freezes the PiP inset',
+    'Only a square-wipe PiP can be stored to Event Memory',
+    'A PiP built on a non-square wipe cannot be stored to Event Memory',
   ],
 };

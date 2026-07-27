@@ -8,6 +8,8 @@ import type { MixerWorld } from '../support/world.js';
 import type { BusId, SourceSlot } from '../../../src/core/types.js';
 import type { ProgramOut } from '../../../src/state/state.js';
 import { programAudio } from '../../../src/core/program.js';
+import { runnerComplete } from '../../../src/core/timeline.js';
+import { audioFollowGains } from '../../../src/core/audio.js';
 import {
   faderGain,
   effectiveBusGains,
@@ -320,4 +322,38 @@ Then('subsequent lever movement no longer changes the bus audio levels', functio
   const after = effectiveBusGains(this.snapshot());
   assert.equal(after.a, before.a);
   assert.equal(after.b, before.b);
+});
+
+// --- Phase 8: #5 Auto Take drives an automatic audio crossfade (@integration, §16) ---
+
+When('Auto Take runs the transition to the B position', function (this: MixerWorld) {
+  this.setTransitionTime(60);
+  this.pressAutoTake();
+  this.sweepGains = [effectiveBusGains(this.snapshot())]; // frame 0 (lever still at A)
+  this.advanceFrames(30);
+  this.sweepGains.push(effectiveBusGains(this.snapshot()));
+  this.advanceFrames(30);
+  this.sweepGains.push(effectiveBusGains(this.snapshot()));
+});
+Then('the bus audio crossfades hands-free from full A-bus to full B-bus', function (this: MixerWorld) {
+  const first = this.sweepGains[0]!;
+  const last = this.sweepGains[this.sweepGains.length - 1]!;
+  assert.ok(Math.abs(first.a - 1) < EPS && Math.abs(first.b) < EPS, 'starts full A');
+  assert.ok(Math.abs(last.a) < EPS && Math.abs(last.b - 1) < EPS, 'ends full B');
+  for (let i = 1; i < this.sweepGains.length; i++) {
+    assert.ok(this.sweepGains[i]!.a <= this.sweepGains[i - 1]!.a && this.sweepGains[i]!.b >= this.sweepGains[i - 1]!.b, 'monotone');
+  }
+});
+Then('the crossfade completes together with the video transition', function (this: MixerWorld) {
+  assert.equal(runnerComplete(this.snapshot().transition.auto), true);
+  assert.equal(this.snapshot().transition.lever, 1);
+  const g = effectiveBusGains(this.snapshot());
+  const expect = audioFollowGains(1);
+  assert.ok(Math.abs(g.a - expect.a) < EPS && Math.abs(g.b - expect.b) < EPS);
+});
+Then(/^Aux 1 and Mic\/Aux 2 remain at their fader settings the entire time$/, function (this: MixerWorld) {
+  const s = this.snapshot();
+  const g = programAudioMix(s).gains;
+  assert.equal(g.aux1, faderGain(s.audio.faders.aux1));
+  assert.equal(g.aux2mic, faderGain(s.audio.faders.micAux2));
 });

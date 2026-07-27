@@ -18,6 +18,9 @@ import {
   PREVIEW_IS_ALWAYS_EFFECTED,
 } from '../../../src/core/program.js';
 import { programFadeAudioMix } from '../../../src/core/fade.js';
+import { runnerComplete } from '../../../src/core/timeline.js';
+import { stageIsBefore } from '../../../src/core/signal-graph.js';
+import { anyEffectOn } from '../../../src/core/digital-effect.js';
 import {
   MATTE_PALETTE,
   matteColorName,
@@ -480,3 +483,37 @@ Then('the Matte is rendered as a flat, uniform colour', function (this: MixerWor
 });
 
 void usesMatte; // (re-exported helper kept available for later phases)
+
+// --- Phase 8: transition-mix-nam @integration (#6 Auto Take drives a MIX; #7 composite effected buses) ---
+
+When(/^the Mix\/Wipe Lever is at the (A|B) position$/, function (this: MixerWorld, pos: string) {
+  this.dispatch({ type: 'SET_LEVER', position: pos === 'A' ? 0 : 1 });
+});
+Given('the TRANSITION control sets the duration', function (this: MixerWorld) {
+  this.setTransitionTime(60);
+});
+Then('the composite dissolves from the A-bus to the B-bus over the set duration', function (this: MixerWorld) {
+  this.advanceToFrame(60);
+  assert.equal(this.snapshot().transition.type, 'mix');
+  assert.equal(runnerComplete(this.snapshot().transition.auto), true);
+  const w = mixWeights(this.snapshot().transition.lever);
+  assert.ok(Math.abs(w.a) < 1e-9 && Math.abs(w.b - 1) < 1e-9);
+});
+Then(/^the Mix\/Wipe Lever ends at the B position$/, function (this: MixerWorld) {
+  assert.equal(this.snapshot().transition.lever, 1);
+});
+
+Given('a digital effect is configured on the A-bus', function (this: MixerWorld) {
+  this.dispatch({ type: 'SELECT_EFFECT_BUS', bus: 'A' });
+  this.dispatch({ type: 'CHOOSE_EFFECT', effect: 'nega' });
+  this.dispatch({ type: 'PRESS_EFFECT_ON' });
+});
+Then('the composite blends the effected A-bus with the B-bus', function (this: MixerWorld) {
+  assert.equal(compositeRule(this.snapshot().transition.type), 'cross-dissolve');
+  const w = mixWeights(0.5);
+  assert.ok(Math.abs(w.a - 0.5) < 1e-9 && Math.abs(w.b - 0.5) < 1e-9);
+  assert.equal(anyEffectOn(this.snapshot().digitalEffect, 'A'), true);
+});
+Then(/^the Mix\/Wipe stage acts downstream of the Digital Effect stage$/, function () {
+  assert.equal(stageIsBefore('digital-effect', 'mix-wipe'), true);
+});

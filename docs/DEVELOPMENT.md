@@ -108,8 +108,15 @@ src/
   persistence/
     backend.ts          StorageBackend interface + localStorage / in-memory implementations (ADR-0015)
     schema.ts           schemaVersion envelope, migration, crash-proof reads (ADR-0015)
-    persistence.ts      The single owner of storage: bank / field-preset / settings / import-export
+    persistence.ts      The single owner of storage: bank / field-preset / settings / bindings / import-export
     subscriber.ts       Passive store→storage mirror (debounced field-preset capture)
+  control/
+    logical-control.ts  Remappable logical-control ids + the ControlSignal shape (ADR-0014)
+    bindings.ts         BindingTable + default bindings (physical address → control)
+    resolver.ts         The sole command emitter: resolveSignal + the per-tick SignalCoalescer
+    keyboard.ts         Pure key-chord resolution + the browser KeyboardAdapter (focus-guarded)
+    automation.ts       Local automation API (RS422/RS232C intent): run transition / call pattern / step memory
+    gamepad.ts,midi.ts,serial.ts  Browser-only input adapters (capability-detected, excluded from CI)
   ui/
     control-strip.ts    First Web Component control surface, store-bound (ADR-0013)
   app.ts                Headless engine assembly (store + clock + bindings)
@@ -121,7 +128,7 @@ test/
   cucumber.mjs          cucumber-js configuration
 ```
 
-## Status (Phases 0–7 complete)
+## Status (Phases 0–8 complete — project complete)
 
 Implemented and rendering: **two buses** + Matte substitution, **Program Out** A/B/EFFECT,
 **Mix/NAM** + the **compositional wipe engine**, the **Matte generator**, per-bus **Colour
@@ -155,21 +162,32 @@ deferred; and a tiered **persistence** module behind an injectable `StorageBacke
 (schema-versioned, crash-proof, Reset ON/OFF boot, JSON import/export) that mirrors the bank and
 field preset to storage.
 
-Next: control mapping + integration recipes + UI polish (Phase 8).
+**Control mapping + recipes + polish (Phase 8, final):** the **control-input mapping layer**
+(`src/control/`, ADR-0014) — a remappable logical-control vocabulary fed by keyboard / gamepad /
+MIDI / Web Serial GPI / a local automation API, with one pure resolver as the sole command
+emitter and a per-tick coalescer, bindings persisted; the **combination recipes** and the
+previously-deferred cross-feature `@integration` scenarios composed at the domain level; and the
+**Frame** field/frame button as a provable v1 no-op. The project's domain model is now complete;
+what remains deferred is pixel-rendering, browser-only surfaces, and faithfully model-constrained
+scenarios (see the [ROADMAP](ROADMAP.md) Phase 8 note).
 
-Known deferrals: **golden-image pixel tests** (no headless-WebGPU runner here); **Trail's
-ping-pong accumulator**, **Scene-Grabber freeze-in-place**, the **five non-Normal DSK edge
-styles**, and the **EXT.CAMERA GPU binding** — all domain-complete, GPU held back as the
-riskiest/blocked-on-device pieces; Compression/Slide/Blinds not yet in the wipe shader;
-**A/V-Synchro per-frame GPU picture-gating** and **real audio-input capture** are browser-only
-follow-ons (the tap surfaces the gated-effect set today); the **selective VIDEO-only / DSK-only
-fade** (a pre-DSK + key-mask GPU refinement); the **Special-Mode compressed-image visuals**
-(macro geometry) and the **IndexedDB captured-still tier** (@integration; no headless IndexedDB)
-join the GPU/blob deferrals; **GPI/RS422 external Auto-Take triggers** await the Phase 8
-control-mapping layer; underivable Pattern-Table parts `@wip`; **real browser-input binding**
-still open from Phase 1. See the [ROADMAP](ROADMAP.md).
+Permanently deferred (the domain model is complete; these are faithful non-goals): **golden-image
+pixel tests** and every rendered-**pixel** outcome — no headless-WebGPU runner (Multi tiles,
+Trail ping-pong, After-Image ghosts, compressed-inset/PiP geometry, mosaic/border/spotlight and
+stretched-square pixels, Compression/Slide/Blinds wipe shaders, the five non-Normal DSK edge
+styles, Special-Mode compressed-image macros, the two selective VIDEO/DSK fade-pixel scenarios);
+**browser-only** surfaces (the Web Audio engine, per-frame A/V-Synchro GPU gating, the EXT.CAMERA
+GPU binding, the control adapters + DOM keyboard listener, IndexedDB still-blob tiers + file
+import/export, device-enumeration/camera-mic-permission scenarios); **@deferred documentation**
+(the four frame-field interlace scenarios + the strobe frame-mode duplicate — the v1 no-op
+contract is CI-green); underivable Pattern-Table parts `@wip`; and **model-constrained** scenarios
+correctly not representable (auto-take:174 & recipes S1–S3 need two live effects at once;
+Recipe 4 hits the Compression⊥Strobe invariant). Every deferral has a tested domain/config proxy.
+See the [ROADMAP](ROADMAP.md).
 
-The domain is verified headlessly: **191 `node:test` units** and **508 Gherkin scenarios
-(3704 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five
+The domain is verified headlessly: **208 `node:test` units** and **536 Gherkin scenarios
+(3921 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five
 digital-effect features, position/scene-grabber, the three key features, the three audio
-features (mixer, follow, A/V Synchro), fade control + Auto Take, Event Memory, and Special Modes.
+features (mixer, follow, A/V Synchro), fade control + Auto Take, Event Memory, Special Modes, the
+control-input mapping layer, the combination recipes + cross-feature integration, and the
+Frame-mode v1 no-op.

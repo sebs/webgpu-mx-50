@@ -15,6 +15,9 @@ import {
   keyBackground,
 } from '../../../src/core/key.js';
 import { resolveBusSource } from '../../../src/core/resolve.js';
+import { stageIsBefore } from '../../../src/core/signal-graph.js';
+import { programVideo } from '../../../src/core/program.js';
+import { runnerComplete } from '../../../src/core/timeline.js';
 
 const tr = (w: MixerWorld) => w.snapshot().transition;
 
@@ -342,4 +345,28 @@ Then('the blinking source video is used as the key source, not the Matte', funct
   const resolved = resolveBusSource(this.snapshot().busB, 'key');
   assert.notEqual(resolved, 'matte');
   assert.equal(resolved, this.snapshot().busB.substituteSource);
+});
+
+// --- Phase 8: chroma-key @integration (#8 output feeds downstream; #9 Auto Take performs the key) ---
+
+Then('the chroma-keyed composite passes into the Downstream Key and Fade stages', function (this: MixerWorld) {
+  assert.equal(this.snapshot().transition.type, 'chroma-key');
+  assert.ok(stageIsBefore('mix-wipe', 'downstream-key') && stageIsBefore('downstream-key', 'fade'));
+});
+Then('the fully processed composite is sent to Program Out', function (this: MixerWorld) {
+  assert.equal(programVideo(this.snapshot()).effectApplied, true);
+});
+Given('Chroma Key is engaged as the transition function', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_TRANSITION_TYPE', transition: 'chroma-key' });
+});
+Then('the lever movement from B toward A is performed automatically over the set transition time', function (this: MixerWorld) {
+  this.advanceToFrame(this.snapshot().transitionFrames);
+  const r = this.snapshot().transition.auto;
+  assert.equal(r.from, 1);
+  assert.equal(r.to, 0);
+  assert.equal(this.snapshot().transition.lever, 0);
+  assert.equal(runnerComplete(r), true);
+});
+Then('the composite blends from fully keyed toward the unkeyed B-bus image', function (this: MixerWorld) {
+  assert.equal(keyForegroundOpacity(1, this.snapshot().transition.lever), 0);
 });

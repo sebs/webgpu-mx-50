@@ -190,3 +190,23 @@ Given('the Trail effect is active', function (this: MixerWorld) {
 When(/^I try to arm A\/V Synchro$/, function (this: MixerWorld) {
   this.dispatch({ type: 'ATTEMPT_AV_SYNCHRO', on: true });
 });
+
+// --- Phase 8: #10 Strobe can be triggered by audio via A/V Synchro (@integration) ---
+
+Given(/^A\/V Synchro is selecting Strobe on the A-bus$/, function (this: MixerWorld) {
+  this.dispatch({ type: 'SELECT_EFFECT_BUS', bus: 'A' });
+  this.dispatch({ type: 'ATTEMPT_AV_SYNCHRO', on: true });
+  this.dispatch({ type: 'SET_AV_SYNCHRO_EFFECT', effect: 'strobe', on: true });
+  this.avSelected = ['strobe'];
+  this.avLastEffect = 'strobe';
+});
+When('the incoming audio rises above the trigger threshold', function (this: MixerWorld) {
+  this.avEnvelope = ENVELOPE_LOUD;
+});
+Then('Strobe pulses on the A-bus', function (this: MixerWorld) {
+  assert.equal(applied(this, 'strobe'), true);
+});
+Then('the hold time is governed by the Effect Interval Timer rather than the TIME control', function (this: MixerWorld) {
+  assert.equal(avSynchroHold('strobe'), 'effect-interval-timer');
+  assert.ok(avSynchroIntervalSeconds(de(this)) > 0);
+});

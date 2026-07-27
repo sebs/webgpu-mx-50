@@ -533,6 +533,12 @@ export function reduce(state: PanelState, command: Command): PanelState {
     case 'SET_TRAIL_TIME':
       return withEffect(state, { ...state.digitalEffect, trailTime: clamp(command.position, 0, 1) });
 
+    case 'SET_FRAME_MODE':
+      // Frame button (§8.10). A real, remembered control that is a provable no-op on the effect
+      // output (ADR-0005 §6, FRAME_MODE_AFFECTS_OUTPUT). Short-circuit before withEffect (not ref-preserving).
+      if (state.digitalEffect.frameMode === command.mode) return state;
+      return withEffect(state, { ...state.digitalEffect, frameMode: command.mode });
+
     case 'ATTEMPT_AV_SYNCHRO': {
       const de = state.digitalEffect;
       if (command.on && de.freeze.trail) return state; // Trail ⊥ A/V Synchro (§8.8)

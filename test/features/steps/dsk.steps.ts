@@ -16,6 +16,7 @@ import {
   dskEdgeStyleByLabel,
 } from '../../../src/core/dsk.js';
 import { matteFlatColor, matteColorAt } from '../../../src/core/matte.js';
+import { elementFadeAmount } from '../../../src/core/fade.js';
 
 const dskOf = (w: MixerWorld) => w.snapshot().dsk;
 const keySourceFromText = (t: string): DskKeySource =>
@@ -205,4 +206,29 @@ Then('the key returns to its original polarity', function (this: MixerWorld) {
 });
 Then('the keyed characters are filled as before', function (this: MixerWorld) {
   assert.equal(dskOf(this).reverse, false);
+});
+
+// --- Phase 8: downstream-key @integration (#13 title over wipe stays sharp; #14 DSK fade enable) ---
+
+Given('the A-bus and B-bus are running a wipe transition', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_TRANSITION_TYPE', transition: 'wipe' });
+});
+When('the wipe progresses across the frame', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_LEVER', position: 0.5 });
+});
+Then('the title stays sharp and in place above the moving wipe', function (this: MixerWorld) {
+  assert.equal(this.snapshot().dsk.on, true);
+  assert.equal(stageIsBefore('mix-wipe', 'downstream-key'), true);
+});
+Then('the DSK keys over the composite rather than either bus alone', function () {
+  assert.equal(stageIsBefore('mix-wipe', 'downstream-key'), true);
+});
+Given('the Fade stage has its DSK enable lit', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_FADE_ENABLE', element: 'dsk', on: true });
+});
+When('the Fade Control lever is moved from IN to OUT', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_FADE_LEVER', position: 1 });
+});
+Then('the title fades out together with the enabled composite', function (this: MixerWorld) {
+  assert.equal(elementFadeAmount(this.snapshot().fade, 'dsk'), 1);
 });

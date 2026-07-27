@@ -95,3 +95,11 @@ export function intervalTicks(seconds: number): number {
 export function compressionReliable(state: PanelState): boolean {
   return !state.digitalEffect.freeze.trail;
 }
+
+/**
+ * Frame field/frame button contract (reference §8.10, ADR-0005 §6). Clean-modern video is
+ * full-resolution progressive RGBA with no interlace fields, so there is no field/frame
+ * resolution trade: the Frame button NEVER alters the effect output. The renderer and the specs
+ * both read this constant, so the no-op is stated in exactly one place.
+ */
+export const FRAME_MODE_AFFECTS_OUTPUT = false;

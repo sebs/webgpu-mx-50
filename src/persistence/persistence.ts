@@ -6,9 +6,10 @@
 
 import { bootState } from '../app.js';
 import { EMPTY_MEMORY, freshMemory, freshSpecialMode, panelSnapshot } from '../state/state.js';
-import { KEY_BANK, KEY_FIELD_PRESET, KEY_SETTINGS, SCHEMA_VERSION, readEnvelope, writeEnvelope } from './schema.js';
+import { KEY_BANK, KEY_BINDINGS, KEY_FIELD_PRESET, KEY_SETTINGS, SCHEMA_VERSION, readEnvelope, writeEnvelope } from './schema.js';
 import type { StorageBackend } from './backend.js';
 import type { PanelSnapshot, PanelState, ResetMode } from '../state/state.js';
+import type { BindingMap } from '../control/bindings.js';
 
 export interface Settings {
   reset: ResetMode;
@@ -29,6 +30,10 @@ export interface Persistence {
   restoreOnBoot(): PanelState;
   exportPreset(target: ExportTarget): string;
   importPreset(json: string): ImportResult;
+  // Control-mapping binding table (ADR-0014) — its own key, remap survives reloads.
+  loadBindings(): BindingMap | null;
+  saveBindings(map: BindingMap): void;
+  clearBindings(): void;
 }
 
 const BANK_SIZE = 8;
@@ -86,6 +91,15 @@ export function createPersistence(backend: StorageBackend): Persistence {
             ? self.loadSettings()
             : self.readFieldPreset();
       return JSON.stringify({ schemaVersion: SCHEMA_VERSION, target: target.kind, data });
+    },
+    loadBindings() {
+      return readEnvelope<BindingMap>(backend, KEY_BINDINGS);
+    },
+    saveBindings(map) {
+      writeEnvelope(backend, KEY_BINDINGS, map);
+    },
+    clearBindings() {
+      backend.remove(KEY_BINDINGS);
     },
     importPreset(json) {
       let parsed: unknown;

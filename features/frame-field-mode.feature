@@ -1,4 +1,3 @@
-@deferred
 Feature: Frame field-versus-frame mode
   As a video editor recreating the WJ-MX50 panel,
   I want the Frame button that trades vertical resolution against motion "vibration"
@@ -22,6 +21,7 @@ Feature: Frame field-versus-frame mode
 
   # --- Intended hardware behavior (documentation only, not built in v1) ---
 
+  @deferred
   Scenario Outline: The Frame button applies only to the frame-storing effects
     Given the "<effect>" digital effect is active
     When the operator toggles the Frame button
@@ -34,6 +34,7 @@ Feature: Frame field-versus-frame mode
       | Multi  |
       | Trail  |
 
+  @deferred
   Scenario Outline: The Frame button has no effect on non-frame-storing effects
     Given the "<effect>" digital effect is active
     When the operator toggles the Frame button
@@ -46,12 +47,14 @@ Feature: Frame field-versus-frame mode
       | Mono   |
       | Paint  |
 
+  @deferred
   Scenario: Field mode trades vertical resolution for clean motion
     Given the Still effect is active
     When the operator selects 1-field mode
     Then the frozen output shows reduced vertical resolution
     And moving detail shows no interlace vibration
 
+  @deferred
   Scenario: Frame mode trades clean motion for full vertical resolution
     Given the Still effect is active
     When the operator selects 2-field frame mode

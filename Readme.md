@@ -17,14 +17,16 @@ npm test        # typecheck + unit + cucumber features + golden scaffolding
 ```
 
 Stack: vanilla TypeScript + WebGPU + [banira](https://github.com/sebs/banira), no UI
-framework (ADR-0003). Current status: **Phases 0–7 complete** — two buses + Matte
-substitution, Program Out (A/B/EFFECT), Mix/NAM + the compositional wipe engine, the Matte
-generator, per-bus colour correction, the four filter effects, the freeze family
-(Still/Strobe/Multi/Trail), position control + Scene Grabber, the Luminance/Chroma keyers,
-the Downstream Key, the **audio engine** (mixer + Audio Follow + A/V Synchro on the Web
-Audio API), the **Fade stage + Auto Take/Auto Fade** (frame-counted, pausable transitions),
-and **Event Memory + Special Modes + tiered persistence** (8 stored panel snapshots, the
-8-macro Special bank, durable schema-versioned storage). Next: control mapping + integration
-recipes + UI polish (Phase 8). See
-[docs/ROADMAP.md](docs/ROADMAP.md) for the build plan and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+framework (ADR-0003). Current status: **Phases 0–8 complete — the domain model is done.**
+Two buses + Matte substitution, Program Out (A/B/EFFECT), Mix/NAM + the compositional wipe
+engine, the Matte generator, per-bus colour correction, the four filter effects, the freeze
+family (Still/Strobe/Multi/Trail), position control + Scene Grabber, the Luminance/Chroma
+keyers, the Downstream Key, the **audio engine** (mixer + Audio Follow + A/V Synchro on the
+Web Audio API), the **Fade stage + Auto Take/Auto Fade** (frame-counted, pausable transitions),
+**Event Memory + Special Modes + tiered persistence**, and the **control-input mapping layer**
+(remappable keyboard/gamepad/MIDI/GPI + a local automation API) with the combination recipes and
+cross-feature integration composed and asserted. Verified headlessly: **208 units, 536 Gherkin
+scenarios (3921 steps)**; what remains deferred is pixel-rendering, browser-only surfaces, and
+faithfully model-constrained scenarios. See
+[docs/ROADMAP.md](docs/ROADMAP.md) for the build history and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 for how to run and test.

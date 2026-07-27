@@ -60,3 +60,25 @@ test('ASPECT is effective only on Square with the ASPECT ON button lit', () => {
   const straight = reduce(structuredClone(FACTORY_PRESET), { type: 'SET_ASPECT_ON', on: true });
   assert.equal(aspectEffective(straight.transition.wipe), false); // not Square
 });
+
+// --- Phase 8: Picture-in-Picture storability predicate (reference §16, recipe 5) ---
+
+import { isStorablePip, isPictureInPicture } from '../../src/core/positioner.js';
+
+test('isStorablePip is true only for a square wipe with the Positioner on and Compression engaged', () => {
+  let s = structuredClone(FACTORY_PRESET);
+  s = reduce(s, { type: 'SET_TRANSITION_TYPE', transition: 'wipe' });
+  s = reduce(s, { type: 'PRESS_WIPE_FAMILY', family: 'square' });
+  s = reduce(s, { type: 'PRESS_COMPRESSION' });
+  s = reduce(s, { type: 'PRESS_POSITIONER' }); // on (Square only)
+  assert.equal(isPictureInPicture(s), true);
+  assert.equal(isStorablePip(s), true);
+  // A non-square inset cannot even be built: PRESS_POSITIONER no-ops off Square.
+  let t = structuredClone(FACTORY_PRESET);
+  t = reduce(t, { type: 'SET_TRANSITION_TYPE', transition: 'wipe' });
+  t = reduce(t, { type: 'PRESS_WIPE_FAMILY', family: 'straight' });
+  t = reduce(t, { type: 'PRESS_POSITIONER' }); // no-op off Square
+  t = reduce(t, { type: 'PRESS_COMPRESSION' });
+  assert.equal(t.positioner.on, false);
+  assert.equal(isStorablePip(t), false);
+});

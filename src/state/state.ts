@@ -83,6 +83,14 @@ export interface AvSynchroEffects {
 /** The freeze-family digital effects backed by GPU frame memory (reference §8.5–§8.8, ADR-0007). */
 export type FreezeEffect = 'still' | 'strobe' | 'multi' | 'trail';
 
+/**
+ * The Frame button field/frame mode (reference §8.10). A documented v1 NO-OP (ADR-0005 §6):
+ * clean-modern video is full-resolution progressive RGBA with no interlace fields, so there is
+ * no field/frame resolution trade — the button never changes the effect output. See
+ * FRAME_MODE_AFFECTS_OUTPUT in core/digital-effect.ts.
+ */
+export type FrameMode = 'field' | 'frame';
+
 /** Any digital effect the block can arm. */
 export type DigitalEffectName = FilterEffect | FreezeEffect;
 
@@ -110,6 +118,8 @@ export interface DigitalEffectState {
   trailTime: number; // 0..1 (reference §8.8)
   multiMode: 'once' | 'repeat'; // reference §8.7
   trailCorner: 'upper-left' | 'upper-right'; // reference §8.8
+  /** Field/frame button (reference §8.10). Inert in v1 (ADR-0005 §6); see FRAME_MODE_AFFECTS_OUTPUT. */
+  frameMode: FrameMode;
   /** A/V Synchro armed; also gates the Trail exclusion (§8.8). */
   avSynchro: boolean;
   /**
@@ -387,6 +397,7 @@ export const FACTORY_PRESET: PanelState = {
     trailTime: 0.5,
     multiMode: 'repeat',
     trailCorner: 'upper-left',
+    frameMode: 'frame',
     avSynchro: false,
     avSynchroLevel: 0.5,
     avSynchroEffects: { nega: false, mosaic: false, mono: false, paint: false, still: false, strobe: false },

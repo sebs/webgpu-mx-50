@@ -302,3 +302,20 @@ test('a compressed-image macro (Bounce) runs as the standard take', () => {
   assert.equal(s.transition.auto.phase, 'running');
   assert.equal(s.specialMode.run.phase, 'idle');
 });
+
+// --- Phase 8: Frame button field/frame mode — a provable v1 no-op (reference §8.10, ADR-0005 §6) ---
+
+import { FRAME_MODE_AFFECTS_OUTPUT } from '../../src/core/digital-effect.js';
+
+test('SET_FRAME_MODE flips the mode, no-ops on the same mode, and touches nothing else', () => {
+  const s = structuredClone(FACTORY_PRESET); // factory frameMode = 'frame'
+  const flipped = reduce(s, { type: 'SET_FRAME_MODE', mode: 'field' });
+  assert.equal(flipped.digitalEffect.frameMode, 'field');
+  assert.equal(reduce(s, { type: 'SET_FRAME_MODE', mode: 'frame' }), s); // same-ref no-op
+  // Only frameMode differs — the rest of the effect block is untouched.
+  assert.deepEqual({ ...flipped.digitalEffect, frameMode: 'X' }, { ...s.digitalEffect, frameMode: 'X' });
+});
+
+test('the Frame button is a documented no-op on the effect output', () => {
+  assert.equal(FRAME_MODE_AFFECTS_OUTPUT, false);
+});

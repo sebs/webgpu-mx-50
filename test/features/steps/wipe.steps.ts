@@ -441,3 +441,18 @@ Then('the wipe shape keeps its native, unstretched proportions', function (this:
 Then('the wipe shape is unchanged', function (this: MixerWorld) {
   assert.equal(aspectAffects(wipeOf(this).family), false);
 });
+
+// --- Phase 8: #11 A soft-edged, one-way, aspect-stretched square wipe (@integration) ---
+// ("I set the ASPECT control toward horizontal" is reused from positioner.steps.)
+
+Then('the wipe grows as a horizontally stretched square with a feathered boundary', function (this: MixerWorld) {
+  const w = this.snapshot().transition.wipe;
+  assert.equal(w.family, 'square');
+  assert.equal(aspectAffects('square'), true);
+  assert.ok(w.aspect > 0);
+  assert.equal(hasSoft(w.edge), true);
+});
+Then('a following swing from B to A travels in the same direction', function (this: MixerWorld) {
+  const w = this.snapshot().transition.wipe;
+  assert.equal(visualTravel(w.oneWay, w.reverse, -1), this.travel.ab);
+});

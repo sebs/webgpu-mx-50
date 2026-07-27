@@ -12,6 +12,7 @@ import type {
   DskKeySource,
   FadeElement,
   FadeTarget,
+  FrameMode,
   FreezeEffect,
   MicAux2Input,
   PanelState,
@@ -48,6 +49,7 @@ export type Command =
   | { type: 'SET_STROBE_TIME'; position: number } // 0..1
   | { type: 'SET_MULTI_TIME'; position: number }
   | { type: 'SET_TRAIL_TIME'; position: number }
+  | { type: 'SET_FRAME_MODE'; mode: FrameMode } // Frame button (§8.10); inert in v1 (ADR-0005 §6)
   | { type: 'ATTEMPT_AV_SYNCHRO'; on: boolean }
   // --- wipe (reference §9.4, ADR-0009) ---
   | { type: 'PRESS_WIPE_FAMILY'; family: WipeFamily } // select family, or cycle its variant

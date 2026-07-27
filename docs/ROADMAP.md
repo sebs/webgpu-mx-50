@@ -416,6 +416,35 @@ they survive a reload.
 
 ### Phase 8 — Control mapping, integration recipes, and polish
 
+> **Status: ✅ done — project complete.** The **control-input mapping layer** (ADR-0014,
+> `src/control/`) normalises every surface — pointer, keyboard, gamepad, Web MIDI, Web Serial
+> GPI, and a local automation API (the RS422/RS232C intent) — onto a remappable logical-control
+> vocabulary; a single **pure resolver** `resolveSignal(signal, state, tick)` is the *only* code
+> that emits a store command, a **coalescer** flushes it once per tick from the render loop, and
+> the **binding table** persists via ADR-0015. That realises the auto-take GPI / RS422 / keyboard /
+> on-screen external-trigger scenarios. **Combination recipes** (`combination-recipes.feature`) and
+> a sweep of previously-deferred cross-feature `@integration` scenarios (Auto Take drives MIX /
+> Chroma / an audio crossfade; Strobe via A/V Synchro; the Mosaic-Spotlight / PiP stacks; DSK over
+> a wipe / DSK fade) are now composed and asserted at the domain level. **Frame field/frame mode**
+> ships as a real, remembered control that is a **provable v1 no-op** (`FRAME_MODE_AFFECTS_OUTPUT`,
+> ADR-0005 §6). A UI **Frame toggle** and an **ARIA `role="group"`** pass complete the hybrid panel
+> (ADR-0013). 28 more Gherkin scenarios green (**536 total, 3921 steps**), **208 units**; the
+> control adapters (gamepad/MIDI/serial + the DOM keyboard listener) are typechecked + served,
+> excluded from CI like the Web Audio engine.
+>
+> **Permanently deferred (documented, faithful):** all rendered-**pixel** outcomes — no headless
+> WebGPU runner, so golden tests stay stubbed (Multi tiles, Trail ping-pong, After-Image ghosts,
+> compressed-inset/PiP geometry, mosaic/border/spotlight/stretched-square pixels, Special-Mode
+> compressed-image macros, the two selective VIDEO/DSK fade-pixel scenarios); **browser-only**
+> surfaces (Web Audio engine, per-frame A/V-Synchro GPU gating, the control adapters, IndexedDB
+> still-blob tiers + file import/export, device-enumeration/camera-mic-permission scenarios);
+> **@deferred documentation** scenarios (the four frame-field interlace scenarios + the strobe
+> frame-mode duplicate — the v1 no-op contract itself is CI-green); and **model-constrained**
+> scenarios that are correctly not representable (auto-take:174 & recipes S1–S3 double-effect need
+> two live effects at once, which the single-bus Digital Effect model forbids; Recipe 4 Multi/Live
+> also hits the Compression⊥Strobe reducer invariant). Every deferral has a domain/config proxy
+> that *is* tested; only the pixels/browser/hardware-shape defer.
+
 Make the instrument performable and complete: remappable external control, end-to-end
 cross-feature recipes as integration tests, and the finished hybrid panel UI.
 

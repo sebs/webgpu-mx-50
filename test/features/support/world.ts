@@ -8,12 +8,17 @@ import { createEngine } from '../../../src/app.js';
 import { panelSnapshot } from '../../../src/state/state.js';
 import { MemoryStorageBackend } from '../../../src/persistence/backend.js';
 import { createPersistence } from '../../../src/persistence/persistence.js';
+import { BindingTable, DEFAULT_BINDINGS } from '../../../src/control/bindings.js';
+import { createAutomation } from '../../../src/control/automation.js';
+import { resolveSignal } from '../../../src/control/resolver.js';
 import type { Engine } from '../../../src/app.js';
 import type { SourceBindingRegistry } from '../../../src/sources/binding.js';
-import type { PanelSnapshot, PanelState, WipeFamily } from '../../../src/state/state.js';
+import type { FrameMode, PanelSnapshot, PanelState, WipeFamily } from '../../../src/state/state.js';
 import type { Command } from '../../../src/state/commands.js';
 import type { ResolveContext } from '../../../src/core/resolve.js';
 import type { Persistence } from '../../../src/persistence/persistence.js';
+import type { AutomationApi } from '../../../src/control/automation.js';
+import type { ControlMode, LogicalControlId } from '../../../src/control/logical-control.js';
 
 export class MixerWorld extends World {
   engine: Engine = createEngine();
@@ -85,6 +90,31 @@ export class MixerWorld extends World {
   /** Recall order (by the slot's distinctive marker) and the cursor after each sequential press. */
   readonly recalledOrder: number[] = [];
   readonly armedAfter: (number | null)[] = [];
+
+  // --- Phase 8: control-mapping seam (ADR-0014) + recipe / frame scratch ---
+  bindingTable = new BindingTable(DEFAULT_BINDINGS);
+  automation: AutomationApi = createAutomation(() => this.snapshot(), (c) => this.dispatch(c), () => this.now);
+  gpiEnabled = false;
+  mappedTakeSource = '';
+  /** Recipe scratch: the (single-block) A/B effect labels and the chosen spotlight modifier / PiP slot. */
+  aEffect = '';
+  bEffect = '';
+  spotlightModifier = '';
+  pipSlot = 0;
+  /** Frame-mode scratch: effect-output signature before/after the toggle, and the mode before. */
+  frameSigBefore = '';
+  frameSigAfter = '';
+  frameModeBefore: FrameMode = 'frame';
+
+  /** Route an input through the resolver (the sole emitter) and dispatch its command, if any. */
+  emitSignal(control: LogicalControlId, mode: ControlMode, value?: number): Command | null {
+    const command = resolveSignal({ control, mode, value }, this.snapshot(), this.now);
+    if (command) {
+      this.dispatch(command);
+      if (command.type === 'PRESS_AUTO_TAKE' || command.type === 'PRESS_AUTO_FADE') this.framesSincePress = 0;
+    }
+    return command;
+  }
 
   /** Subscribe the notify counter to the current store (re-run after a reload swaps the engine). */
   wireNotifyCounter(): void {

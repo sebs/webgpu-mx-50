@@ -18,6 +18,12 @@ import { AvSynchroTap } from './audio/av-synchro-tap.js';
 import { createPersistence } from './persistence/persistence.js';
 import { LocalStorageBackend } from './persistence/backend.js';
 import { attachPersistence } from './persistence/subscriber.js';
+import { BindingTable } from './control/bindings.js';
+import { SignalCoalescer } from './control/resolver.js';
+import { KeyboardAdapter } from './control/keyboard.js';
+import { GamepadAdapter } from './control/gamepad.js';
+import { MidiAdapter } from './control/midi.js';
+import { SerialGpiAdapter } from './control/serial.js';
 import type { Size } from './core/types.js';
 import type { SourceSlot } from './core/types.js';
 
@@ -74,6 +80,16 @@ async function boot(): Promise<void> {
   const controls = createControlStrip(engine.store, () => engine.clock.tick);
   document.getElementById('app')?.appendChild(controls);
 
+  // Control-input mapping (ADR-0014): every remappable surface normalises onto logical-control
+  // signals, coalesced and resolved into store commands once per tick. Bindings persist (ADR-0015);
+  // pointer/touch stays on the control strip's direct path. Non-keyboard surfaces are capability-detected.
+  const bindings = new BindingTable(persistence.loadBindings() ?? undefined, persistence.saveBindings);
+  const coalescer = new SignalCoalescer();
+  new KeyboardAdapter(bindings, coalescer).attach(window);
+  const gamepad = new GamepadAdapter(bindings, coalescer);
+  if ('requestMIDIAccess' in navigator) void new MidiAdapter(bindings, coalescer).start();
+  if ('serial' in navigator) void new SerialGpiAdapter(bindings, coalescer).start();
+
   // Audio engine (ADR-0010): the Web Audio graph, driven live by the store. It starts
   // suspended — browsers only let audio run after a user gesture, so resume on first click.
   const audio = new AudioEngine(engine.store);
@@ -86,6 +102,10 @@ async function boot(): Promise<void> {
 
   let lastAvSynchro = '';
   const loop = new RenderLoop(engine.clock, (_alpha, tick) => {
+    // Poll gamepads and flush coalesced input signals to store commands (ADR-0014) — the one
+    // place resolveSignal fires, passing the tick purely. Then advance the timeline runners.
+    gamepad.poll();
+    coalescer.flush(engine.store.getSnapshot(), tick, (command) => engine.store.dispatch(command));
     // Advance the Auto Take / Auto Fade runners for this logical tick (ADR-0012). Idle is a
     // no-op: the reducer returns the same snapshot and the store skips notification.
     engine.store.dispatch({ type: 'ADVANCE_TIMELINE', tick });

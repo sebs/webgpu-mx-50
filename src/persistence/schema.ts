@@ -10,6 +10,7 @@ export const SCHEMA_VERSION = 1;
 export const KEY_SETTINGS = 'mx50:settings';
 export const KEY_FIELD_PRESET = 'mx50:fieldPreset';
 export const KEY_BANK = 'mx50:eventMemory';
+export const KEY_BINDINGS = 'mx50:bindings';
 
 export interface Envelope<T> {
   schemaVersion: number;

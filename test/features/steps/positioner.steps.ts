@@ -162,3 +162,27 @@ Then('the Scene Grabber is cancelled', function (this: MixerWorld) {
 Then('the grabbed still is discarded', function (this: MixerWorld) {
   assert.equal(this.snapshot().positioner.sceneGrabber, false);
 });
+
+// --- Phase 8: #12 Build a moving picture-in-picture inset then freeze it (@integration) ---
+
+When('I set the ASPECT control to a 4:3 ratio', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_WIPE_ASPECT', value: 0.33 });
+});
+When(/^I set the wiped size with the Mix\/Wipe lever to a small inset$/, function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_LEVER', position: 0.2 });
+});
+When('I move the Positioner joystick to the upper-right corner', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_POSITIONER_JOYSTICK', x: DIR_VEC['upper-right corner']!.x, y: DIR_VEC['upper-right corner']!.y });
+});
+Then('a small live inset appears in the upper-right corner', function (this: MixerWorld) {
+  const p = this.snapshot().positioner;
+  assert.ok(p.on && !p.sceneGrabber && p.x > 0 && p.y < 0);
+  assert.equal(aspectEffective(this.snapshot().transition.wipe), true);
+});
+When('I move the Positioner joystick to the lower-left corner', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_POSITIONER_JOYSTICK', x: DIR_VEC['lower-left corner']!.x, y: DIR_VEC['lower-left corner']!.y });
+});
+Then('the frozen inset travels to the lower-left corner over the live background', function (this: MixerWorld) {
+  const p = this.snapshot().positioner;
+  assert.ok(p.sceneGrabber && p.x < 0 && p.y > 0);
+});
