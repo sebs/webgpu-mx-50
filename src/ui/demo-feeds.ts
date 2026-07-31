@@ -1,25 +1,26 @@
-// Demo video feeds for Source 1 and Source 2 (ADR-0008 video path). Each feed is an
-// HTMLVideoElement the VideoSource reads from; by default it plays a self-contained
-// procedural clip (an animated 2D canvas via captureStream — no assets, no network),
-// and a per-feed file picker swaps in any local video file without touching the
-// Source binding. The component shows both feeds as labelled preview monitors, so
-// what the Mix/Wipe lever blends is visible before it hits the buses.
+// Source monitors for Source 1 and Source 2 (ADR-0008 video path), styled per
+// docs/STYLEGUIDE.md: each feed is a monitor card — video, scanline veil, corner
+// label, tally — with a caption row holding the feed controls. The feed itself is an
+// HTMLVideoElement the VideoSource reads: by default a self-contained procedural clip
+// (animated 2D canvas via captureStream — no assets, no network); the file picker
+// swaps in any local video file without touching the Source binding.
 //
-// This is presentation-side demo content: it draws on wall-clock time and never
-// touches the store or the logical clock (ADR-0012 stays authoritative for the mixer).
+// Tallies are display-only and driven from outside (main.ts derives them from the
+// store snapshot): 'onair' when the source feeds Program Out, 'ready' when it is
+// selected on a bus. This component never reads the store (ADR-0011 stays one-way).
+//
+// Presentation-side demo content: draws on wall-clock time, never touches the
+// logical clock (ADR-0012 stays authoritative for the mixer).
+
+import { ensureTheme } from './theme.js';
 
 const FEED_W = 640;
 const FEED_H = 360;
 
 const STYLE = `
-mx-demo-feeds { display:block; width:min(100%,1280px); margin:0.75rem auto 0; color:#e6e8eb; }
-mx-demo-feeds .feeds { display:flex; gap:0.75rem; flex-wrap:wrap; }
-mx-demo-feeds .feed { flex:1 1 260px; padding:0.5rem; border:1px solid #23272e; border-radius:8px; background:#111418; }
-mx-demo-feeds .feed video { width:100%; aspect-ratio:16/9; background:#000; border-radius:4px; display:block; object-fit:cover; }
-mx-demo-feeds .feed .bar { display:flex; gap:0.5rem; align-items:center; margin-top:0.4rem; }
-mx-demo-feeds .feed .label { font-size:0.72rem; letter-spacing:0.04em; text-transform:uppercase; color:#8b93a1; flex:1; }
-mx-demo-feeds .feed button { font:inherit; font-size:0.8rem; padding:0.25rem 0.55rem; border-radius:6px; border:1px solid #2a2f38; background:#171b21; color:#cfd4dc; cursor:pointer; }
-mx-demo-feeds .feed button:hover { background:#1e232b; }
+mx-demo-feeds { display: flex; flex-direction: column; gap: 10px; }
+mx-demo-feeds .mon-caption { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+mx-demo-feeds .mon-caption .mx-note { flex: 1; letter-spacing: 0.18em; }
 `;
 
 /** captureStream is universal in WebGPU-era browsers, but keep the lib floor honest. */
@@ -28,6 +29,8 @@ type CapturableCanvas = HTMLCanvasElement & {
 };
 
 type DrawFn = (ctx: CanvasRenderingContext2D, t: number, frame: number) => void;
+
+export type TallyState = 'off' | 'ready' | 'onair';
 
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
@@ -41,14 +44,12 @@ function drawFeedOne(ctx: CanvasRenderingContext2D, t: number, frame: number): v
     ctx.fillStyle = bars[i]!;
     ctx.fillRect(i * w, 0, w + 1, FEED_H);
   }
-  // Bouncing ball on a sine path.
   const x = FEED_W * (0.5 + 0.42 * Math.sin(t * 0.9));
   const y = FEED_H * (0.55 - 0.35 * Math.abs(Math.sin(t * 2.1)));
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
   ctx.arc(x, y, 26, 0, Math.PI * 2);
   ctx.fill();
-  // Ident + timecode strip.
   ctx.fillStyle = 'rgba(0,0,0,0.72)';
   ctx.fillRect(0, FEED_H - 64, FEED_W, 64);
   ctx.fillStyle = '#ffffff';
@@ -68,7 +69,6 @@ function drawFeedTwo(ctx: CanvasRenderingContext2D, t: number, _frame: number): 
   sky.addColorStop(1, '#20104a');
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, FEED_W, FEED_H);
-  // Deterministic star placement (tiny LCG) so the feed needs no stored state.
   let seed = 42;
   ctx.fillStyle = '#ffffff';
   for (let i = 0; i < 90; i++) {
@@ -81,7 +81,6 @@ function drawFeedTwo(ctx: CanvasRenderingContext2D, t: number, _frame: number): 
     ctx.fillRect((sx % FEED_W) - r / 2, sy - r / 2, r, r);
   }
   ctx.globalAlpha = 1;
-  // Orbiting wireframe square.
   ctx.save();
   ctx.translate(FEED_W / 2 + 120 * Math.cos(t * 0.7), FEED_H / 2 + 70 * Math.sin(t * 0.7));
   ctx.rotate(t * 1.3);
@@ -103,6 +102,9 @@ interface Feed {
   /** Object URL of a user-loaded clip, revoked when replaced. */
   fileUrl: string | null;
   onPattern: boolean;
+  label: HTMLElement | null;
+  tally: HTMLElement | null;
+  clipName: string;
 }
 
 export class MxDemoFeeds extends HTMLElement {
@@ -119,7 +121,14 @@ export class MxDemoFeeds extends HTMLElement {
     this.feeds.push(this.makeFeed(drawFeedOne), this.makeFeed(drawFeedTwo));
   }
 
+  /** Drive the monitor tally: 'onair' | 'ready' | 'off' (styleguide LED semantics). */
+  setTally(index: number, state: TallyState): void {
+    const feed = this.feeds[index];
+    if (feed?.tally) feed.tally.setAttribute('data-state', state);
+  }
+
   connectedCallback(): void {
+    ensureTheme();
     if (!document.getElementById('mx-demo-feeds-style')) {
       const style = document.createElement('style');
       style.id = 'mx-demo-feeds-style';
@@ -127,10 +136,7 @@ export class MxDemoFeeds extends HTMLElement {
       document.head.appendChild(style);
     }
 
-    const row = document.createElement('div');
-    row.className = 'feeds';
-    this.feeds.forEach((feed, i) => row.appendChild(this.buildPanel(feed, i + 1)));
-    this.appendChild(row);
+    this.feeds.forEach((feed, i) => this.appendChild(this.buildPanel(feed, i + 1)));
 
     const start = performance.now();
     const tick = (): void => {
@@ -163,7 +169,9 @@ export class MxDemoFeeds extends HTMLElement {
     video.autoplay = true;
     video.playsInline = true;
 
-    const feed: Feed = { video, canvas, ctx, draw, fileUrl: null, onPattern: true };
+    const feed: Feed = {
+      video, canvas, ctx, draw, fileUrl: null, onPattern: true, label: null, tally: null, clipName: 'Pattern',
+    };
     draw(ctx, 0, 0); // First frame before the loop starts, so the stream is never blank.
     this.usePattern(feed);
     return feed;
@@ -172,6 +180,7 @@ export class MxDemoFeeds extends HTMLElement {
   /** Point the feed's video at the live canvas stream. */
   private usePattern(feed: Feed): void {
     feed.onPattern = true;
+    feed.clipName = 'Pattern';
     if (feed.fileUrl) {
       URL.revokeObjectURL(feed.fileUrl);
       feed.fileUrl = null;
@@ -182,28 +191,52 @@ export class MxDemoFeeds extends HTMLElement {
       feed.video.srcObject = feed.canvas.captureStream(60);
       void feed.video.play().catch(() => undefined);
     }
+    this.updateLabel(feed);
   }
 
   /** Point the feed's video at a user-selected local clip (looped, muted). */
   private useFile(feed: Feed, file: File): void {
     feed.onPattern = false;
+    feed.clipName = file.name;
     if (feed.fileUrl) URL.revokeObjectURL(feed.fileUrl);
     feed.fileUrl = URL.createObjectURL(file);
     feed.video.srcObject = null;
     feed.video.src = feed.fileUrl;
     feed.video.loop = true;
     void feed.video.play().catch(() => undefined);
+    this.updateLabel(feed);
+  }
+
+  private updateLabel(feed: Feed): void {
+    if (!feed.label) return;
+    const slot = this.feeds.indexOf(feed) + 1;
+    feed.label.textContent = `SOURCE ${slot} · ${feed.clipName.toUpperCase()}`;
   }
 
   private buildPanel(feed: Feed, slot: number): HTMLElement {
     const panel = document.createElement('div');
-    panel.className = 'feed';
+    panel.className = 'mx-srcmon';
 
-    const bar = document.createElement('div');
-    bar.className = 'bar';
-    const label = document.createElement('span');
-    label.className = 'label';
-    label.textContent = `Source ${slot} — live feed`;
+    const monitor = document.createElement('div');
+    monitor.className = 'mx-monitor';
+    const scan = document.createElement('div');
+    scan.className = 'scan';
+    const label = document.createElement('div');
+    label.className = 'mon-label';
+    const tally = document.createElement('span');
+    tally.className = 'mx-tally';
+    tally.setAttribute('data-state', 'off');
+    tally.title = 'Tally: red = on Program Out, green = selected on a bus';
+    monitor.append(feed.video, scan, label, tally);
+    feed.label = label;
+    feed.tally = tally;
+    this.updateLabel(feed);
+
+    const caption = document.createElement('div');
+    caption.className = 'mon-caption';
+    const name = document.createElement('span');
+    name.className = 'mx-note';
+    name.textContent = `Source ${slot} monitor`;
 
     const picker = document.createElement('input');
     picker.type = 'file';
@@ -216,16 +249,18 @@ export class MxDemoFeeds extends HTMLElement {
 
     const load = document.createElement('button');
     load.type = 'button';
+    load.className = 'mx-ghostbtn';
     load.textContent = 'Load clip…';
     load.addEventListener('click', () => picker.click());
 
     const pattern = document.createElement('button');
     pattern.type = 'button';
+    pattern.className = 'mx-ghostbtn';
     pattern.textContent = 'Pattern';
     pattern.addEventListener('click', () => this.usePattern(feed));
 
-    bar.append(label, load, pattern, picker);
-    panel.append(feed.video, bar);
+    caption.append(name, load, pattern, picker);
+    panel.append(monitor, caption);
     return panel;
   }
 }

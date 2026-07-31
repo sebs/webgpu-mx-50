@@ -3,34 +3,20 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>web-mx-50 — Phase 0 skeleton</title>
+    <title>web-mx-50 — two-bus digital A/V mixer</title>
     <style>
+      /* Critical boot styles only — the console theme (src/ui/theme.ts) injects the rest. */
       :root { color-scheme: dark; }
       html, body {
         margin: 0;
-        height: 100%;
-        background: #0b0d10;
-        color: #e6e8eb;
-        font: 14px/1.5 system-ui, sans-serif;
-      }
-      #app {
-        display: grid;
-        place-items: center;
         min-height: 100%;
-        padding: 1rem;
-        box-sizing: border-box;
-      }
-      /* Program Out canvas — the effected composite (Phase 0: one source). */
-      #program {
-        width: min(100%, 1280px);
-        aspect-ratio: 16 / 9;
-        height: auto;
-        background: #000;
-        border-radius: 6px;
-        box-shadow: 0 0 0 1px #23272e, 0 10px 40px rgba(0, 0, 0, 0.5);
+        background: #0b0c14;
+        color: #e9e9ed;
+        font: 14px/1.5 system-ui, sans-serif;
       }
       #capability {
         max-width: 40rem;
+        margin: 4rem auto;
         padding: 1.25rem 1.5rem;
         border: 1px solid #5a2b2b;
         border-radius: 8px;
@@ -38,12 +24,47 @@
         color: #f2c7c7;
       }
       #capability h1 { margin: 0 0 0.5rem; font-size: 1.1rem; }
-      #capability code { color: #e6e8eb; }
+      #capability code { color: #e9e9ed; }
     </style>
   </head>
   <body>
     <main id="app">
-      <canvas id="program" width="1280" height="720" aria-label="Program output"></canvas>
+      <header class="mx-head">
+        <div class="brand-row">
+          <span class="brand">web-mx-50</span>
+          <span class="sub">Two-bus digital A/V mixer · operator surface</span>
+        </div>
+        <div class="stat">
+          <span>WebGPU</span>
+          <span>60 fps logical</span>
+          <span id="mx-status">booting</span>
+        </div>
+      </header>
+
+      <!-- Monitor bridge: source monitors left (demo feeds mount), Program monitor right. -->
+      <div class="mx-bridge">
+        <div class="mx-srcmons" id="mx-sources"></div>
+        <div>
+          <div class="mx-monitor mx-pgm">
+            <!-- Program Out canvas — the effected composite. -->
+            <canvas id="program" width="1280" height="720" aria-label="Program output"></canvas>
+            <div class="scan"></div>
+            <div class="mx-chip-row">
+              <span class="mx-chip" id="mx-pgm-label">PROGRAM OUT</span>
+              <span class="mx-chip mono" id="mx-timecode">00:00:00</span>
+            </div>
+            <div class="mx-onair"><span class="led"></span>ON AIR</div>
+          </div>
+          <div class="mx-mon-caption">
+            <span>Program monitor · preview carries the effected signal</span>
+            <span id="mx-transition-label"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- The operator console (mx-console) mounts here. -->
+      <div id="mx-console-mount"></div>
+
       <div id="capability" role="alert" hidden></div>
     </main>
     <!-- banira `dev --ts` transpiles TypeScript on the fly and maps .js -> .ts. -->
