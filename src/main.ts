@@ -1,18 +1,20 @@
 // Browser entry point. Feature-detects WebGPU (ADR-0002), initialises the device and
-// sRGB swapchain, builds the four Source slots + Matte, wires the headless store to the
-// two-bus renderer and the control strip, and runs the render loop. Phase 1: two buses,
-// Program Out selection, and Mix/NAM come alive.
+// sRGB swapchain, builds the four Source slots + Matte (Source 1/2 are live video
+// feeds, Source 3/4 generated patterns), wires the headless store to the two-bus
+// renderer and the control strip, and runs the render loop.
 
 import { detectWebGPU, WEBGPU_REQUIREMENT_MESSAGE } from './gpu/capabilities.js';
 import { initGpu } from './gpu/device.js';
 import type { GpuContext } from './gpu/device.js';
 import { GeneratedSource } from './sources/generated-source.js';
 import { MatteSource } from './sources/matte-source.js';
+import { VideoSource } from './sources/video-source.js';
 import { SourceRegistry } from './sources/registry.js';
 import { Renderer } from './engine/renderer.js';
 import { RenderLoop } from './engine/loop.js';
 import { createEngine } from './app.js';
 import { createControlStrip } from './ui/control-strip.js';
+import { createDemoFeeds } from './ui/demo-feeds.js';
 import { AudioEngine } from './audio/engine.js';
 import { AvSynchroTap } from './audio/av-synchro-tap.js';
 import { createPersistence } from './persistence/persistence.js';
@@ -62,14 +64,19 @@ async function boot(): Promise<void> {
   attachPersistence(engine.store, persistence);
   const size: Size = { width: canvas.width, height: canvas.height };
 
-  // Four Source slots (distinct generated patterns) + the Matte generator.
-  const generated: GeneratedSource[] = [1, 2, 3, 4].map(
+  // Source 1 + 2: live video feeds (ADR-0008 video path) from the demo feed panel —
+  // procedural clips by default, swappable for local video files. Source 3 + 4 stay
+  // generated patterns; Matte is the internal generator. Blend feeds with the lever.
+  const feeds = createDemoFeeds();
+  const videoSources = feeds.feedVideos.map((video) => new VideoSource(gpu.device, video));
+  const generated: GeneratedSource[] = [3, 4].map(
     (slot) => new GeneratedSource(gpu.device, { size, variant: slot - 1 }),
   );
   const matte = new MatteSource(gpu.device, size);
 
   const registry = new SourceRegistry();
-  ([1, 2, 3, 4] as SourceSlot[]).forEach((slot, i) => registry.set(slot, generated[i]!));
+  ([1, 2] as SourceSlot[]).forEach((slot, i) => registry.set(slot, videoSources[i]!));
+  ([3, 4] as SourceSlot[]).forEach((slot, i) => registry.set(slot, generated[i]!));
   registry.set('matte', matte);
   await registry.acquireAll();
 
@@ -78,7 +85,9 @@ async function boot(): Promise<void> {
   // First control surface, bound to the single store (ADR-0013). The tick provider lets the
   // AUTO TAKE / AUTO FADE buttons stamp their press with the current logical tick (ADR-0012).
   const controls = createControlStrip(engine.store, () => engine.clock.tick);
-  document.getElementById('app')?.appendChild(controls);
+  const app = document.getElementById('app');
+  app?.appendChild(feeds);
+  app?.appendChild(controls);
 
   // Control-input mapping (ADR-0014): every remappable surface normalises onto logical-control
   // signals, coalesced and resolved into store commands once per tick. Bindings persist (ADR-0015);

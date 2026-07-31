@@ -46,7 +46,7 @@ browser smoke (`npm run dev`).
 | EXT.CAMERA GPU binding | `src/engine/renderer.ts:88` | Currently falls back to the composite; needs `getUserMedia` → external texture for the DSK key source. |
 | IndexedDB still-blob tier (async `BlobBackend`) | `src/persistence/backend.ts:4` | The `StorageBackend` seam is designed for it; a blob backend + GPU still readback unblocks `event-memory.feature` "…carries a captured still…", "…references a still reloads the pixels…". |
 | File import/export DOM glue | `src/persistence/persistence.ts` (`exportPreset`/`importPreset`) | The versioned-JSON codecs exist; only the download/upload wiring is missing. |
-| Real browser-input device binding | `src/sources/source.ts:8`, `src/sources/binding.ts` | The binding registry exists; real capture/media providers don't. Open since Phase 1. |
+| Real browser-input device binding | `src/sources/source.ts:8`, `src/sources/binding.ts` | **Partially landed:** `VideoSource` (`src/sources/video-source.ts`) now backs Source 1/2 with live video (demo feeds + local files, `src/ui/demo-feeds.ts`). Still open: `getUserMedia` camera capture, still images, and the zero-copy `importExternalTexture` path. |
 | Gamepad / Web MIDI / Web Serial adapters | `src/control/{gamepad,midi,serial}.ts` | **Already written and wired** from `main.ts` (Phase 8); a real MIDI controller or gamepad drives the mixer today. Only CI-excluded (the APIs are undefined under node). |
 
 ## 🟢 Buildable — domain-composable `@integration` not yet wired

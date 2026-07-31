@@ -57,6 +57,11 @@ npm run build   # no-bundler ESM output to dist/
 
 Individual gates: `npm run typecheck` · `npm run test:unit` · `npm run test:features`.
 
+**Blend two video feeds:** on load, Source 1 and Source 2 are live video feeds (self-contained
+procedural clips — swap in your own files with each feed's *Load clip…* button). Bus A starts on
+Source 1, Bus B on Source 2, transition MIX — drag the **Mix/Wipe lever** to blend them, or try
+NAM/WIPE, per-bus colour correction, and the digital effects on top.
+
 ## How it's built
 
 The interesting part of the experiment is the architecture, not the artwork:

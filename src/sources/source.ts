@@ -3,9 +3,10 @@
 // delivers a GPU texture for the current frame in the linear working space (ADR-0005),
 // plus its intrinsic size and a readiness flag.
 //
-// Phase 0 implements only GeneratedSource. Camera/video (which use the zero-copy
-// importExternalTexture path and return a GPUExternalTexture) and still images are
-// deferred to Phase 1+; the interface is shaped to accommodate them.
+// Implemented: GeneratedSource (GPU test patterns), MatteSource, and VideoSource
+// (an HTMLVideoElement copied per-frame — covers files, canvas streams, and cameras).
+// Still images and the zero-copy importExternalTexture path (GPUExternalTexture,
+// which needs texture_external WGSL bindings) remain deferred.
 
 import type { Size } from '../core/types.js';
 
