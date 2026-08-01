@@ -431,7 +431,9 @@ export const FACTORY_PRESET: PanelState = {
     reverse: false,
   },
   audio: {
-    faders: { a: 0.7, b: 0.4, aux1: 0.6, micAux2: 0.6, master: 0.75 },
+    // All channels start at zero: the desk comes up silent until the operator
+    // raises a fader (owner decision; the hardware remembers no audio preset).
+    faders: { a: 0, b: 0, aux1: 0, micAux2: 0, master: 0 },
     micAux2: 'mic',
     audioFollow: false,
   },

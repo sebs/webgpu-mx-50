@@ -184,8 +184,8 @@ frame-field interlace scenarios, `@wip` Pattern-Table parts, analog/genlock timi
 pixel tests** are stubbed for the whole renderer because this environment has no headless-WebGPU
 adapter — an environment limit, not a code limit. Every deferral has a tested domain/config proxy.
 
-The domain is verified headlessly: **208 `node:test` units** and **536 Gherkin scenarios
-(3921 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five
+The domain is verified headlessly: **208 `node:test` units** and **537 Gherkin scenarios
+(3937 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five
 digital-effect features, position/scene-grabber, the three key features, the three audio
 features (mixer, follow, A/V Synchro), fade control + Auto Take, Event Memory, Special Modes, the
 control-input mapping layer, the combination recipes + cross-feature integration, and the

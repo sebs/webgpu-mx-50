@@ -9,8 +9,8 @@ and rendered on WebGPU — with its behaviour pinned by executable specs derived
 The **domain model is complete and verified headlessly**; the GPU renders the core signal path,
 with the most complex visuals documented as deferred (see below).
 
-> **Status:** proof of concept · Phases 0–8 complete · **208 unit tests + 536 Gherkin scenarios
-> (3921 steps)** green · no UI framework, no bundler.
+> **Status:** proof of concept · Phases 0–8 complete · **208 unit tests + 537 Gherkin scenarios
+> (3937 steps)** green · no UI framework, no bundler.
 
 ## What it reproduces
 
@@ -57,10 +57,11 @@ npm run build   # no-bundler ESM output to dist/
 
 Individual gates: `npm run typecheck` · `npm run test:unit` · `npm run test:features`.
 
-**Blend two video feeds:** on load, Source 1 and Source 2 are live video feeds (self-contained
-procedural clips — swap in your own files with each feed's *Load clip…* button). Bus A starts on
-Source 1, Bus B on Source 2, transition MIX — drag the **Mix/Wipe lever** to blend them, or try
-NAM/WIPE, per-bus colour correction, and the digital effects on top.
+**Blend video feeds:** on load, all four Sources are live video feeds with their own monitors
+(self-contained procedural clips — swap any of them for your own files with the monitor's
+*Load clip…* button; *Pattern* brings the clip back). Bus A starts on Source 1, Bus B on
+Source 2, transition MIX — drag the **Mix/Wipe lever** to blend them, or try NAM/WIPE, per-bus
+colour correction, and the digital effects on top.
 
 ## How it's built
 

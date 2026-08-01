@@ -29,8 +29,14 @@ Feature: Audio mixer
     When I raise the B Fader
     Then the audio of source 3 rises in the mix
 
+  Scenario: The desk powers up silent
+    # Owner decision: every channel including the Master boots at zero — no audio
+    # reaches Program Out until the operator raises the faders.
+    Then no audio reaches Program Out
+
   Scenario: Master Fader scales the entire mix
     Given the A, B, AUX1 and MIC/AUX2 Faders are set to nominal levels
+    And the MASTER Fader is raised
     When I pull the MASTER Fader to minimum
     Then no audio reaches Program Out
     When I return the MASTER Fader to nominal
@@ -56,6 +62,7 @@ Feature: Audio mixer
   Scenario: EFFECT Program Out passes the full mixed audio
     Given the Mic/Aux2 switch is set to "Mic"
     And the A, B, AUX1 and MIC/AUX2 Faders are all raised
+    And the MASTER Fader is raised
     When I select EFFECT as the Program Out
     Then the audio output contains the A-bus source, the B-bus source, Aux 1 and the Mic
     And the mix is scaled by the MASTER Fader
@@ -74,6 +81,7 @@ Feature: Audio mixer
 
   Scenario: Full mix requires the EFFECT selection
     Given the A-bus and B-bus sources both have audio
+    And the AUX1 and MIC/AUX2 Faders are raised
     When I select A as the Program Out
     Then the B-bus audio is absent from the output
     When I then select EFFECT as the Program Out

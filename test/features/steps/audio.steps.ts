@@ -87,9 +87,16 @@ When(/^I reassign source (\d+) to the (A-bus|B-bus)$/, function (this: MixerWorl
 });
 
 // Ensure both buses carry real (non-Matte) audio; wording varies across scenarios.
+// "Has audio" implies the channel fader is up — the desk boots with every fader at zero.
 Given(/^the A-bus (?:source and the |and )B-bus sources? both have audio$/, function (this: MixerWorld) {
   this.dispatch({ type: 'ASSIGN_SOURCE', bus: 'A', source: 1 });
   this.dispatch({ type: 'ASSIGN_SOURCE', bus: 'B', source: 2 });
+  setFader(this, 'a', FADER_UNITY);
+  setFader(this, 'b', FADER_UNITY);
+});
+
+Given(/^the MASTER Fader is raised$/, function (this: MixerWorld) {
+  setFader(this, 'master', FADER_UNITY);
 });
 
 // ===========================================================================

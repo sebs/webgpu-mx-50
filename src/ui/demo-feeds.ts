@@ -1,4 +1,4 @@
-// Source monitors for Source 1 and Source 2 (ADR-0008 video path), styled per
+// Source monitors for Source 1–4 (ADR-0008 video path), styled per
 // docs/STYLEGUIDE.md: each feed is a monitor card — video, scanline veil, corner
 // label, tally — with a caption row holding the feed controls. The feed itself is an
 // HTMLVideoElement the VideoSource reads: by default a self-contained procedural clip
@@ -18,9 +18,9 @@ const FEED_W = 640;
 const FEED_H = 360;
 
 const STYLE = `
-mx-demo-feeds { display: flex; flex-direction: column; gap: 10px; }
-mx-demo-feeds .mon-caption { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
-mx-demo-feeds .mon-caption .mx-note { flex: 1; letter-spacing: 0.18em; }
+mx-demo-feeds { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-content: start; }
+mx-demo-feeds .mon-caption { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+mx-demo-feeds .mon-caption .mx-note { flex: 1; min-width: 0; letter-spacing: 0.14em; white-space: nowrap; }
 `;
 
 /** captureStream is universal in WebGPU-era browsers, but keep the lib floor honest. */
@@ -94,6 +94,55 @@ function drawFeedTwo(ctx: CanvasRenderingContext2D, t: number, _frame: number): 
   ctx.fillText('FEED 2', 18, 40);
 }
 
+/** Feed 3 — teal ground with pulsing concentric rings. */
+function drawFeedThree(ctx: CanvasRenderingContext2D, t: number, _frame: number): void {
+  const sea = ctx.createLinearGradient(0, 0, FEED_W, FEED_H);
+  sea.addColorStop(0, '#062e2a');
+  sea.addColorStop(1, '#0a4d3c');
+  ctx.fillStyle = sea;
+  ctx.fillRect(0, 0, FEED_W, FEED_H);
+  const cx = FEED_W / 2 + 60 * Math.sin(t * 0.5);
+  const cy = FEED_H / 2 + 30 * Math.cos(t * 0.8);
+  for (let i = 0; i < 7; i++) {
+    const r = ((t * 60 + i * 46) % 320) + 6;
+    ctx.strokeStyle = '#3fe0b0';
+    ctx.globalAlpha = Math.max(0, 1 - r / 320) * 0.9;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 40px system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('FEED 3', 18, 40);
+}
+
+/** Feed 4 — a warm scrolling checkerboard with a roaming diamond. */
+function drawFeedFour(ctx: CanvasRenderingContext2D, t: number, _frame: number): void {
+  const tile = 40;
+  const offset = (t * 60) % (tile * 2);
+  for (let y = -1; y < FEED_H / tile + 1; y++) {
+    for (let x = -2; x < FEED_W / tile + 2; x++) {
+      ctx.fillStyle = (x + y) % 2 === 0 ? '#7a3d0e' : '#b8641a';
+      ctx.fillRect(x * tile + offset - tile, y * tile, tile, tile);
+    }
+  }
+  ctx.save();
+  ctx.translate(FEED_W / 2 + 140 * Math.sin(t * 1.1), FEED_H / 2 + 80 * Math.cos(t * 0.6));
+  ctx.rotate(Math.PI / 4);
+  ctx.fillStyle = '#ffd98a';
+  ctx.fillRect(-45, -45, 90, 90);
+  ctx.restore();
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(0, 0, 170, 64);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 40px system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('FEED 4', 18, 34);
+}
+
 interface Feed {
   video: HTMLVideoElement;
   canvas: CapturableCanvas;
@@ -111,14 +160,19 @@ export class MxDemoFeeds extends HTMLElement {
   private readonly feeds: Feed[] = [];
   private raf = 0;
 
-  /** The two live feed elements, in Source-slot order (Source 1, Source 2). */
+  /** The four live feed elements, in Source-slot order (Source 1 … Source 4). */
   get feedVideos(): readonly HTMLVideoElement[] {
     return this.feeds.map((feed) => feed.video);
   }
 
   constructor() {
     super();
-    this.feeds.push(this.makeFeed(drawFeedOne), this.makeFeed(drawFeedTwo));
+    this.feeds.push(
+      this.makeFeed(drawFeedOne),
+      this.makeFeed(drawFeedTwo),
+      this.makeFeed(drawFeedThree),
+      this.makeFeed(drawFeedFour),
+    );
   }
 
   /** Drive the monitor tally: 'onair' | 'ready' | 'off' (styleguide LED semantics). */

@@ -45,6 +45,7 @@ Feature: Program output selection
     And the Master fader governs the program audio level
 
   Scenario Outline: Direct-out buttons carry only their bus audio plus the aux/mic inputs
+    Given the four input faders A, B, AUX1 and MIC/AUX2 are contributing to the mix
     When I select program output <mode>
     Then the <bus> audio is present in the program output
     And Aux 1 and Aux 2/Mic audio are present in the program output

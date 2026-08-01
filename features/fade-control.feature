@@ -111,6 +111,7 @@ Feature: Fade control
   Scenario Outline: Fading to a bus keeps that bus audio plus the aux inputs
     Given the AUDIO enable button is lit
     And the fade target is <bus>
+    And the four input faders A, B, AUX1 and MIC/AUX2 are contributing to the mix
     When I move the Fade Control lever fully to OUT
     Then the <bus>-bus audio is present in the program output
     And Aux 1 and Aux 2/Mic audio are present in the program output
@@ -124,6 +125,7 @@ Feature: Fade control
   Scenario: Fading everything to B melts the composite back to clean B video and audio
     Given the VIDEO, DSK and AUDIO enable buttons are all lit
     And the fade target is B
+    And the four input faders A, B, AUX1 and MIC/AUX2 are contributing to the mix
     When I move the Fade Control lever fully to OUT
     Then the program video is the uneffected B-bus video
     And the program audio is the B-bus audio

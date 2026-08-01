@@ -1,13 +1,12 @@
 // Browser entry point. Feature-detects WebGPU (ADR-0002), initialises the device and
-// sRGB swapchain, builds the four Source slots + Matte (Source 1/2 are live video
-// feeds, Source 3/4 generated patterns), wires the headless store to the two-bus
-// renderer and the operator console, and runs the render loop. The monitor bridge
-// (source monitors + Program monitor chrome) is display-only and store-driven.
+// sRGB swapchain, builds the four Source slots (all live video feeds with their own
+// monitors) + Matte, wires the headless store to the two-bus renderer and the operator
+// console, and runs the render loop. The monitor bridge (source monitors + Program
+// monitor chrome) is display-only and store-driven.
 
 import { detectWebGPU, WEBGPU_REQUIREMENT_MESSAGE } from './gpu/capabilities.js';
 import { initGpu } from './gpu/device.js';
 import type { GpuContext } from './gpu/device.js';
-import { GeneratedSource } from './sources/generated-source.js';
 import { MatteSource } from './sources/matte-source.js';
 import { VideoSource } from './sources/video-source.js';
 import { SourceRegistry } from './sources/registry.js';
@@ -105,23 +104,19 @@ async function boot(): Promise<void> {
   attachPersistence(engine.store, persistence);
   const size: Size = { width: canvas.width, height: canvas.height };
 
-  // Source 1 + 2: live video feeds (ADR-0008 video path) shown on the source monitors —
-  // procedural clips by default, swappable for local video files. Source 3 + 4 stay
-  // generated patterns; Matte is the internal generator. Blend feeds with the lever.
+  // Source 1–4: live video feeds (ADR-0008 video path) shown on the source monitor
+  // wall — distinct procedural clips by default, each swappable for a local video file
+  // via its monitor's picker. Matte is the internal generator. Blend with the lever.
   const feeds = createDemoFeeds();
   const videoSources = feeds.feedVideos.map((video) => new VideoSource(gpu.device, video));
-  const generated: GeneratedSource[] = [3, 4].map(
-    (slot) => new GeneratedSource(gpu.device, { size, variant: slot - 1 }),
-  );
   const matte = new MatteSource(gpu.device, size);
 
   const registry = new SourceRegistry();
-  ([1, 2] as SourceSlot[]).forEach((slot, i) => registry.set(slot, videoSources[i]!));
-  ([3, 4] as SourceSlot[]).forEach((slot, i) => registry.set(slot, generated[i]!));
+  ([1, 2, 3, 4] as SourceSlot[]).forEach((slot, i) => registry.set(slot, videoSources[i]!));
   registry.set('matte', matte);
   await registry.acquireAll();
 
-  const renderer = new Renderer({ gpu, registry, generated, matte, size });
+  const renderer = new Renderer({ gpu, registry, generated: [], matte, size });
 
   // The operator console (ADR-0013, styled per docs/STYLEGUIDE.md), bound to the single
   // store. The tick provider lets AUTO TAKE / AUTO FADE stamp their press (ADR-0012).
@@ -136,8 +131,7 @@ async function boot(): Promise<void> {
   const reflectBridge = (s: PanelState): void => {
     if (pgmLabel) pgmLabel.textContent = `PROGRAM OUT · ${s.programOut.toUpperCase()}`;
     if (pgmCaption) pgmCaption.textContent = transitionLabel(s);
-    feeds.setTally(0, tallyFor(1, s));
-    feeds.setTally(1, tallyFor(2, s));
+    ([1, 2, 3, 4] as SourceSlot[]).forEach((slot, i) => feeds.setTally(i, tallyFor(slot, s)));
   };
   engine.store.subscribe(reflectBridge);
   reflectBridge(engine.store.getSnapshot());

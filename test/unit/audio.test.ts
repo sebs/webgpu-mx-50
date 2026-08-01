@@ -22,6 +22,11 @@ import {
 } from '../../src/core/audio.js';
 
 const fresh = (): PanelState => structuredClone(FACTORY_PRESET);
+/** The desk boots silent (all faders at zero) — routing tests need standing levels. */
+const raised = (s: PanelState): PanelState => {
+  s.audio = { ...s.audio, faders: { a: 0.7, b: 0.4, aux1: 0.6, micAux2: 0.6, master: 0.75 } };
+  return s;
+};
 const EPS = 1e-9;
 
 // --- fader law ---
@@ -105,14 +110,14 @@ test('disengaging Audio Follow restores the untouched standing faders', () => {
 // --- programAudioMix routing ---
 
 test('EFFECT routes every input and Master governs', () => {
-  const s = reduce(fresh(), { type: 'SET_PROGRAM_OUT', mode: 'effect' });
+  const s = reduce(raised(fresh()), { type: 'SET_PROGRAM_OUT', mode: 'effect' });
   const mix = programAudioMix(s);
   assert.ok(mix.gains.busA > 0 && mix.gains.busB > 0 && mix.gains.aux1 > 0 && mix.gains.aux2mic > 0);
   assert.equal(mix.master, faderGain(s.audio.faders.master));
 });
 
 test('direct A/B routes that bus plus aux+mic, excludes the other bus, and bypasses Master', () => {
-  const s = reduce(fresh(), { type: 'SET_PROGRAM_OUT', mode: 'A' });
+  const s = reduce(raised(fresh()), { type: 'SET_PROGRAM_OUT', mode: 'A' });
   const mix = programAudioMix(s);
   assert.ok(mix.gains.busA > 0, 'A bus present');
   assert.equal(mix.gains.busB, 0, 'B bus excluded');
@@ -127,7 +132,7 @@ test('a bus resolving to the Matte contributes no audio', () => {
 });
 
 test('programAudible is false once the Master is pulled to minimum in EFFECT', () => {
-  let s = reduce(fresh(), { type: 'SET_PROGRAM_OUT', mode: 'effect' });
+  let s = reduce(raised(fresh()), { type: 'SET_PROGRAM_OUT', mode: 'effect' });
   assert.equal(programAudible(s), true);
   s = reduce(s, { type: 'SET_AUDIO_FADER', fader: 'master', level: 0 });
   assert.equal(programAudible(s), false);

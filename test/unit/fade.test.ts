@@ -24,6 +24,11 @@ const withFade = (partial: Partial<FadeState>): PanelState => {
   s.fade = { ...s.fade, ...partial };
   return s;
 };
+/** The desk boots silent (all faders at zero) — audio-routing checks need standing levels. */
+const raised = (s: PanelState): PanelState => {
+  s.audio = { ...s.audio, faders: { a: 0.7, b: 0.4, aux1: 0.6, micAux2: 0.6, master: 0.75 } };
+  return s;
+};
 
 // --- video target ---
 
@@ -95,11 +100,11 @@ test('fading to a card silences the program audio at OUT', () => {
 });
 
 test('fading to a bus keeps that bus + aux and drops the other bus at OUT', () => {
-  const toA = programFadeAudioMix(withFade({ audio: true, lever: 1, target: 'A' })).gains;
+  const toA = programFadeAudioMix(raised(withFade({ audio: true, lever: 1, target: 'A' }))).gains;
   assert.ok(toA.busA > 0 && toA.busB === 0 && toA.aux1 > 0 && toA.aux2mic > 0);
-  const toB = programFadeAudioMix(withFade({ audio: true, lever: 1, target: 'B' })).gains;
+  const toB = programFadeAudioMix(raised(withFade({ audio: true, lever: 1, target: 'B' }))).gains;
   assert.ok(toB.busB > 0 && toB.busA === 0 && toB.aux1 > 0 && toB.aux2mic > 0);
-  assert.equal(programFadeAudible(withFade({ audio: true, lever: 1, target: 'B' })), true);
+  assert.equal(programFadeAudible(raised(withFade({ audio: true, lever: 1, target: 'B' }))), true);
 });
 
 test('the headphone monitor is documented as pre-fade (never attenuated)', () => {

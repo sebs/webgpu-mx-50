@@ -292,6 +292,7 @@ export default {
     'REVERSE inverts the key polarity',
     'Pressing REVERSE again restores the original polarity',
     // audio-mixer (all)
+    'The desk powers up silent',
     'A Fader follows the source assigned to the A-bus',
     'B Fader follows the source assigned to the B-bus',
     'Master Fader scales the entire mix',
