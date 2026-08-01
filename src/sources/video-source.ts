@@ -14,17 +14,38 @@ import type { Source } from './source.js';
 
 const HAVE_CURRENT_DATA = 2;
 
+/** requestVideoFrameCallback is near-universal in WebGPU-era browsers; feature-detected. */
+type RvfcVideo = HTMLVideoElement & {
+  requestVideoFrameCallback?(cb: () => void): number;
+  cancelVideoFrameCallback?(handle: number): void;
+};
+
 export class VideoSource implements Source {
   readonly kind = 'video' as const;
   isReady = false;
 
   private texture: GPUTexture | null = null;
   private textureSize: Size = { width: 0, height: 0 };
+  /** Copy gating: with rVFC, only frames the video actually PRESENTED are re-imported
+   *  (a 30 fps clip on a 120 Hz display imports 30×/s, not 120×). Without rVFC the flag
+   *  stays permanently true — the exact previous copy-every-frame behaviour. */
+  private dirty = true;
+  private rvfcHandle = 0;
 
   constructor(
     private readonly device: GPUDevice,
     readonly video: HTMLVideoElement,
-  ) {}
+  ) {
+    const v = video as RvfcVideo;
+    if (typeof v.requestVideoFrameCallback === 'function') {
+      this.dirty = false;
+      const onFrame = (): void => {
+        this.dirty = true;
+        this.rvfcHandle = v.requestVideoFrameCallback!(onFrame);
+      };
+      this.rvfcHandle = v.requestVideoFrameCallback(onFrame);
+    }
+  }
 
   get intrinsicSize(): Size {
     if (this.video.videoWidth > 0 && this.video.videoHeight > 0) {
@@ -44,12 +65,15 @@ export class VideoSource implements Source {
       video.readyState >= HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0;
     if (hasFrame) {
       const size = { width: video.videoWidth, height: video.videoHeight };
-      this.ensureTexture(size);
-      device.queue.copyExternalImageToTexture(
-        { source: video },
-        { texture: this.texture!, colorSpace: 'srgb' },
-        size,
-      );
+      const reallocated = this.ensureTexture(size);
+      if (this.dirty || reallocated) {
+        device.queue.copyExternalImageToTexture(
+          { source: video },
+          { texture: this.texture!, colorSpace: 'srgb' },
+          size,
+        );
+        this.dirty = false;
+      }
     } else {
       this.ensureTexture(this.intrinsicSize);
     }
@@ -57,6 +81,11 @@ export class VideoSource implements Source {
   }
 
   release(): void {
+    const v = this.video as RvfcVideo;
+    if (this.rvfcHandle && typeof v.cancelVideoFrameCallback === 'function') {
+      v.cancelVideoFrameCallback(this.rvfcHandle);
+      this.rvfcHandle = 0;
+    }
     this.video.pause();
     this.texture?.destroy();
     this.texture = null;
@@ -64,10 +93,11 @@ export class VideoSource implements Source {
     this.isReady = false;
   }
 
-  /** (Re)allocate the frame texture when the content size changes; starts out black. */
-  private ensureTexture(size: Size): void {
+  /** (Re)allocate the frame texture when the content size changes; starts out black.
+   *  Returns true when a fresh (black) texture was allocated and needs a copy. */
+  private ensureTexture(size: Size): boolean {
     if (this.texture && this.textureSize.width === size.width && this.textureSize.height === size.height) {
-      return;
+      return false;
     }
     this.texture?.destroy();
     this.texture = this.device.createTexture({
@@ -77,5 +107,6 @@ export class VideoSource implements Source {
         GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.textureSize = size;
+    return true;
   }
 }

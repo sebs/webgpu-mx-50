@@ -72,7 +72,9 @@ fn fs(in : VSOut) -> @location(0) vec4f {
   else { col = vec3f(0.0); }
   var nd : f32;
   if (u.shape < 0.5) { nd = max(abs(n.x), abs(n.y)); } else { nd = length(n); }
-  var m = 1.0 - smoothstep(0.985, 1.0, nd); // feathered inset edge
+  // One-sided OUTWARD feather: pixels on/inside the boundary stay fully foreground, so a
+  // full-frame inset (a completed macro parked at B) shows no edge vignette.
+  var m = 1.0 - smoothstep(1.0, 1.03, nd);
   if (u.halfExt.x < 1e-4 || u.halfExt.y < 1e-4) { m = 0.0; } // degenerate inset
   let fgCol = select(bIn, aIn, u.fg < 0.5);
   return vec4f(mix(col, fgCol, m), 1.0);

@@ -179,6 +179,10 @@ export interface PositionerState {
   y: number;
   size: number; // wiped/inset size 0..1
   sceneGrabber: boolean;
+  /** Blob-tier reference for the frozen pixels currently on screen (ADR-0015):
+   *  null/absent = unsaved or none. Optional so existing literals and persisted
+   *  payloads stay valid (schema stays v1). */
+  stillId?: string | null;
 }
 
 /** Automatic-transition runner lifecycle (ADR-0012): idle → running → (paused ⇄ running) → complete. */

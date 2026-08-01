@@ -12,7 +12,8 @@ import { presentWGSL } from './shaders/present.wgsl.js';
 import { WIPE_FAMILIES, hasBorder, hasSoft, isWideEdge, blindsAxes, incomingRemap, outgoingRemap } from '../core/wipe.js';
 import { complementaryMatteIndex } from '../core/wipe.js';
 import { aspectEffective, effectiveInsetSize, grabCapture } from '../core/positioner.js';
-import type { GrabCapture } from '../core/positioner.js';
+import type { GrabCapture, StillPixels, StillRecord } from '../core/positioner.js';
+import { alignedBytesPerRow, packTightRows } from './readback.js';
 import { matteFlatColor } from '../core/matte.js';
 import type { Size } from '../core/types.js';
 import type { PanelState, WipeState } from '../state/state.js';
@@ -67,8 +68,74 @@ export class WipePass {
     this.freeze = device.createTexture({
       size: { width: size.width, height: size.height },
       format: WORKING_FORMAT,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      usage:
+        GPUTextureUsage.RENDER_ATTACHMENT |
+        GPUTextureUsage.TEXTURE_BINDING |
+        GPUTextureUsage.COPY_SRC |
+        GPUTextureUsage.COPY_DST,
     });
+    this.size = size;
+  }
+
+  private readonly size: Size;
+
+  /** Read the freeze texture back as tightly packed RGBA8 (ADR-0015 still tier). */
+  async readStill(): Promise<StillPixels> {
+    const { device } = this;
+    const { width, height } = this.size;
+    const bytesPerRow = alignedBytesPerRow(width);
+    const staging = device.createBuffer({
+      size: bytesPerRow * height,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+    const encoder = device.createCommandEncoder();
+    encoder.copyTextureToBuffer({ texture: this.freeze }, { buffer: staging, bytesPerRow }, { width, height });
+    device.queue.submit([encoder.finish()]);
+    await staging.mapAsync(GPUMapMode.READ);
+    const pixels = packTightRows(new Uint8Array(staging.getMappedRange()), bytesPerRow, width, height);
+    staging.unmap();
+    staging.destroy();
+    return { width, height, pixels };
+  }
+
+  /** The pass-side grab latch, for persisting alongside the pixels. */
+  currentGrab(): GrabCapture {
+    return { ...this.grab };
+  }
+
+  /**
+   * Re-upload a recalled still into the freeze texture and re-latch its grab geometry.
+   * Setting grabPrev suppresses the trackGrab rising edge, so the recall's live blit
+   * cannot clobber the injected pixels.
+   */
+  injectStill(record: StillRecord): void {
+    const { width, height } = this.size;
+    if (record.width === width && record.height === height) {
+      this.device.queue.writeTexture(
+        { texture: this.freeze },
+        record.pixels,
+        { bytesPerRow: record.width * 4, rowsPerImage: record.height },
+        { width, height },
+      );
+    } else {
+      // Size mismatch (canvas size changed between sessions): upload to a temp texture
+      // and blit-scale into the freeze through the existing grab pipeline.
+      const temp = this.device.createTexture({
+        size: { width: record.width, height: record.height },
+        format: WORKING_FORMAT,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+      });
+      this.device.queue.writeTexture(
+        { texture: temp },
+        record.pixels,
+        { bytesPerRow: record.width * 4, rowsPerImage: record.height },
+        { width: record.width, height: record.height },
+      );
+      this.blitToFreeze(temp);
+      temp.destroy();
+    }
+    this.grab = { ...record.grab };
+    this.grabPrev = true;
   }
 
   /**
@@ -81,28 +148,33 @@ export class WipePass {
     const grabbed = state.positioner.on && state.positioner.sceneGrabber;
     if (grabbed && !this.grabPrev) {
       this.grab = grabCapture(state.positioner, state.transition.lever, state.transition.wipe.modifiers.compression);
-      const encoder = this.device.createCommandEncoder();
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [
-          { view: this.freeze.createView(), clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store' },
-        ],
-      });
-      pass.setPipeline(this.grabBlit);
-      pass.setBindGroup(
-        0,
-        this.device.createBindGroup({
-          layout: this.grabBlit.getBindGroupLayout(0),
-          entries: [
-            { binding: 0, resource: this.sampler },
-            { binding: 1, resource: texB.createView() },
-          ],
-        }),
-      );
-      pass.draw(3);
-      pass.end();
-      this.device.queue.submit([encoder.finish()]);
+      this.blitToFreeze(texB);
     }
     this.grabPrev = grabbed;
+  }
+
+  /** Fullscreen blit of any texture into the freeze target (capture and still-recall path). */
+  private blitToFreeze(source: GPUTexture): void {
+    const encoder = this.device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [
+        { view: this.freeze.createView(), clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store' },
+      ],
+    });
+    pass.setPipeline(this.grabBlit);
+    pass.setBindGroup(
+      0,
+      this.device.createBindGroup({
+        layout: this.grabBlit.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: source.createView() },
+        ],
+      }),
+    );
+    pass.draw(3);
+    pass.end();
+    this.device.queue.submit([encoder.finish()]);
   }
 
   /** Composite A and B through the composed wipe at the given lever position. */
@@ -118,7 +190,10 @@ export class WipePass {
     const asp = aspectEffective(wipe) ? wipe.aspect : 0; // ASPECT applies only when its ON button is lit (§7)
     const p = state.transition.lever;
     const m = wipe.modifiers;
-    const axes = m.blinds ? blindsAxes(wipe.family, wipe.variant) : { x: false, y: false };
+    // Blinds strips exist only mid-travel: at the lever extremes the strip-tiled field
+    // would cross zero at every strip boundary, ghosting seams over a parked frame.
+    const midTravel = p > 0.001 && p < 0.999;
+    const axes = m.blinds && midTravel ? blindsAxes(wipe.family, wipe.variant) : { x: false, y: false };
     const rb = incomingRemap(wipe, p, asp);
     const ra = outgoingRemap(wipe, p, asp);
     const grabbed = state.positioner.on && state.positioner.sceneGrabber;
@@ -157,8 +232,8 @@ export class WipePass {
     s[30] = this.grab.cv;
     s[31] = this.grab.half;
     s[32] = this.grab.compressed ? 1 : 0;
-    s[33] = 0;
-    s[34] = 0;
+    s[33] = rb ? 1 : 0;
+    s[34] = ra ? 1 : 0;
     s[35] = 0;
     device.queue.writeBuffer(this.uniform, 0, s);
 

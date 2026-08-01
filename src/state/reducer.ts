@@ -10,7 +10,7 @@ import { blindsLegal, pressBorder, pressSoft, VARIANT_COUNT } from '../core/wipe
 import { wrapUnit } from '../core/key.js';
 import { nextDskEdgeStyle } from '../core/dsk.js';
 import { quantizeTransitionFrames, startRunner, advanceRunner, runnerLever, runnerActive } from '../core/timeline.js';
-import { nextArmedSlot } from '../core/event-memory.js';
+import { nextArmedSlot, stillKeyForSlot } from '../core/event-memory.js';
 import { macroFromButton, macroNeedsLeverAtB, canRunMacro, VIBRATE_FRAMES } from '../core/special-mode.js';
 import type { BusId } from '../core/types.js';
 import type {
@@ -343,8 +343,8 @@ export function reduce(state: PanelState, command: Command): PanelState {
     case 'PRESS_POSITIONER': {
       const p = state.positioner;
       if (p.on) {
-        // Turning the Positioner off cancels any Scene Grabber (§7).
-        return { ...state, positioner: { ...p, on: false, sceneGrabber: false } };
+        // Turning the Positioner off cancels any Scene Grabber (§7) and its blob reference.
+        return { ...state, positioner: { ...p, on: false, sceneGrabber: false, stillId: null } };
       }
       if (state.transition.wipe.family !== 'square') return state; // unavailable off Square
       return { ...state, positioner: { ...p, on: true, size: clamp(p.size * 2, 0, 1) } };
@@ -362,7 +362,9 @@ export function reduce(state: PanelState, command: Command): PanelState {
     case 'PRESS_SCENE_GRABBER': {
       const p = state.positioner;
       if (!p.on) return state; // Scene Grabber needs the Positioner active
-      return { ...state, positioner: { ...p, sceneGrabber: !p.sceneGrabber } };
+      // Rising edge = a fresh unsaved grab; falling = released. Either way the previous
+      // blob-tier reference no longer matches the on-screen pixels (ADR-0015).
+      return { ...state, positioner: { ...p, sceneGrabber: !p.sceneGrabber, stillId: null } };
     }
 
     // --- keys (reference §9.5–§9.6) ---
@@ -667,10 +669,17 @@ export function reduce(state: PanelState, command: Command): PanelState {
       const slot = command.shift ? command.button + 4 : command.button;
       if (slot < 1 || slot > 8) return state;
       if (state.memory.memoryArmed) {
-        // STORE: write the current snapshot, consume the latch, remember it for the confirm LED.
+        // STORE: write the current snapshot, consume the latch, remember it for the confirm
+        // LED. A live Scene-Grabber still mints the slot-keyed blob reference on the LIVE
+        // panel first, so the slot and the live state share one id (ADR-0015 two-tier
+        // consistency; the persistence subscriber writes the blob before the bank).
+        const stillLive = state.positioner.on && state.positioner.sceneGrabber;
+        const base = stillLive
+          ? { ...state, positioner: { ...state.positioner, stillId: stillKeyForSlot(slot) } }
+          : state;
         const slots = state.memory.slots.slice();
-        slots[slot - 1] = panelSnapshot(state);
-        return { ...state, memory: { ...state.memory, slots, memoryArmed: false, lastStoredSlot: slot } };
+        slots[slot - 1] = panelSnapshot(base);
+        return { ...base, memory: { ...state.memory, slots, memoryArmed: false, lastStoredSlot: slot } };
       }
       // ARM the slot for recall by the next AUTO TAKE (arming an empty slot is allowed).
       if (state.memory.armedSlot === slot) return state;
@@ -700,6 +709,16 @@ export function reduce(state: PanelState, command: Command): PanelState {
       // change, so it stops any orbit / cancels a run / clears the prompt (reference §14).
       if (sm.armed === macro && !sm.orbiting && sm.run.phase === 'idle' && !sm.leverPrompt) return state;
       return withSpecialMode(state, { ...sm, armed: macro, orbiting: false, leverPrompt: false, run: { ...IDLE_RUNNER } });
+    }
+
+    case 'LOAD_BANK': {
+      // Bank import (ADR-0015 portable presets): replace the 8 slots, clear the interaction
+      // latches (an imported bank invalidates the armed cursor), keep the LIVE panel
+      // untouched. Imported banks may orphan old still blobs — the still-store's boot
+      // sweep owns that cleanup.
+      const slots: (PanelSnapshot | null)[] = [];
+      for (let i = 0; i < 8; i++) slots.push(i < command.slots.length ? (command.slots[i] ?? null) : null);
+      return { ...state, memory: { ...EMPTY_MEMORY, slots } };
     }
 
     case 'LOAD_STATE':

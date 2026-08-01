@@ -210,7 +210,10 @@ export function revealRect(family: WipeFamily, variant: number, progress: number
       const h = p * 0.5;
       if (v === 0) return { x0: 0.5 - h, x1: 0.5 + h, y0: 0, y1: 1 };
       if (v === 1) return { x0: 0, x1: 1, y0: 0.5 - h, y1: 0.5 + h };
-      return { x0: 0.5 - h, x1: 0.5 + h, y0: 0.5 - h, y1: 0.5 + h };
+      // Cross variants: the actual reveal spans the full frame (two crossing bands), so
+      // the only envelope that never samples outside the frame is the identity — the
+      // cross shows the incoming picture uncompressed (documented degradation).
+      return { x0: 0, x1: 1, y0: 0, y1: 1 };
     }
     case 'square': {
       const hx = Math.min((0.75 * p) / Math.max(1 + aspect, 0.05), 0.5);
@@ -271,9 +274,20 @@ export function outgoingSlideAffine(anchors: RevealAnchors, rect: RevealRect): S
   return { sx: 1, sy: 1, ox, oy };
 }
 
+/**
+ * Whether a family runs INWARD under REVERSE (the centred families are invariant under
+ * the uv mirror, so the shader contracts their reveal instead). The remap affines target
+ * the forward reveal rect, which does not exist in that mode — the modifiers degrade to
+ * plain crops there rather than sampling outside the frame.
+ */
+function reversedInward(wipe: WipeState): boolean {
+  return wipe.reverse && (wipe.family === 'split' || wipe.family === 'square');
+}
+
 /** The incoming (B) remap for the composed modifiers; Compression takes precedence over Slide. */
 export function incomingRemap(wipe: WipeState, progress: number, aspect: number): SampleAffine | null {
   const m = wipe.modifiers;
+  if (reversedInward(wipe)) return null;
   if (m.compression >= 1) return compressionAffine(revealRect(wipe.family, wipe.variant, progress, aspect));
   if (m.slide >= 1) {
     return slideAffine(revealAnchors(wipe.family, wipe.variant), revealRect(wipe.family, wipe.variant, progress, aspect));
@@ -284,6 +298,7 @@ export function incomingRemap(wipe: WipeState, progress: number, aspect: number)
 /** The outgoing (A) remap: only when the modifier is pressed twice ("both scenes"). */
 export function outgoingRemap(wipe: WipeState, progress: number, aspect: number): SampleAffine | null {
   const m = wipe.modifiers;
+  if (reversedInward(wipe)) return null;
   const anchors = revealAnchors(wipe.family, wipe.variant);
   const rect = revealRect(wipe.family, wipe.variant, progress, aspect);
   if (m.compression === 2) return outgoingCompressionAffine(anchors, rect);

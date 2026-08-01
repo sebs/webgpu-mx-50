@@ -7,12 +7,18 @@ import { PanelStore } from './state/store.js';
 import { FACTORY_PRESET, fieldPreset } from './state/state.js';
 import { LogicalClock } from './engine/clock.js';
 import { SourceBindingRegistry } from './sources/binding.js';
+import { AudioInputBindingRegistry } from './sources/audio-binding.js';
+import { MediaDeviceCatalog } from './sources/device-catalog.js';
 import type { PanelState } from './state/state.js';
 
 export interface Engine {
   readonly store: PanelStore;
   readonly clock: LogicalClock;
   readonly bindings: SourceBindingRegistry;
+  /** Aux/Mic audio channel bindings (inputs-and-devices Rule 4). */
+  readonly audioBindings: AudioInputBindingRegistry;
+  /** Headless permission + enumeration model (inputs-and-devices Rule 5). */
+  readonly catalog: MediaDeviceCatalog;
 }
 
 /**
@@ -25,6 +31,8 @@ export function createEngine(initial: PanelState = FACTORY_PRESET): Engine {
     store: new PanelStore(initial),
     clock: new LogicalClock(),
     bindings: new SourceBindingRegistry(),
+    audioBindings: new AudioInputBindingRegistry(),
+    catalog: new MediaDeviceCatalog(),
   };
 }
 

@@ -61,6 +61,19 @@ export default {
     'Rebinding a source replaces its previous provider',
     'An image binding presents as a still video frame',
     'The same media provider may back more than one source',
+    // inputs-and-devices Rules 2-5 — real device binding (browser-I/O sweep)
+    'Choosing a specific camera for a source',
+    'A source with no bound provider produces no video',
+    'Losing a camera device leaves the source unbound',
+    'Binding the External Camera In as the DSK key',
+    'The External Camera In may also be bound to a file',
+    'A missing External Camera binding disables the DSK key source',
+    'Binding an auxiliary audio input',
+    'The Mic-or-Aux2 fader selects one active audio source',
+    'Choosing a specific microphone device',
+    'Camera enumeration requires granted permission',
+    'Microphone enumeration requires granted permission',
+    'The device list updates when hardware changes',
     // source-selection
     'Assigning an external source to a bus',
     'Selecting a source binds its audio to the matching bus fader',
@@ -358,7 +371,7 @@ export default {
     'Recalling an event and pressing AUTO TAKE performs that event',
     'Successive AUTO TAKE presses step through stored events in numerical order',
     'Sequential playback skips empty event slots',
-    // event-memory (15; excludes 2 @integration IndexedDB-still + 1 @deferred battery)
+    // event-memory (17; excludes 1 @deferred battery scenario)
     'Storing a panel setup into a memory captures the complete snapshot',
     'The event LED blinks three times to confirm a successful store',
     'EVENT NO. buttons 1 to 4 address memories 1 to 4 without SHIFT',
@@ -374,6 +387,8 @@ export default {
     'Holding MEMORY and SHIFT through a power cycle clears all eight memories',
     'A normal power cycle does not clear the memories',
     'Stored memories persist across a reload',
+    'Storing a memory that carries a captured still keeps the two storage tiers consistent',
+    'Recalling a memory that references a still reloads the pixels onto the GPU',
     // special-modes (18; all — the two picture scenarios assert the pure macro geometry)
     'Entering Special Mode',
     'Selecting a macro with a plain Event button',

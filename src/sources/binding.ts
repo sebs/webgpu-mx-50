@@ -24,8 +24,13 @@ export interface Binding {
 
 const AUDIO_KINDS: ReadonlySet<SourceKind> = new Set<SourceKind>(['camera', 'video']);
 
+/** What may back the dedicated External Camera In (DSK key only, reference §10). */
+export type ExtCameraKind = 'camera' | 'video';
+
 export class SourceBindingRegistry {
   private readonly bindings = new Map<SourceSlot, Binding>();
+  /** The External Camera In binding — never offered as a bus source. */
+  private extCam: Binding | null = null;
 
   get slots(): readonly SourceSlot[] {
     return SOURCE_SLOTS;
@@ -56,19 +61,48 @@ export class SourceBindingRegistry {
     this.bindings.delete(slot);
   }
 
-  /** Mark every slot backed by this provider as unavailable (device disconnected). */
+  /** The provider actually feeding a slot: null when unbound OR the binding is unavailable. */
+  activeProvider(slot: SourceSlot): string | null {
+    const b = this.bindings.get(slot);
+    return b && b.available ? b.providerId : null;
+  }
+
+  /** Mark every slot (and the External Camera) backed by this provider as unavailable. */
   markUnavailable(providerId: string): void {
     for (const binding of this.bindings.values()) {
       if (binding.providerId === providerId) binding.available = false;
     }
+    if (this.extCam && this.extCam.providerId === providerId) this.extCam.available = false;
   }
 
-  /** Distinct available providers — each is offered for selection on either bus. */
+  /**
+   * Distinct available providers — each is offered for selection on either bus. The
+   * External Camera binding is deliberately absent: it is never a bus source (§10).
+   */
   availableProviders(): string[] {
     const ids = new Set<string>();
     for (const binding of this.bindings.values()) {
       if (binding.available) ids.add(binding.providerId);
     }
     return [...ids];
+  }
+
+  /** Bind the External Camera In (DSK key only — never offered as a bus source). */
+  bindExtCamera(kind: ExtCameraKind, providerId: string): Binding {
+    this.extCam = { kind, providerId, hasAudio: true, still: false, available: true };
+    return this.extCam;
+  }
+
+  getExtCamera(): Binding | null {
+    return this.extCam;
+  }
+
+  clearExtCamera(): void {
+    this.extCam = null;
+  }
+
+  /** The DSK has a real key feed: bound and its device still present. */
+  extCameraAvailable(): boolean {
+    return this.extCam !== null && this.extCam.available;
   }
 }

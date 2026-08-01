@@ -54,3 +54,46 @@ test('a disconnected provider is marked unavailable', () => {
   assert.equal(reg.get(1)?.available, false);
   assert.deepEqual(reg.availableProviders(), []);
 });
+
+// --- activeProvider + the External Camera In (browser-I/O sweep) ------------
+
+test('activeProvider reflects availability: unbound → null, bound → id, lost → null', () => {
+  const reg = new SourceBindingRegistry();
+  assert.equal(reg.activeProvider(1), null);
+  reg.bind(1, 'camera', 'camera:cam-1');
+  assert.equal(reg.activeProvider(1), 'camera:cam-1');
+  reg.markUnavailable('camera:cam-1');
+  assert.equal(reg.activeProvider(1), null);
+  assert.equal(reg.get(1)!.available, false); // the binding object survives, unavailable
+  reg.bind(1, 'camera', 'camera:cam-2');
+  assert.equal(reg.activeProvider(1), 'camera:cam-2');
+});
+
+test('bindExtCamera holds one replaceable binding, camera or video kind', () => {
+  const reg = new SourceBindingRegistry();
+  assert.equal(reg.getExtCamera(), null);
+  reg.bindExtCamera('camera', 'cam-1');
+  assert.equal(reg.getExtCamera()!.kind, 'camera');
+  reg.bindExtCamera('video', 'file:title.mp4');
+  assert.equal(reg.getExtCamera()!.kind, 'video');
+  assert.equal(reg.extCameraAvailable(), true);
+});
+
+test('the External Camera binding is never offered as a bus source', () => {
+  const reg = new SourceBindingRegistry();
+  reg.bind(2, 'camera', 'camera:bus-cam');
+  reg.bindExtCamera('camera', 'camera:ext-cam');
+  assert.equal(reg.availableProviders().indexOf('camera:ext-cam'), -1);
+  assert.notEqual(reg.availableProviders().indexOf('camera:bus-cam'), -1);
+});
+
+test('markUnavailable reaches the External Camera; clearExtCamera removes it', () => {
+  const reg = new SourceBindingRegistry();
+  reg.bindExtCamera('camera', 'cam-1');
+  reg.markUnavailable('cam-1');
+  assert.equal(reg.extCameraAvailable(), false);
+  assert.equal(reg.getExtCamera()!.available, false);
+  reg.clearExtCamera();
+  assert.equal(reg.getExtCamera(), null);
+  assert.equal(reg.extCameraAvailable(), false);
+});

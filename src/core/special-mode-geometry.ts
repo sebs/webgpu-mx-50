@@ -123,7 +123,9 @@ export function macroFrame(
     }
     case 'shutter': {
       if (opts.squareWipe) {
-        const h = 0.5 * (1 - q);
+        // The circle starts ENCLOSING the frame (radius √2/2 reaches the corners), so the
+        // reveal begins from a clean full-B picture and shrinks continuously to the Matte.
+        const h = 0.5 * Math.SQRT2 * (1 - q);
         return { bg: 'matte', fg: 'B', center: [0.5, 0.5], half: [h, h], angle: 0, shape: 1, mix: 0, mosaic: 0 };
       }
       return { bg: 'matte', fg: 'B', center: [0.5, 0.5], half: [0.5, 0.5 * (1 - q)], angle: 0, shape: 0, mix: 0, mosaic: 0 };

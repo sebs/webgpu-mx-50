@@ -74,6 +74,15 @@ export function micAux2Muted(state: PanelState): MicAux2Input {
   return state.audio.micAux2 === 'mic' ? 'aux2' : 'mic';
 }
 
+/**
+ * Whether the desk currently demands live mic capture (drives lazy getUserMedia): the
+ * MIC/AUX2 switch on Mic AND that fader path routed and open. Deliberately pre-Fade and
+ * pre-Master — a running fade or a closed Master must not flap device acquisition.
+ */
+export function micCaptureWanted(state: PanelState): boolean {
+  return micAux2Active(state) === 'mic' && programAudioMix(state).gains.aux2mic > 0;
+}
+
 export interface ProgramAudioMix {
   gains: { busA: number; busB: number; aux1: number; aux2mic: number };
   /** Master gain applied to the whole mix — governs only in EFFECT (reference §2, §5). */

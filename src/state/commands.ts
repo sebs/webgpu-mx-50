@@ -19,6 +19,7 @@ import type {
   ProgramOut,
   TransitionType,
   WipeFamily,
+  PanelSnapshot,
 } from './state.js';
 
 export type Command =
@@ -109,6 +110,7 @@ export type Command =
   // --- Special Mode (reference §14) ---
   | { type: 'PRESS_MEMORY_SHIFT' } // the MEMORY+SHIFT chord: toggle Special Mode
   | { type: 'SELECT_SPECIAL_MACRO'; button: 1 | 2 | 3 | 4; shift: boolean } // arm a macro (button + shift×4)
+  | { type: 'LOAD_BANK'; slots: (PanelSnapshot | null)[] } // preset import: replace the bank only
   | { type: 'LOAD_STATE'; state: PanelState };
 
 /** Discriminant union of all command type tags, handy for exhaustiveness. */

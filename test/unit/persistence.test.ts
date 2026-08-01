@@ -72,7 +72,7 @@ test('exportPreset / importPreset round-trip the bank and reject bad input', () 
 
   const target = new MemoryStorageBackend();
   const q = createPersistence(target);
-  assert.deepEqual(q.importPreset(json), { ok: true });
+  assert.deepEqual(q.importPreset(json), { ok: true, target: 'bank' });
   assert.deepEqual(q.loadBank(), p.loadBank());
 
   assert.deepEqual(q.importPreset('nonsense{'), { ok: false, reason: 'corrupt' });

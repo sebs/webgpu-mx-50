@@ -94,6 +94,9 @@ mx-console { display: block; }
 .mx-block-id { font-size: 8px; padding: 2px 5px; border-radius: 3px; background: rgba(255,255,255,0.05); }
 .mx-sep { border-top: 1px solid rgba(255,255,255,0.05); margin: 0; padding-top: 6px; }
 .mx-note { font: 500 8px/1.4 var(--mx-font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--mx-label-dim); }
+.mx-note[data-err="true"] { color: var(--mx-red); }
+/* EXT. CAMERA selected but no live camera: the composite stands in — blink the key-source LED. */
+mx-console:not([data-ext-camera-live="1"]) .mxled.mx-extcam[data-state="on"] .led { animation: mxblink 1s step-end infinite; }
 .mx-row { display: flex; align-items: center; gap: 8px; }
 .mx-grid { display: grid; gap: 6px; }
 .mx-grid.tight { gap: 5px; }

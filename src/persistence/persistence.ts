@@ -16,7 +16,9 @@ export interface Settings {
 }
 
 export type ExportTarget = { kind: 'bank' } | { kind: 'settings' } | { kind: 'fieldPreset' };
-export type ImportResult = { ok: true } | { ok: false; reason: 'corrupt' | 'unsupported-version' };
+export type ImportResult =
+  | { ok: true; target: ExportTarget['kind'] }
+  | { ok: false; reason: 'corrupt' | 'unsupported-version' };
 
 export interface Persistence {
   loadSettings(): Settings;
@@ -116,7 +118,7 @@ export function createPersistence(backend: StorageBackend): Persistence {
       else if (env.target === 'settings') self.saveSettings(env.data as Settings);
       else if (env.target === 'fieldPreset') writeEnvelope(backend, KEY_FIELD_PRESET, env.data);
       else return { ok: false, reason: 'corrupt' };
-      return { ok: true };
+      return { ok: true, target: env.target };
     },
   };
   return self;

@@ -6,7 +6,7 @@
 import { matteFlatColor, matteColorAt } from './matte.js';
 import { resolveBusSource } from './resolve.js';
 import type { BusSource } from './types.js';
-import type { DskEdgeStyle, DskState, MatteState, PanelState } from '../state/state.js';
+import type { DskEdgeStyle, DskKeySource, DskState, MatteState, PanelState } from '../state/state.js';
 
 /** The EDGE button cycles this ring (reference §10). */
 export const DSK_EDGE_STYLES: readonly DskEdgeStyle[] = [
@@ -126,4 +126,18 @@ export function dskKeySource(state: PanelState): 'ext-camera' | BusSource {
   if (dsk.keySource === 'ext-camera') return 'ext-camera';
   const bus = dsk.keySource === 'A' ? state.busA : state.busB;
   return resolveBusSource(bus, 'dsk');
+}
+
+/** What texture feeds the DSK key window at the GPU. */
+export type DskKeyFeed = 'A' | 'B' | 'camera' | 'composite';
+
+/**
+ * What feeds the DSK key window: a bus, the live External Camera, or — when EXT. CAMERA
+ * is selected but no camera is granted/delivering — the pre-fade composite stand-in (the
+ * documented fallback while no camera is attached).
+ */
+export function dskKeyFeed(keySource: DskKeySource, cameraLive: boolean): DskKeyFeed {
+  if (keySource === 'A') return 'A';
+  if (keySource === 'B') return 'B';
+  return cameraLive ? 'camera' : 'composite';
 }

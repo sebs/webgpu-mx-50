@@ -6,19 +6,70 @@ import { setWorldConstructor, World } from '@cucumber/cucumber';
 import type { IWorldOptions } from '@cucumber/cucumber';
 import { createEngine } from '../../../src/app.js';
 import { panelSnapshot } from '../../../src/state/state.js';
-import { MemoryStorageBackend } from '../../../src/persistence/backend.js';
+import { MemoryBlobBackend, MemoryStorageBackend } from '../../../src/persistence/backend.js';
 import { createPersistence } from '../../../src/persistence/persistence.js';
+import { createStillStore } from '../../../src/persistence/still-store.js';
+import { attachPersistence } from '../../../src/persistence/subscriber.js';
+import { KEY_BANK } from '../../../src/persistence/schema.js';
 import { BindingTable, DEFAULT_BINDINGS } from '../../../src/control/bindings.js';
 import { createAutomation } from '../../../src/control/automation.js';
 import { resolveSignal } from '../../../src/control/resolver.js';
 import type { Engine } from '../../../src/app.js';
 import type { SourceBindingRegistry } from '../../../src/sources/binding.js';
+import type { AudioInputBindingRegistry } from '../../../src/sources/audio-binding.js';
+import type { MediaDeviceCatalog } from '../../../src/sources/device-catalog.js';
+import type { Binding } from '../../../src/sources/binding.js';
+import type { GrabCapture, StillPixels, StillRecord } from '../../../src/core/positioner.js';
+import type { GpuStillPort, StillStore } from '../../../src/persistence/still-store.js';
 import type { FrameMode, PanelSnapshot, PanelState, WipeFamily } from '../../../src/state/state.js';
 import type { Command } from '../../../src/state/commands.js';
 import type { ResolveContext } from '../../../src/core/resolve.js';
 import type { Persistence } from '../../../src/persistence/persistence.js';
 import type { AutomationApi } from '../../../src/control/automation.js';
 import type { ControlMode, LogicalControlId } from '../../../src/control/logical-control.js';
+
+/** Storage backend that journals bank writes into the World's shared tier journal. */
+class JournaledStorageBackend extends MemoryStorageBackend {
+  journal: string[] = [];
+  override set(key: string, value: string): void {
+    if (key === KEY_BANK) this.journal.push('bank:set');
+    super.set(key, value);
+  }
+}
+
+/** Blob backend that journals every tier operation. */
+class JournaledBlobBackend extends MemoryBlobBackend {
+  constructor(private readonly journal: string[]) {
+    super();
+  }
+  override set(key: string, record: StillRecord): Promise<void> {
+    this.journal.push(`blob:set:${key}`);
+    return super.set(key, record);
+  }
+  override get(key: string): Promise<StillRecord | null> {
+    this.journal.push(`blob:get:${key}`);
+    return super.get(key);
+  }
+  override remove(key: string): Promise<void> {
+    this.journal.push(`blob:remove:${key}`);
+    return super.remove(key);
+  }
+}
+
+/** Canned GPU port: fixed 4×2 pixels, settable grab, records injections (no GPU in CI). */
+export class FakeGpuStillPort implements GpuStillPort {
+  grab: GrabCapture = { cu: 0.5, cv: 0.5, half: 0.2, compressed: true };
+  injected: StillRecord | null = null;
+  readStill(): Promise<StillPixels> {
+    return Promise.resolve({ width: 4, height: 2, pixels: new ArrayBuffer(32) });
+  }
+  currentGrab(): GrabCapture {
+    return { ...this.grab };
+  }
+  injectStill(record: StillRecord): void {
+    this.injected = record;
+  }
+}
 
 export class MixerWorld extends World {
   engine: Engine = createEngine();
@@ -79,8 +130,29 @@ export class MixerWorld extends World {
 
   // --- Event Memory + persistence scratch (Phase 7: §13, ADR-0015) ---
   /** In-memory storage backend — survives a simulated reload while the Map lives. */
-  readonly storage = new MemoryStorageBackend();
+  readonly storage = new JournaledStorageBackend();
   persistence: Persistence = createPersistence(this.storage);
+
+  // --- two-tier still persistence (browser-I/O sweep, ADR-0015) ---
+  /** Shared journal of tier operations, for ordering assertions. */
+  readonly tierJournal: string[] = this.storage.journal;
+  readonly blobs = new JournaledBlobBackend(this.tierJournal);
+  readonly fakeGpu = new FakeGpuStillPort();
+  stills: StillStore = createStillStore(this.blobs, this.persistence, this.fakeGpu);
+  private stillsAttached = false;
+  /** Wire the still-aware persistence subscriber once for the scenario. */
+  attachStills(): void {
+    if (this.stillsAttached) return;
+    this.stillsAttached = true;
+    attachPersistence(this.engine.store, this.persistence, this.stills);
+  }
+
+  // --- device-binding scratch (inputs-and-devices Rules 2/4/5) ---
+  promptShown = false;
+  camerasBeforeGrant = 0;
+  chosenCamera = '';
+  micsBeforeGrant = 0;
+  bindingBefore: Binding | undefined;
   /** Store-notification counter, to prove recall dispatches through the normal update path. */
   notifyCount = 0;
   armNotifyMark = 0;
@@ -178,6 +250,14 @@ export class MixerWorld extends World {
 
   get bindings(): SourceBindingRegistry {
     return this.engine.bindings;
+  }
+
+  get audioBindings(): AudioInputBindingRegistry {
+    return this.engine.audioBindings;
+  }
+
+  get catalog(): MediaDeviceCatalog {
+    return this.engine.catalog;
   }
 
   snapshot(): PanelState {

@@ -64,6 +64,19 @@ export interface GrabCapture {
   compressed: boolean;
 }
 
+/** Tightly packed RGBA8 pixels of a captured still (width*height*4 bytes, ADR-0015). */
+export interface StillPixels {
+  width: number;
+  height: number;
+  pixels: ArrayBuffer;
+}
+
+/** A persisted still: the pixels plus the grab-edge latch that rides with the BLOB tier
+ *  (the panel snapshot carries only a still-reference id). */
+export interface StillRecord extends StillPixels {
+  grab: GrabCapture;
+}
+
 /** Latch the inset geometry at the grab instant. `compression` is wipe.modifiers.compression. */
 export function grabCapture(p: PositionerState, lever: number, compression: number): GrabCapture {
   const c = insetCentre(p.x, p.y);

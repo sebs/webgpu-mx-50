@@ -15,8 +15,10 @@
 import { resolveBusSource } from '../core/resolve.js';
 import { compositeRule } from '../core/transition.js';
 import { directOutSource } from '../core/program.js';
+import { dskKeyFeed } from '../core/dsk.js';
 import { fadeVideoTarget, videoFadeAmount } from '../core/fade.js';
 import { specialFrame } from '../core/special-mode-geometry.js';
+import type { GrabCapture, StillPixels, StillRecord } from '../core/positioner.js';
 import { BusProcessor, NO_PULSE } from '../gpu/bus-processor.js';
 import { CombinePass } from '../gpu/combine.js';
 import { WipePass } from '../gpu/wipe.js';
@@ -122,14 +124,33 @@ export class Renderer {
     }
 
     // Downstream Key (reference §10) over the (possibly faded) picture; the DSK fade
-    // element dissolves the title independently inside the pass. Key source is the
-    // External Camera (not yet bound — falls back to the UNFADED composite, so the key
-    // window stays stable during a video-only fade) or the A/B bus texture.
+    // element dissolves the title independently inside the pass. Key source is a bus
+    // texture, the live External Camera, or — while no camera is granted/delivering —
+    // the UNFADED composite stand-in (so the key window stays stable during a
+    // video-only fade).
     let out = base;
     if (state.dsk.on) {
-      const keyTex = state.dsk.keySource === 'A' ? aTex : state.dsk.keySource === 'B' ? bTex : composite;
+      const cam = registry.has('ext-camera') ? registry.get('ext-camera') : null;
+      const feed = dskKeyFeed(state.dsk.keySource, cam !== null && cam.isReady);
+      const keyTex =
+        feed === 'A' ? aTex : feed === 'B' ? bTex : feed === 'camera' ? cam!.getFrameTexture(device) : composite;
       out = this.dsk.render(base, keyTex, state);
     }
     this.present.render(gpu.context, out, gpu.srgbView);
+  }
+
+  // --- still tier delegates (ADR-0015): the Renderer structurally implements the
+  // GpuStillPort the persistence StillStore drives. ---
+
+  readStill(): Promise<StillPixels> {
+    return this.wipe.readStill();
+  }
+
+  currentGrab(): GrabCapture {
+    return this.wipe.currentGrab();
+  }
+
+  injectStill(record: StillRecord): void {
+    this.wipe.injectStill(record);
   }
 }

@@ -15,6 +15,7 @@ import {
   dskKeySource,
   dskEdgeGeometry,
   dskEdgeGraded,
+  dskKeyFeed,
   edgeHasBorderOrShadow,
   DSK_EDGE_MODE,
 } from '../../src/core/dsk.js';
@@ -131,4 +132,18 @@ test('dskEdgeGraded: white fill + GRADATION only', () => {
   assert.equal(dskEdgeGraded({ ...s.dsk, fill: 'white' }, gradMatte), true);
   assert.equal(dskEdgeGraded({ ...s.dsk, fill: 'matte' }, gradMatte), false); // forced-black edge never grades
   assert.equal(dskEdgeGraded({ ...s.dsk, fill: 'white' }, s.matte), false);
+});
+
+// --- DSK key feed (EXT.CAMERA GPU binding) ----------------------------------
+
+test('dskKeyFeed: A/B pass through regardless of camera state', () => {
+  assert.equal(dskKeyFeed('A', true), 'A');
+  assert.equal(dskKeyFeed('A', false), 'A');
+  assert.equal(dskKeyFeed('B', true), 'B');
+  assert.equal(dskKeyFeed('B', false), 'B');
+});
+
+test('dskKeyFeed: ext-camera uses the live camera, else the composite stands in', () => {
+  assert.equal(dskKeyFeed('ext-camera', true), 'camera');
+  assert.equal(dskKeyFeed('ext-camera', false), 'composite');
 });

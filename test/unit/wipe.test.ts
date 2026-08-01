@@ -139,9 +139,10 @@ test('revealRect: triangle envelope (1.5x travel, centred across)', () => {
   assert.ok(Math.abs(r.y0 - 0.7) < 1e-9 && r.y1 === 1);
 });
 
-test('revealRect: split opens from centre; cross is the centred core', () => {
+test('revealRect: split opens from centre; the cross degrades to the identity envelope', () => {
   assert.deepEqual(revealRect('split', 0, 0.5, 0), { x0: 0.25, x1: 0.75, y0: 0, y1: 1 });
-  assert.deepEqual(revealRect('split', 2, 0.5, 0), { x0: 0.25, x1: 0.75, y0: 0.25, y1: 0.75 });
+  // Cross variants reveal a full-frame cross, so only the identity never samples outside.
+  assert.deepEqual(revealRect('split', 2, 0.5, 0), { x0: 0, x1: 1, y0: 0, y1: 1 });
 });
 
 test('revealRect: square tracks 0.75p, aspect skews, oval squashes y, clamps at half-frame', () => {
@@ -201,6 +202,18 @@ test('outgoingRemap: slide x2 pushes A out by the boundary displacement', () => 
   assert.ok(Math.abs(corner.ox + 0.25) < 1e-9 && Math.abs(corner.oy + 0.25) < 1e-9);
   const cross = outgoingRemap(plainWipe('split', 2, { slide: 2 }), 0.25, 0);
   assert.ok(cross && cross.ox === 0 && cross.oy === 0);
+});
+
+test('inward-reversed centred families degrade the remaps to plain crops', () => {
+  // REVERSE runs Split/Square inward: the forward reveal rect does not exist, so the
+  // affines are withheld (the shader then samples the untransformed frame).
+  const revSquare = { ...plainWipe('square', 0, { compression: 1 }), reverse: true };
+  assert.equal(incomingRemap(revSquare, 0.5, 0), null);
+  const revSplit = { ...plainWipe('split', 0, { compression: 2 }), reverse: true };
+  assert.equal(outgoingRemap(revSplit, 0.5, 0), null);
+  // Edge-anchored families keep their remaps under REVERSE (the uv mirror re-anchors them).
+  const revStraight = { ...plainWipe('straight', 0, { compression: 1 }), reverse: true };
+  assert.notEqual(incomingRemap(revStraight, 0.5, 0), null);
 });
 
 test('blindsAxes: strips run along the travel axis; illegal families get none', () => {

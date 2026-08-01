@@ -6,9 +6,9 @@
 
 import { programAudioMix } from './audio.js';
 import { matteFlatColor } from './matte.js';
-import { resolveBusSource } from './resolve.js';
+import { busAudioSource, resolveBusSource } from './resolve.js';
 import type { ProgramAudioMix } from './audio.js';
-import type { BusId, BusSource } from './types.js';
+import type { BusId, BusSource, SourceSlot } from './types.js';
 import type { FadeElement, FadeState, FadeTarget, PanelState } from '../state/state.js';
 
 /** How much a given element is faded: 0 when its enable is unlit, else the shared fade lever. */
@@ -134,3 +134,31 @@ export function programFadeAudible(state: PanelState): boolean {
 
 /** The headphone monitor is tapped before the Fade stage — it is never attenuated (reference §11). */
 export const HEADPHONE_MONITOR_BYPASSES_FADE = true;
+
+// --- per-source programme gains (real audio capture, ADR-0010) --------------
+
+/** Post-Fade linear gain each Source slot's audio receives at Program Out. */
+export interface ProgramSourceMix {
+  slots: Record<SourceSlot, number>;
+  aux1: number;
+  aux2mic: number;
+  master: number;
+}
+
+/**
+ * Map the per-fader programme gains onto per-SOURCE slot gains: audio follows the bus
+ * that holds the source ("A Fader follows the source assigned to the A-bus"), Matte
+ * contributes silence and the blinking substitute never carries audio (busAudioSource,
+ * ADR-0006), and the same source on both buses sums both fader paths. Wraps
+ * programFadeAudioMix so Program-Out routing, Audio Follow, and the Fade stage are
+ * inherited, never re-derived.
+ */
+export function programFadeSourceMix(state: PanelState): ProgramSourceMix {
+  const { gains, master } = programFadeAudioMix(state);
+  const slots: Record<SourceSlot, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  const a = busAudioSource(state.busA);
+  const b = busAudioSource(state.busB);
+  if (a !== null) slots[a] += gains.busA;
+  if (b !== null) slots[b] += gains.busB;
+  return { slots, aux1: gains.aux1, aux2mic: gains.aux2mic, master };
+}

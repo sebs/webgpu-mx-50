@@ -48,6 +48,10 @@ export type AfterImageStrength = 'many-faint-close' | 'few-wide' | 'subtle-lopsi
 /**
  * A lopsided mix collapses the double-exposure contrast → subtle ghosting over a mostly
  * one-sided picture; near-centre mixes read as dense (short TIME) or sparse (long TIME).
+ * Deliberately direction-agnostic: when the FROZEN side dominates, the "subtle ghost" is
+ * the faint live overlay of the moving subject — the feature outline's "mostly live
+ * picture" phrasing is loose for the Strobe-on-A rows, and this is the documented
+ * interpretation (the double exposure is subtle either way the lever leans).
  */
 export function afterImageStrength(look: AfterImageLook): AfterImageStrength {
   if (look.ghostAlpha < 0.35 || look.ghostAlpha > 0.65) return 'subtle-lopsided';

@@ -18,6 +18,7 @@ import { AV_SYNCHRO_EFFECTS } from '../core/av-synchro.js';
 import { SPECIAL_MACROS } from '../core/special-mode.js';
 import type { MxSlider } from './primitives/slider.js';
 import type { PanelStore } from '../state/store.js';
+import type { PresetFileIo } from '../persistence/file-io.js';
 import type { BusId, BusSource } from '../core/types.js';
 import type {
   BusState, DskFill, DskKeySource, FadeElement, FadeTarget, FilterEffect, MicAux2Input,
@@ -108,7 +109,10 @@ export class MxConsole extends HTMLElement {
   private readonly refresh: Array<(state: PanelState) => void> = [];
   private tickNow: () => number = () => 0;
 
-  bind(store: PanelStore, tickNow: () => number = () => 0): void {
+  private presetIo: PresetFileIo | null = null;
+
+  bind(store: PanelStore, tickNow: () => number = () => 0, presetIo: PresetFileIo | null = null): void {
+    this.presetIo = presetIo;
     this.store = store;
     this.tickNow = tickNow;
     if (this.isConnected) this.build();
@@ -399,9 +403,13 @@ export class MxConsole extends HTMLElement {
     pad.addEventListener('mx-move', (e) => {
       const { x, y } = (e as CustomEvent<{ x: number; y: number }>).detail;
       store.dispatch({ type: 'SET_POSITIONER_JOYSTICK', x, y });
+      // The same joystick chooses the Trail start corner while Trail runs (reference §8.8).
+      if (store.getSnapshot().digitalEffect.freeze.trail && x !== 0) {
+        store.dispatch({ type: 'SET_TRAIL_CORNER', corner: x < 0 ? 'upper-left' : 'upper-right' });
+      }
     });
     this.refresh.push((s) => {
-      pad.disabled = !s.positioner.on;
+      pad.disabled = !s.positioner.on && !s.digitalEffect.freeze.trail;
       pad.setFromStore(s.positioner.x, s.positioner.y);
       pad.setFrameSize(s.positioner.size);
     });
@@ -925,9 +933,14 @@ export class MxConsole extends HTMLElement {
     grid.appendChild(reverse.el);
     for (const source of ['ext-camera', 'A', 'B'] as DskKeySource[]) {
       const button = ledButton({
-        label: source === 'ext-camera' ? 'Ext cam' : `Key ${source}`, title: 'Key source',
+        label: source === 'ext-camera' ? 'Ext cam' : `Key ${source}`,
+        title:
+          source === 'ext-camera'
+            ? 'Key source — EXT. CAMERA (the composite stands in until a camera is attached)'
+            : 'Key source',
         onClick: () => store.dispatch({ type: 'SET_DSK_KEY_SOURCE', source }),
       });
+      if (source === 'ext-camera') button.el.classList.add('mx-extcam');
       this.refresh.push((s) => button.set(s.dsk.keySource === source ? 'on' : 'off'));
       grid.appendChild(button.el);
     }
@@ -1041,7 +1054,34 @@ export class MxConsole extends HTMLElement {
     this.refresh.push((s) => memoryBtn.set(s.memory.memoryArmed ? 'on' : 'off'));
     const clear = ledButton({ label: 'Clear all', title: 'Mass-clear every stored event', onClick: () => store.dispatch({ type: 'CLEAR_ALL_SLOTS' }) });
     memModes.append(memoryBtn.el, clear.el);
-    memory.appendChild(memModes);
+    // Portable presets (ADR-0015): export/import the 8-slot bank as versioned JSON.
+    // The console stays store-only — the file glue owns persistence and the one
+    // LOAD_BANK dispatch; feedback is sticky until the next export/import.
+    if (this.presetIo) {
+      const io = this.presetIo;
+      const note = document.createElement('span');
+      note.className = 'mx-note';
+      const exportBtn = ledButton({
+        label: 'Export', title: 'Download the 8-slot bank as versioned JSON',
+        onClick: () => {
+          note.textContent = io.exportPreset('bank');
+          note.setAttribute('data-err', 'false');
+        },
+      });
+      const importBtn = ledButton({
+        label: 'Import', title: 'Load a bank JSON file — replaces all 8 slots',
+        onClick: () =>
+          io.importPreset((text, ok) => {
+            note.textContent = text;
+            note.setAttribute('data-err', String(!ok));
+          }),
+      });
+      memModes.append(exportBtn.el, importBtn.el);
+      memory.appendChild(memModes);
+      memory.appendChild(note);
+    } else {
+      memory.appendChild(memModes);
+    }
 
     const slots = this.grid(8, true);
     for (let n = 1; n <= 8; n++) {
@@ -1102,12 +1142,12 @@ export class MxConsole extends HTMLElement {
 let defined = false;
 
 /** Define the element (once) and return a bound instance for the given store. */
-export function createConsole(store: PanelStore, tickNow: () => number = () => 0): MxConsole {
+export function createConsole(store: PanelStore, tickNow: () => number = () => 0, presetIo: PresetFileIo | null = null): MxConsole {
   if (!defined) {
     customElements.define('mx-console', MxConsole);
     defined = true;
   }
   const console = document.createElement('mx-console') as MxConsole;
-  console.bind(store, tickNow);
+  console.bind(store, tickNow, presetIo);
   return console;
 }

@@ -37,7 +37,8 @@ fn vs(@builtin(vertex_index) vertexIndex : u32) -> VSOut {
 fn fs(in : VSOut) -> @location(0) vec4f {
   let comp = textureSample(composite, samp, in.uv).rgb;
   let bus = textureSample(targetTex, samp, in.uv).rgb;
-  let target = select(bus, u.targetColour.rgb, u.targetMode < 0.5);
-  return vec4f(mix(comp, target, u.amount), 1.0);
+  // 'target' is a WGSL reserved word — hence 'goal'.
+  let goal = select(bus, u.targetColour.rgb, u.targetMode < 0.5);
+  return vec4f(mix(comp, goal, u.amount), 1.0);
 }
 `;

@@ -7,6 +7,11 @@
 
 import type { PanelSnapshot } from '../state/state.js';
 
+/** IndexedDB key for a slot's captured still (1..8). DB-scoped, so no "mx50:" prefix needed. */
+export function stillKeyForSlot(slot: number): string {
+  return 'still:' + slot;
+}
+
 /** The 1-based slot numbers that currently hold a snapshot. */
 export function occupiedSlots(slots: readonly (PanelSnapshot | null)[]): number[] {
   const out: number[] = [];

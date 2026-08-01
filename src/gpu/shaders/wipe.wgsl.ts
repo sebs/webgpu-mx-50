@@ -37,8 +37,8 @@ struct Uniforms {
   grabCV : f32,        // s30  inset centre V at capture
   grabHalf : f32,      // s31  inset half-extent at capture (size-hold)
   grabCompressed : f32,// s32  compression state at capture (offset 128)
-  _p0 : f32,           // s33
-  _p1 : f32,           // s34
+  remapBOn : f32,      // s33  incoming remap is real (0 = degrade to a plain crop)
+  remapAOn : f32,      // s34  outgoing remap is real
   _p2 : f32,           // s35
 };
 
@@ -195,21 +195,27 @@ fn fs(in : VSOut) -> @location(0) vec4f {
   var f = fieldValue(fam, variant, uvF, u.progress, u.aspect);
   // Centred families (Split, Square) are invariant under the uv mirror, so REVERSE runs
   // them inward instead: the reveal contracts from the far state as the lever advances.
+  // The endpoints snap to clean full-A / full-B frames — the inward boundary otherwise
+  // parks at the pattern centre (a feathered blob / border band that never leaves).
   if (u.reverse > 0.5 && (fam == 4u || fam == 6u)) {
     f = -fieldValue(fam, variant, uvF, 1.0 - u.progress, u.aspect);
+    if (u.progress >= 0.999) { f = 1.0; }
+    if (u.progress <= 0.001) { f = -1.0; }
   }
 
   // Compression / Slide (reference §9.4): the affected side samples an affine remap of
   // its FULL frame (core/wipe.ts) instead of a crop. Applying the affine to the
   // pairing/multi-transformed uv yields one copy per tile / mirrored pair; the reverse
-  // flip un-mirrors the imagery so Reverse only re-anchors the picture.
+  // flip un-mirrors the imagery so Reverse only re-anchors the picture. When the CPU
+  // supplies no real remap (remapOn = 0: inward-reversed families, non-rect complements)
+  // the side degrades to a plain crop of the UNTRANSFORMED frame.
   var uvA = in.uv;
   var uvB = in.uv;
-  if (u.compression > 0.5 || u.slide > 0.5) {
+  if ((u.compression > 0.5 || u.slide > 0.5) && u.remapBOn > 0.5) {
     uvB = uv * u.remapB.xy + u.remapB.zw;
     if (u.reverse > 0.5) { uvB = vec2f(1.0) - uvB; }
   }
-  if (u.compression > 1.5 || u.slide > 1.5) {
+  if ((u.compression > 1.5 || u.slide > 1.5) && u.remapAOn > 0.5) {
     uvA = uv * u.remapA.xy + u.remapA.zw;
     if (u.reverse > 0.5) { uvA = vec2f(1.0) - uvA; }
   }

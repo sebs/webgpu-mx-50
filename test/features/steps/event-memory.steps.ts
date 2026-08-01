@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import type { MixerWorld } from '../support/world.js';
 import type { SourceSlot } from '../../../src/core/types.js';
 import { panelSnapshot, EVENT_LED_STORE_BLINKS } from '../../../src/state/state.js';
-import { occupiedSlots } from '../../../src/core/event-memory.js';
+import { occupiedSlots, stillKeyForSlot } from '../../../src/core/event-memory.js';
 
 const nums = (s: string): number[] => (s.match(/\d+/g) ?? []).map(Number);
 const slotSnap = (w: MixerWorld, slot: number) => w.snapshot().memory.slots[slot - 1];
@@ -190,4 +190,60 @@ Then(/^slot (\d+) still holds its stored panel snapshot$/, function (this: Mixer
 Then('the snapshot is read back synchronously from local storage at boot', function (this: MixerWorld) {
   assert.equal(this.lastReloadSync, true);
   assert.notEqual(this.storage.get('mx50:eventMemory'), null);
+});
+
+// ===========================================================================
+// Two-tier still persistence (@integration, ADR-0015): the blob tier commits
+// FIRST, the snapshot carries only a still-reference id, and recall re-uploads
+// the pixels through the GpuStillPort. Headless via MemoryBlobBackend + the
+// World's FakeGpuStillPort; async steps settle on stills.idle().
+// ===========================================================================
+
+Given('the panel setup includes a Scene Grabber still the user chose to store', function (this: MixerWorld) {
+  this.attachStills();
+  this.dispatch({ type: 'SET_TRANSITION_TYPE', transition: 'wipe' });
+  this.dispatch({ type: 'PRESS_WIPE_FAMILY', family: 'square' });
+  this.dispatch({ type: 'PRESS_COMPRESSION' });
+  this.dispatch({ type: 'PRESS_POSITIONER' });
+  this.dispatch({ type: 'PRESS_SCENE_GRABBER' }); // a genuine grabbed PiP
+});
+Then('the still pixels are written to IndexedDB under the slot 5 key first', async function (this: MixerWorld) {
+  await this.stills.idle();
+  assert.notEqual(await this.blobs.get(stillKeyForSlot(5)), null);
+  const blobIdx = this.tierJournal.indexOf('blob:set:' + stillKeyForSlot(5));
+  const bankIdx = this.tierJournal.indexOf('bank:set');
+  assert.ok(blobIdx !== -1 && bankIdx !== -1 && blobIdx < bankIdx, 'blob tier committed before localStorage');
+});
+Then('then the panel snapshot carrying only a still-reference id is committed to local storage', async function (this: MixerWorld) {
+  await this.stills.idle();
+  const slot5 = this.persistence.loadBank()[4]!;
+  assert.equal(slot5.positioner.stillId, stillKeyForSlot(5));
+  assert.ok(JSON.stringify(slot5).length < 8192, 'a reference id, not a pixel payload');
+});
+Then('slot 5 references its still consistently across both backends', async function (this: MixerWorld) {
+  await this.stills.idle();
+  const id = this.snapshot().memory.slots[4]!.positioner.stillId!;
+  assert.ok((await this.blobs.keys()).indexOf(id) !== -1);
+  assert.equal(this.persistence.loadBank()[4]!.positioner.stillId, id);
+});
+
+Given('slot 5 holds a snapshot that references a captured still in IndexedDB', async function (this: MixerWorld) {
+  this.attachStills();
+  this.dispatch({ type: 'SET_TRANSITION_TYPE', transition: 'wipe' });
+  this.dispatch({ type: 'PRESS_WIPE_FAMILY', family: 'square' });
+  this.dispatch({ type: 'PRESS_COMPRESSION' });
+  this.dispatch({ type: 'PRESS_POSITIONER' });
+  this.dispatch({ type: 'PRESS_SCENE_GRABBER' });
+  this.pressMemory();
+  this.pressEventNo(1, true); // store into slot 5
+  await this.stills.idle();
+  this.dispatch({ type: 'PRESS_SCENE_GRABBER' }); // release, so the recall demonstrably restores it
+  this.fakeGpu.injected = null;
+});
+Then('the referenced still blob is loaded from IndexedDB and re-uploaded to a GPU texture', async function (this: MixerWorld) {
+  await this.stills.idle();
+  assert.ok(this.tierJournal.indexOf('blob:get:' + stillKeyForSlot(5)) !== -1, 'served from the blob tier');
+  assert.notEqual(this.fakeGpu.injected, null, 'pixels re-uploaded through the GPU port');
+  assert.deepEqual(this.fakeGpu.injected!.grab, this.fakeGpu.currentGrab(), 'grab geometry rode with the blob');
+  assert.equal(this.fakeGpu.injected!.pixels.byteLength, this.fakeGpu.injected!.width * this.fakeGpu.injected!.height * 4);
 });

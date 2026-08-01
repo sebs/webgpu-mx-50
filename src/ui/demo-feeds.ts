@@ -13,6 +13,7 @@
 // logical clock (ADR-0012 stays authoritative for the mixer).
 
 import { ensureTheme } from './theme.js';
+import { CameraFeedController } from '../sources/camera.js';
 
 const FEED_W = 640;
 const FEED_H = 360;
@@ -31,6 +32,25 @@ type CapturableCanvas = HTMLCanvasElement & {
 type DrawFn = (ctx: CanvasRenderingContext2D, t: number, frame: number) => void;
 
 export type TallyState = 'off' | 'ready' | 'onair';
+
+export type FeedProviderKind = 'generated' | 'video' | 'camera' | 'image';
+
+export interface FeedBoundDetail {
+  /** 0-based feed index; the SourceSlot is index + 1. */
+  index: number;
+  kind: FeedProviderKind;
+  /** 'pattern:N' | 'file:<name>' | 'camera:<deviceId>' | 'image:<name>' */
+  providerId: string;
+  /** kind 'image' only: the picked file — the listener decodes it (GPU side). */
+  file?: File;
+  /** kind 'camera' only: the live stream (audio-adoption seam for the audio engine). */
+  stream?: MediaStream;
+}
+
+export interface FeedUnavailableDetail {
+  index: number;
+  providerId: string;
+}
 
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
@@ -154,6 +174,13 @@ interface Feed {
   label: HTMLElement | null;
   tally: HTMLElement | null;
   clipName: string;
+  /** Still-image overlay (kind 'image'). */
+  still: HTMLImageElement | null;
+  stillUrl: string | null;
+  stillFile: File | null;
+  /** Camera capture (kind 'camera'); constructed lazily on the first click. */
+  camera: CameraFeedController | null;
+  deviceSelect: HTMLSelectElement | null;
 }
 
 export class MxDemoFeeds extends HTMLElement {
@@ -208,6 +235,8 @@ export class MxDemoFeeds extends HTMLElement {
     cancelAnimationFrame(this.raf);
     for (const feed of this.feeds) {
       if (feed.fileUrl) URL.revokeObjectURL(feed.fileUrl);
+      if (feed.stillUrl) URL.revokeObjectURL(feed.stillUrl);
+      feed.camera?.close(feed.video);
     }
   }
 
@@ -225,14 +254,33 @@ export class MxDemoFeeds extends HTMLElement {
 
     const feed: Feed = {
       video, canvas, ctx, draw, fileUrl: null, onPattern: true, label: null, tally: null, clipName: 'Pattern',
+      still: null, stillUrl: null, stillFile: null, camera: null, deviceSelect: null,
     };
     draw(ctx, 0, 0); // First frame before the loop starts, so the stream is never blank.
-    this.usePattern(feed);
+    this.usePattern(feed, false); // construction: no listeners yet, nothing to emit
+
     return feed;
   }
 
+  private emitBound(feed: Feed, kind: FeedProviderKind, providerId: string, extra?: { file?: File; stream?: MediaStream }): void {
+    const detail: FeedBoundDetail = { index: this.feeds.indexOf(feed), kind, providerId, ...extra };
+    this.dispatchEvent(new CustomEvent<FeedBoundDetail>('mx-feed-bound', { detail, bubbles: true }));
+  }
+
+  /** Park camera and still overlays before switching provider. */
+  private parkExtras(feed: Feed): void {
+    feed.camera?.close(feed.video);
+    if (feed.still) feed.still.hidden = true;
+    if (feed.stillUrl) {
+      URL.revokeObjectURL(feed.stillUrl);
+      feed.stillUrl = null;
+    }
+    feed.stillFile = null;
+  }
+
   /** Point the feed's video at the live canvas stream. */
-  private usePattern(feed: Feed): void {
+  private usePattern(feed: Feed, emit = true): void {
+    this.parkExtras(feed);
     feed.onPattern = true;
     feed.clipName = 'Pattern';
     if (feed.fileUrl) {
@@ -246,10 +294,13 @@ export class MxDemoFeeds extends HTMLElement {
       void feed.video.play().catch(() => undefined);
     }
     this.updateLabel(feed);
+    if (emit) this.emitBound(feed, 'generated', 'pattern:' + (this.feeds.indexOf(feed) + 1));
   }
 
-  /** Point the feed's video at a user-selected local clip (looped, muted). */
+  /** Point the feed's video at a user-selected local clip (looped; the audio engine's
+   *  element tap governs audibility, so the element itself may be unmuted by the engine). */
   private useFile(feed: Feed, file: File): void {
+    this.parkExtras(feed);
     feed.onPattern = false;
     feed.clipName = file.name;
     if (feed.fileUrl) URL.revokeObjectURL(feed.fileUrl);
@@ -259,6 +310,76 @@ export class MxDemoFeeds extends HTMLElement {
     feed.video.loop = true;
     void feed.video.play().catch(() => undefined);
     this.updateLabel(feed);
+    this.emitBound(feed, 'video', 'file:' + file.name);
+  }
+
+  /** Gesture-gated camera capture for this feed (the click IS the gesture). */
+  private async useCamera(feed: Feed, deviceId?: string): Promise<void> {
+    if (!feed.camera) {
+      feed.camera = new CameraFeedController();
+      feed.camera.onEnded((endedId) => {
+        // Device loss: fall back to the demo pattern (the wall never goes black) and
+        // report the provider unavailable — a stand-in picture, not a rebinding.
+        this.usePattern(feed, false);
+        const detail: FeedUnavailableDetail = { index: this.feeds.indexOf(feed), providerId: 'camera:' + endedId };
+        this.dispatchEvent(new CustomEvent<FeedUnavailableDetail>('mx-feed-unavailable', { detail, bubbles: true }));
+      });
+    }
+    if (feed.still) feed.still.hidden = true;
+    try {
+      const result = await feed.camera.open(feed.video, deviceId);
+      feed.onPattern = false;
+      feed.clipName = result.label || 'Camera';
+      if (feed.fileUrl) {
+        URL.revokeObjectURL(feed.fileUrl);
+        feed.fileUrl = null;
+      }
+      feed.video.removeAttribute('src');
+      this.updateLabel(feed);
+      this.emitBound(feed, 'camera', 'camera:' + result.deviceId, { stream: result.stream });
+      // Post-grant re-enumeration: labels are real now; reveal the device chooser.
+      void feed.camera.enumerate().then((devices) => this.fillDevices(feed, devices.map((d) => ({ id: d.deviceId, label: d.label }))));
+    } catch (error) {
+      const name = (error as DOMException | null)?.name;
+      feed.clipName = name === 'NotFoundError' ? 'No camera' : 'Camera denied';
+      this.updateLabel(feed);
+      // The feed keeps its current content; the button stays clickable (re-prompt allowed).
+    }
+  }
+
+  private fillDevices(feed: Feed, devices: readonly { id: string; label: string }[]): void {
+    const select = feed.deviceSelect;
+    if (!select) return;
+    select.innerHTML = '';
+    for (const d of devices) {
+      const opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = d.label || 'Camera';
+      select.appendChild(opt);
+    }
+    select.hidden = devices.length === 0;
+  }
+
+  /** A picked still image: a single unchanging frame overlaid on the monitor. */
+  private useStill(feed: Feed, file: File): void {
+    feed.camera?.close(feed.video);
+    feed.onPattern = false;
+    feed.clipName = file.name;
+    if (feed.fileUrl) {
+      URL.revokeObjectURL(feed.fileUrl);
+      feed.fileUrl = null;
+    }
+    feed.video.srcObject = null;
+    feed.video.removeAttribute('src');
+    if (feed.stillUrl) URL.revokeObjectURL(feed.stillUrl);
+    feed.stillUrl = URL.createObjectURL(file);
+    feed.stillFile = file;
+    if (feed.still) {
+      feed.still.src = feed.stillUrl;
+      feed.still.hidden = false;
+    }
+    this.updateLabel(feed);
+    this.emitBound(feed, 'image', 'image:' + file.name, { file });
   }
 
   private updateLabel(feed: Feed): void {
@@ -281,7 +402,15 @@ export class MxDemoFeeds extends HTMLElement {
     tally.className = 'mx-tally';
     tally.setAttribute('data-state', 'off');
     tally.title = 'Tally: red = on Program Out, green = selected on a bus';
-    monitor.append(feed.video, scan, label, tally);
+    const still = document.createElement('img');
+    still.hidden = true;
+    still.style.position = 'absolute';
+    still.style.inset = '0';
+    still.style.width = '100%';
+    still.style.height = '100%';
+    still.style.objectFit = 'cover';
+    feed.still = still;
+    monitor.append(feed.video, still, scan, label, tally);
     feed.label = label;
     feed.tally = tally;
     this.updateLabel(feed);
@@ -307,13 +436,40 @@ export class MxDemoFeeds extends HTMLElement {
     load.textContent = 'Load clip…';
     load.addEventListener('click', () => picker.click());
 
+    const stillPicker = document.createElement('input');
+    stillPicker.type = 'file';
+    stillPicker.accept = 'image/*';
+    stillPicker.hidden = true;
+    stillPicker.addEventListener('change', () => {
+      const file = stillPicker.files && stillPicker.files[0];
+      if (file) this.useStill(feed, file);
+    });
+    const stillBtn = document.createElement('button');
+    stillBtn.type = 'button';
+    stillBtn.className = 'mx-ghostbtn';
+    stillBtn.textContent = 'Still…';
+    stillBtn.addEventListener('click', () => stillPicker.click());
+
+    const cameraBtn = document.createElement('button');
+    cameraBtn.type = 'button';
+    cameraBtn.className = 'mx-ghostbtn';
+    cameraBtn.textContent = 'Camera';
+    cameraBtn.addEventListener('click', () => void this.useCamera(feed));
+
+    const deviceSelect = document.createElement('select');
+    deviceSelect.className = 'mx-ghostbtn';
+    deviceSelect.hidden = true;
+    deviceSelect.title = 'Camera device';
+    deviceSelect.addEventListener('change', () => void this.useCamera(feed, deviceSelect.value));
+    feed.deviceSelect = deviceSelect;
+
     const pattern = document.createElement('button');
     pattern.type = 'button';
     pattern.className = 'mx-ghostbtn';
     pattern.textContent = 'Pattern';
     pattern.addEventListener('click', () => this.usePattern(feed));
 
-    caption.append(name, load, pattern, picker);
+    caption.append(name, load, stillBtn, cameraBtn, deviceSelect, pattern, picker, stillPicker);
     panel.append(monitor, caption);
     return panel;
   }

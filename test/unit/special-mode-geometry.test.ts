@@ -121,7 +121,10 @@ test('shutter collapses B to the Matte: horizontal split, circle under Square Wi
   assert.deepEqual(split.half, [0.5, 0.5 * 0.6]);
   const circle = macroFrame('shutter', 0.4, 0, { joystickX: 0, squareWipe: true });
   assert.equal(circle.shape, 1);
-  assert.ok(Math.abs(circle.half[0] - 0.5 * 0.6) < 1e-9 && circle.half[0] === circle.half[1]);
+  // The circle radius carries the sqrt(2)/2 factor so it starts enclosing the frame.
+  assert.ok(Math.abs(circle.half[0] - 0.5 * Math.SQRT2 * 0.6) < 1e-9 && circle.half[0] === circle.half[1]);
+  const start = macroFrame('shutter', 0, 0, { joystickX: 0, squareWipe: true });
+  assert.ok(Math.abs(start.half[0] - 0.5 * Math.SQRT2) < 1e-9, 'begins with the corners inside the circle (clean full B)');
   assert.equal(split.bg, 'matte');
   assert.equal(split.fg, 'B');
 });

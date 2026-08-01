@@ -1,10 +1,11 @@
 # Deferred work & known limitations
 
-web-mx-50's **domain model is complete** (Phases 0–8) and, as of the Phase-9 GPU sweep, **every
-deferred picture pass is written**: 280 `node:test` units and 545 Gherkin scenarios (3996 steps)
-pass headlessly, and `banira compile` builds the whole app. This document is the single
-consolidated inventory of what is **not** built or **not** CI-verified, and — the part that
-matters — **which of it can still be built**.
+web-mx-50's **domain model is complete** (Phases 0–8) and, as of the Phase-9 GPU sweep and the
+Phase-10 browser-I/O sweep, **every deferred picture pass and every browser-I/O tier is
+written**: 330 `node:test` units and 563 Gherkin scenarios (4137 steps) pass headlessly, and
+`banira compile` builds the whole app. This document is the single consolidated inventory of
+what is **not** built or **not** CI-verified, and — the part that matters — **which of it can
+still be built**.
 
 Each item is tagged:
 
@@ -41,16 +42,32 @@ exists (ADR-0016).
 | Special-Mode compressed-image macros | `core/special-mode-geometry.ts` (`macroFrame`/`specialFrame`) + `gpu/special-fx.ts` + `special-fx.wgsl.ts`. Unblocked the two `special-modes.feature` picture scenarios |
 | Combination-recipe looks | After-Image = Strobe+MIX (selectors in `core/after-image.ts`, S8/S9 scenarios wired); PiP compressed-inset pixels via the wipe posOn branch; Mosaic-Spotlight REVERSE via the inset mask flip |
 
-## 🟢 Buildable — browser I/O (some already written, CI-excluded)
+## ✅ Built — the former "browser I/O" bucket (Phase 10)
 
-| Item | Where | Notes |
-|---|---|---|
-| Real audio-input capture | `src/audio/engine.ts` | Replace the stand-in oscillators with `MediaStream` / `MediaElement` sources. Small, high value. |
-| EXT.CAMERA GPU binding | `src/engine/renderer.ts:88` | Currently falls back to the composite; needs `getUserMedia` → external texture for the DSK key source. |
-| IndexedDB still-blob tier (async `BlobBackend`) | `src/persistence/backend.ts:4` | The `StorageBackend` seam is designed for it; a blob backend + GPU still readback unblocks `event-memory.feature` "…carries a captured still…", "…references a still reloads the pixels…". |
-| File import/export DOM glue | `src/persistence/persistence.ts` (`exportPreset`/`importPreset`) | The versioned-JSON codecs exist; only the download/upload wiring is missing. |
-| Real browser-input device binding | `src/sources/source.ts:8`, `src/sources/binding.ts` | **Partially landed:** `VideoSource` (`src/sources/video-source.ts`) now backs all four Sources with live video (demo feeds + local files, `src/ui/demo-feeds.ts`). Still open: `getUserMedia` camera capture, still images, and the zero-copy `importExternalTexture` path. |
-| Gamepad / Web MIDI / Web Serial adapters | `src/control/{gamepad,midi,serial}.ts` | **Already written and wired** from `main.ts` (Phase 8); a real MIDI controller or gamepad drives the mixer today. Only CI-excluded (the APIs are undefined under node). |
+All six rows are landed (the Gamepad/MIDI/Serial row was already built in Phase 8). Each follows
+the house pattern: the decision-shaped logic is a **pure headless seam** the specs pin
+(`programFadeSourceMix`, `MediaDeviceCatalog`, `camera-lifecycle`, `StillStore`, `preset-file`),
+and the browser glue stays thin, typechecked, and CI-excluded. Verification of the glue itself is
+browser smoke (`npm run dev`).
+
+| Item | Where it landed |
+|---|---|
+| Real audio-input capture | `src/audio/engine.ts` rebuilt: per-slot `MediaElementAudioSourceNode` taps on the feed videos (gesture-attached, unmuted behind zeroed faders), demand-driven getUserMedia mic (`core/audio.ts micCaptureWanted`), per-source routing via `core/fade.ts programFadeSourceMix`. Aux1/Aux2 keep stand-in oscillators (no browser jack); the mic deliberately has no fake fallback. |
+| EXT.CAMERA GPU binding | `src/sources/camera-source.ts` (+ pure `camera-lifecycle.ts`) registered as `'ext-camera'` in the widened `SourceRegistry`; renderer keys through `core/dsk.ts dskKeyFeed` with the composite stand-in preserved; `src/ui/ext-camera-monitor.ts` card on the source wall; `bindExtCamera` on the binding registry. Unblocked the 3 External-Camera scenarios. |
+| IndexedDB still-blob tier | `BlobBackend` (`IndexedDbBlobBackend`/`MemoryBlobBackend`) + `src/persistence/still-store.ts` (blob-FIRST two-tier commits, orphan sweep, promise-queue ordering) + `PositionerState.stillId` minted in the reducer + `WipePass.readStill/injectStill` (256-aligned readback via pure `gpu/readback.ts`). Unblocked both `event-memory.feature` still scenarios. |
+| File import/export DOM glue | pure `src/persistence/preset-file.ts` (names, feedback, size cap) + thin `file-io.ts` (download/upload) + the `LOAD_BANK` command (bank-only live import; latches cleared, live panel untouched) + Export/Import buttons in the console's Event Memory block. |
+| Real browser-input device binding | feed pickers grew Camera (gesture-gated `CameraFeedController`) and Still (`ImageSource`, upload-once) options; `mx-feed-bound`/`mx-feed-unavailable` events mirror into `engine.bindings` (+ `activeProvider`) and swap the registry entry; `MediaDeviceCatalog` models permission-gated enumeration headlessly. Unblocked 9 device/permission scenarios. |
+| Gamepad / Web MIDI / Web Serial | Already written and wired (Phase 8); CI-excluded because the APIs are undefined under node — an environment limit, not a code limit. |
+
+**`importExternalTexture` — assessed and deliberately not built.** It is not zero-copy in this
+app's shape (the contained blit-pass variant re-introduces the same one conversion write that
+`copyExternalImageToTexture` already performs, plus per-frame bind-group churn and an sRGB
+reinterpretation dance), and full `texture_external` adoption would invade every consuming shader
+while breaking the freeze-family `copyTextureToTexture` contract. The one measurable win —
+skipping redundant imports — is mechanism-independent and landed instead as
+`requestVideoFrameCallback` dirty-gating in `VideoSource` (a 30 fps clip on a 120 Hz display now
+imports 30×/s, not 120×). Revisit if: profiling shows the copy >~1 ms/frame on a target platform;
+sources become WebCodecs `VideoFrame`s; or HDR/wide-gamut camera sources arrive.
 
 ## 🟢 Buildable — domain-composable `@integration` not yet wired
 
@@ -90,13 +107,10 @@ Building these means changing the domain model against a spec-derived rule the t
 
 ## Suggested next steps (highest leverage first)
 
-1. **Real audio-input capture** (`src/audio/engine.ts`) — replace the stand-in oscillators with
-   `MediaStream` sources; the A/V-Synchro picture gating it feeds is already live.
-2. **IndexedDB still tier + file import/export glue** — small; unblocks the two still
-   `@integration` scenarios and gives portable presets a UI. `WipePass.freeze` is the designed
-   readback/injection point for the Scene-Grabber still.
-3. **Wire the 3 program-output `@integration` scenarios** — pure step-definition work, no new code.
-4. **A headless-WebGPU runner** (Deno `--webgpu` or a native harness) — would let every
+1. **Wire the 3 program-output `@integration` scenarios** — pure step-definition work, no new code.
+2. **A headless-WebGPU runner** (Deno `--webgpu` or a native harness) — would let every
    now-rendering pass be pixel-pinned in `test/golden/`, retiring the last environment limit.
+3. **Browser smoke sweep** of the Phase-9/10 work (`npm run dev`): the GPU looks, camera/mic
+   permission flows, still store/recall across a reload, and preset export/import.
 
 Nothing in the 🟠/⚪ buckets should be built without first revisiting the ADR it rests on.
