@@ -341,9 +341,11 @@ export class MxDemoFeeds extends HTMLElement {
       void feed.camera.enumerate().then((devices) => this.fillDevices(feed, devices.map((d) => ({ id: d.deviceId, label: d.label }))));
     } catch (error) {
       const name = (error as DOMException | null)?.name;
+      if (name === 'AbortError') return; // superseded by a newer choice: silent no-op
       feed.clipName = name === 'NotFoundError' ? 'No camera' : 'Camera denied';
       this.updateLabel(feed);
-      // The feed keeps its current content; the button stays clickable (re-prompt allowed).
+      // The feed keeps its current content (open() acquires before it swaps); the button
+      // stays clickable, so a re-prompt is one click away.
     }
   }
 

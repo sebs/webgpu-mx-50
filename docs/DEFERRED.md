@@ -57,7 +57,7 @@ browser smoke (`npm run dev`).
 | IndexedDB still-blob tier | `BlobBackend` (`IndexedDbBlobBackend`/`MemoryBlobBackend`) + `src/persistence/still-store.ts` (blob-FIRST two-tier commits, orphan sweep, promise-queue ordering) + `PositionerState.stillId` minted in the reducer + `WipePass.readStill/injectStill` (256-aligned readback via pure `gpu/readback.ts`). Unblocked both `event-memory.feature` still scenarios. |
 | File import/export DOM glue | pure `src/persistence/preset-file.ts` (names, feedback, size cap) + thin `file-io.ts` (download/upload) + the `LOAD_BANK` command (bank-only live import; latches cleared, live panel untouched) + Export/Import buttons in the console's Event Memory block. |
 | Real browser-input device binding | feed pickers grew Camera (gesture-gated `CameraFeedController`) and Still (`ImageSource`, upload-once) options; `mx-feed-bound`/`mx-feed-unavailable` events mirror into `engine.bindings` (+ `activeProvider`) and swap the registry entry; `MediaDeviceCatalog` models permission-gated enumeration headlessly. Unblocked 9 device/permission scenarios. |
-| Gamepad / Web MIDI / Web Serial | Already written and wired (Phase 8); CI-excluded because the APIs are undefined under node — an environment limit, not a code limit. |
+| Gamepad / Web MIDI / Web Serial | Written and wired (Phase 8), hardened by browser smoke: the Serial GPI adapter no longer calls the gesture-gated `requestPort()` at boot (a `SecurityError`) — `start()` re-attaches already-granted ports via `getPorts()` + the `connect` event, and the port chooser lives behind the header's "GPI…" button. CI-excluded because the APIs are undefined under node. |
 
 **`importExternalTexture` — assessed and deliberately not built.** It is not zero-copy in this
 app's shape (the contained blit-pass variant re-introduces the same one conversion write that
@@ -69,14 +69,20 @@ skipping redundant imports — is mechanism-independent and landed instead as
 imports 30×/s, not 120×). Revisit if: profiling shows the copy >~1 ms/frame on a target platform;
 sources become WebCodecs `VideoFrame`s; or HDR/wide-gamut camera sources arrive.
 
-## 🟢 Buildable — domain-composable `@integration` not yet wired
+## ✅ Already wired — the former "domain-composable `@integration`" bucket
 
-These need **no new production code** — just step definitions using existing selectors, like the
-cross-feature `@integration` scenarios wired in Phase 8. (The Phase-8 sweep skipped them, wrongly
-assuming their plainer, already-green counterparts covered them.)
+This bucket turned out to be **stale, not deferred**: cucumber's `name` filters are
+partial-match regexes, and the include-list entries ("The A button sends the A-bus directly",
+"Preview lets me monitor the effect while sending a clean bus", …) have always matched these
+very `@integration` scenarios — there are no plainer counterparts in
+`program-output.feature`. All four (A-bypass, B-bypass, EFFECT-composite, and the two-row
+Preview outline) execute and pass, and their step definitions assert exactly the selectors
+this table prescribed: `programVideo().effectApplied`, `programAudio().masterGoverns`, the
+7-input contributor list, and `PREVIEW_IS_ALWAYS_EFFECTED`
+(`test/features/steps/mixer.steps.ts`). The include-list names are now the full scenario
+titles, so the coverage is explicit rather than an accident of prefix matching.
 
-| Scenario | Feature | Assertion available via |
-|---|---|---|
+---|---|---|
 | The A / B button sends the bus directly, bypassing all effects | `program-output.feature` | `programVideo().effectApplied === false`; `programAudioMix` (bus + aux, Master bypassed). |
 | The EFFECT button sends the fully processed composite | `program-output.feature` | `programVideo().effectApplied === true`; `programAudio().masterGoverns`. |
 | Preview lets me monitor the effect while sending a clean bus | `program-output.feature` | `PREVIEW_IS_ALWAYS_EFFECTED` + `programVideo()`. |
@@ -107,10 +113,9 @@ Building these means changing the domain model against a spec-derived rule the t
 
 ## Suggested next steps (highest leverage first)
 
-1. **Wire the 3 program-output `@integration` scenarios** — pure step-definition work, no new code.
-2. **A headless-WebGPU runner** (Deno `--webgpu` or a native harness) — would let every
+1. **A headless-WebGPU runner** (Deno `--webgpu` or a native harness) — would let every
    now-rendering pass be pixel-pinned in `test/golden/`, retiring the last environment limit.
-3. **Browser smoke sweep** of the Phase-9/10 work (`npm run dev`): the GPU looks, camera/mic
+2. **Browser smoke sweep** of the Phase-9/10 work (`npm run dev`): the GPU looks, camera/mic
    permission flows, still store/recall across a reload, and preset export/import.
 
 Nothing in the 🟠/⚪ buckets should be built without first revisiting the ADR it rests on.

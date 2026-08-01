@@ -56,8 +56,12 @@ export class CameraSource implements Source {
     this.onLifecycle?.(this.state);
   }
 
-  /** Gesture-gated entry: getUserMedia({video, audio:false}), wire track.onended. */
+  /** Gesture-gated entry: getUserMedia({video, audio:false}), wire track.onended.
+   *  Attaching while LIVE is a device switch: the current stream is released first
+   *  (REQUEST does not transition out of 'live' — by design, so a stale grant can
+   *  never clobber a healthy stream without this explicit detach). */
   async attach(deviceId?: string): Promise<CameraLifecycle> {
+    if (this.state.phase === 'live') this.detach();
     this.step({ type: 'REQUEST' });
     if (this.state.phase !== 'requesting') return this.state;
     let stream: MediaStream;

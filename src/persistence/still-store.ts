@@ -25,12 +25,28 @@ export interface StillStore {
   commitBank(next: PanelState, prev: PanelState): Promise<void>;
   /** Recall path: load the record and re-upload pixels+grab to the GPU. false = missing (fresh-grab fallback). */
   recallStill(stillId: string | null | undefined): Promise<boolean>;
-  /** Boot hygiene: remove blob keys not referenced by any slot's stillId. */
-  sweepOrphans(slots: readonly (PanelSnapshot | null)[]): Promise<void>;
+  /** Boot hygiene: remove blob keys not referenced by any slot's stillId (nor an extra root,
+   *  e.g. the restored live panel's own reference). */
+  sweepOrphans(slots: readonly (PanelSnapshot | null)[], extraRoots?: readonly (string | null | undefined)[]): Promise<void>;
   /** Mass-clear companion to persistence.clearBank() (MEMORY+SHIFT power-up). */
   clearAll(): Promise<void>;
   /** Settles when every queued tier operation has completed. */
   idle(): Promise<void>;
+}
+
+/**
+ * Whether a bank change involves the still tier at all: a changed slot referencing a still
+ * (in the next OR the previous bank), or a fresh live mint in flight. Still-less changes
+ * should be mirrored SYNCHRONOUSLY (no async window in which a tab close loses the store).
+ */
+export function bankTouchesStills(next: PanelState, prev: PanelState): boolean {
+  for (let i = 0; i < 8; i++) {
+    const nextSlot = next.memory.slots[i] ?? null;
+    const prevSlot = prev.memory.slots[i] ?? null;
+    if (nextSlot === prevSlot) continue;
+    if (nextSlot?.positioner.stillId != null || prevSlot?.positioner.stillId != null) return true;
+  }
+  return false;
 }
 
 export function createStillStore(blobs: BlobBackend, persistence: Persistence, gpu: GpuStillPort): StillStore {
@@ -53,9 +69,11 @@ export function createStillStore(blobs: BlobBackend, persistence: Persistence, g
           const prevSlot = prev.memory.slots[i] ?? null;
           if (nextSlot === prevSlot) continue;
           const key = stillKeyForSlot(i + 1);
-          // A freshly minted still store: the reducer stamps the slot key on both the
-          // slot and the live panel while the grab is on screen. TIER 1 FIRST.
-          if (nextSlot?.positioner.stillId === key && next.positioner.sceneGrabber) {
+          // A freshly minted still store: the reducer stamps the slot key on BOTH the slot
+          // and the LIVE panel while the grab is on screen — all three conditions, so a
+          // LOAD_BANK import (which never touches the live positioner) can NEVER be misread
+          // as a mint and overwrite a stored blob with the current freeze pixels. TIER 1 FIRST.
+          if (nextSlot?.positioner.stillId === key && next.positioner.stillId === key && next.positioner.sceneGrabber) {
             try {
               const pixels = await gpu.readStill();
               await blobs.set(key, { ...pixels, grab: gpu.currentGrab() });
@@ -89,12 +107,18 @@ export function createStillStore(blobs: BlobBackend, persistence: Persistence, g
       });
     },
 
-    sweepOrphans(slots) {
+    sweepOrphans(slots, extraRoots) {
       return queue(async () => {
         const referenced: string[] = [];
         for (let i = 0; i < slots.length; i++) {
           const id = slots[i]?.positioner.stillId;
           if (id != null) referenced.push(id);
+        }
+        if (extraRoots) {
+          for (let i = 0; i < extraRoots.length; i++) {
+            const id = extraRoots[i];
+            if (id != null) referenced.push(id);
+          }
         }
         const keys = await blobs.keys();
         for (let i = 0; i < keys.length; i++) {

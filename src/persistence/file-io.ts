@@ -41,9 +41,12 @@ export function downloadJson(fileName: string, json: string, doc: Document = doc
 
 export function createPresetFileIo(deps: PresetFileIoDeps): PresetFileIo {
   const doc = deps.doc ?? document;
-  // One persistent hidden input, reused across imports (a transient one risks GC mid-read
-  // on Safari); value reset before each open so re-importing the same file re-fires change.
+  // One persistent hidden input with ONE persistent change listener (a cancelled picker
+  // fires no event, so per-call listeners would accumulate and a later pick would run
+  // every stale handler). importPreset() just points `pendingDone` at the current
+  // callback; value reset before each open so re-importing the same file re-fires change.
   let input: HTMLInputElement | null = null;
+  let pendingDone: ((feedback: string, ok: boolean) => void) | null = null;
   const picker = (): HTMLInputElement => {
     if (!input) {
       input = doc.createElement('input');
@@ -51,8 +54,46 @@ export function createPresetFileIo(deps: PresetFileIoDeps): PresetFileIo {
       input.accept = 'application/json,.json';
       input.hidden = true;
       doc.body.appendChild(input);
+      input.addEventListener('change', () => {
+        const done = pendingDone;
+        pendingDone = null;
+        if (done) handlePick(input!, done);
+      });
     }
     return input;
+  };
+
+  const handlePick = (el: HTMLInputElement, done: (feedback: string, ok: boolean) => void): void => {
+    const fail = (reason: 'read-error' | 'too-large' | 'storage-full'): void =>
+      done(importFeedback({ ok: false, reason } as ImportOutcome), false);
+    const file = el.files && el.files[0];
+    if (!file) return; // nothing picked: silent no-op
+    if (file.size > MAX_IMPORT_BYTES) {
+      fail('too-large');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => fail('read-error');
+    reader.onabort = () => fail('read-error');
+    reader.onload = () => {
+      let result: ImportResult;
+      try {
+        result = deps.persistence.importPreset(String(reader.result));
+      } catch {
+        // LocalStorageBackend.set throws QuotaExceededError through importPreset.
+        fail('storage-full');
+        return;
+      }
+      let occupied = 0;
+      if (result.ok && result.target === 'bank') {
+        // Re-reading through loadBank() reuses the tested normalizeBank.
+        deps.store.dispatch({ type: 'LOAD_BANK', slots: deps.persistence.loadBank() });
+        const slots = deps.store.getSnapshot().memory.slots;
+        for (let i = 0; i < slots.length; i++) if (slots[i] !== null) occupied++;
+      }
+      done(importFeedback(result, occupied), result.ok);
+    };
+    reader.readAsText(file);
   };
 
   return {
@@ -65,40 +106,7 @@ export function createPresetFileIo(deps: PresetFileIoDeps): PresetFileIo {
 
     importPreset(done) {
       const el = picker();
-      const fail = (reason: 'read-error' | 'too-large' | 'storage-full'): void =>
-        done(importFeedback({ ok: false, reason } as ImportOutcome), false);
-      const onChange = (): void => {
-        el.removeEventListener('change', onChange);
-        const file = el.files && el.files[0];
-        if (!file) return; // picker cancelled: silent no-op
-        if (file.size > MAX_IMPORT_BYTES) {
-          fail('too-large');
-          return;
-        }
-        const reader = new FileReader();
-        reader.onerror = () => fail('read-error');
-        reader.onabort = () => fail('read-error');
-        reader.onload = () => {
-          let result: ImportResult;
-          try {
-            result = deps.persistence.importPreset(String(reader.result));
-          } catch {
-            // LocalStorageBackend.set throws QuotaExceededError through importPreset.
-            fail('storage-full');
-            return;
-          }
-          let occupied = 0;
-          if (result.ok && result.target === 'bank') {
-            // Re-reading through loadBank() reuses the tested normalizeBank.
-            deps.store.dispatch({ type: 'LOAD_BANK', slots: deps.persistence.loadBank() });
-            const slots = deps.store.getSnapshot().memory.slots;
-            for (let i = 0; i < slots.length; i++) if (slots[i] !== null) occupied++;
-          }
-          done(importFeedback(result, occupied), result.ok);
-        };
-        reader.readAsText(file);
-      };
-      el.addEventListener('change', onChange);
+      pendingDone = done; // a cancelled prior pick is simply overwritten — one listener, ever
       el.value = '';
       el.click();
     },

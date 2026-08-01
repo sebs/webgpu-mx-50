@@ -50,7 +50,11 @@ export class AudioEngine {
   private readonly unsubscribe: Unsubscribe;
   private micState: MicStatus = 'idle';
   private micStream: MediaStream | null = null;
+  private micHead: MediaStreamAudioSourceNode | null = null;
   private inputsAttached = false;
+  private lastState: PanelState;
+  private prevMicSelected = false;
+  private disposed = false;
 
   constructor(
     store: PanelStore,
@@ -89,7 +93,9 @@ export class AudioEngine {
     this.master.connect(this.analyser);
     this.analyser.connect(ctx.destination);
 
-    this.sync(store.getSnapshot());
+    this.lastState = store.getSnapshot();
+    this.prevMicSelected = micAux2Active(this.lastState) === 'mic';
+    this.sync(this.lastState);
     this.unsubscribe = store.subscribe((next) => this.sync(next));
   }
 
@@ -110,6 +116,7 @@ export class AudioEngine {
 
   /** Push the panel state's routing + fader gains (post-Fade) onto the graph. */
   private sync(state: PanelState): void {
+    this.lastState = state;
     const mix = programFadeSourceMix(state);
     for (const slot of SLOTS) this.ramp(this.gSource.get(slot)!.gain, mix.slots[slot]);
     this.ramp(this.gAux1.gain, mix.aux1);
@@ -118,7 +125,13 @@ export class AudioEngine {
     this.ramp(this.gMicSelect.gain, active === 'mic' ? 1 : 0);
     this.ramp(this.gAux2Select.gain, active === 'aux2' ? 1 : 0);
     this.ramp(this.master.gain, mix.master);
+    // Flipping the switch back to Mic is a fresh operator decision: un-park a denial so
+    // the next demand re-prompts (the documented retry path).
+    const micSelected = active === 'mic';
+    if (micSelected && !this.prevMicSelected) this.retryMic();
+    this.prevMicSelected = micSelected;
     this.maybeAcquireMic(state);
+    this.maybeReleaseMic(state);
   }
 
   /**
@@ -146,21 +159,34 @@ export class AudioEngine {
     }
   }
 
-  /** Demand-driven mic acquisition; denial parks sticky until retryMic(). */
+  /**
+   * Demand-driven mic acquisition; denial parks until retryMic() (or the MIC/AUX2 switch
+   * is flipped back to Mic). Gated on the element taps being attached — that only happens
+   * inside the resume() user gesture, so BOOT NEVER PROMPTS: a restored field preset with
+   * an open MIC fader waits for the first pointer/key press before getUserMedia fires.
+   */
   private maybeAcquireMic(state: PanelState): void {
-    if (this.micState !== 'idle' || !this.inputs || !micCaptureWanted(state)) return;
+    if (this.micState !== 'idle' || !this.inputs || !this.inputsAttached || !micCaptureWanted(state)) return;
     this.micState = 'pending';
     this.inputs.acquireMic().then(
       (stream) => {
+        if (this.disposed || !micCaptureWanted(this.lastState)) {
+          // Landed after dispose or after demand dropped: release immediately.
+          for (const track of stream.getTracks()) track.stop();
+          this.micState = 'idle';
+          return;
+        }
         this.micStream = stream;
-        const head = this.ctx.createMediaStreamSource(stream);
-        head.connect(this.gMicSelect);
+        this.micHead = this.ctx.createMediaStreamSource(stream);
+        this.micHead.connect(this.gMicSelect);
         this.micState = 'live';
         const track = stream.getAudioTracks()[0];
         if (track) {
           track.addEventListener('ended', () => {
             this.micState = 'idle'; // device unplugged: re-acquire on the next demand
             this.micStream = null;
+            this.micHead?.disconnect();
+            this.micHead = null;
           });
         }
       },
@@ -168,6 +194,16 @@ export class AudioEngine {
         this.micState = 'denied';
       },
     );
+  }
+
+  /** Demand-driven release: the switch off Mic (or the fader closing) stops the capture. */
+  private maybeReleaseMic(state: PanelState): void {
+    if (this.micState !== 'live' || micCaptureWanted(state)) return;
+    if (this.micStream) for (const track of this.micStream.getTracks()) track.stop();
+    this.micStream = null;
+    this.micHead?.disconnect();
+    this.micHead = null;
+    this.micState = 'idle';
   }
 
   /** Reserved head swap for camera-backed slots (MediaStream audio bypasses element taps). */
@@ -201,13 +237,16 @@ export class AudioEngine {
     return Math.sqrt(sum / this.envBuf.length);
   }
 
-  /** Resume the context from a user gesture, then attach the element taps (gesture context). */
+  /** Resume the context from a user gesture, then attach the element taps (gesture context).
+   *  Mic demand is re-checked here too — acquisition is gated on this gesture having happened. */
   async resume(): Promise<void> {
     if (this.ctx.state !== 'running') await this.ctx.resume();
     this.attachInputs();
+    this.maybeAcquireMic(this.lastState);
   }
 
   dispose(): void {
+    this.disposed = true;
     this.unsubscribe();
     if (this.micStream) for (const track of this.micStream.getTracks()) track.stop();
     // Re-mute tapped elements: their audio would otherwise stay routed into a closed graph.

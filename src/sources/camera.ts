@@ -18,6 +18,9 @@ export interface CameraOpenResult {
 export class CameraFeedController {
   private current: MediaStream | null = null;
   private endedCb: ((deviceId: string) => void) | null = null;
+  /** Generation counter: every open()/close() invalidates in-flight opens, so the losing
+   *  side of a race stops its own tracks instead of leaking a live capture. */
+  private generation = 0;
 
   constructor(private readonly media: MediaDevices | undefined = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined) {}
 
@@ -26,18 +29,26 @@ export class CameraFeedController {
   }
 
   /**
-   * Permission-gated — call ONLY from a user-gesture handler. Opens the camera (a specific
-   * device when given; video-only constraints so the mic prompt is never bundled), sets
-   * element.srcObject, plays, and resolves with the running stream. Rejects with the
-   * DOMException (NotAllowedError / NotFoundError / OverconstrainedError).
+   * Permission-gated — call ONLY from a user-gesture handler. Acquires the NEW stream
+   * FIRST and only then swaps out the previous one, so a denied/failed request leaves the
+   * feed's current content untouched (nothing is torn down up front). Concurrent opens and
+   * an intervening close() cancel the in-flight request: its stream is stopped and the
+   * promise rejects with an AbortError the caller treats as a silent no-op. Rejects with
+   * the DOMException (NotAllowedError / NotFoundError / OverconstrainedError) otherwise.
    */
   async open(video: HTMLVideoElement, deviceId?: string): Promise<CameraOpenResult> {
     if (!this.media) throw new DOMException('mediaDevices unavailable', 'NotFoundError');
-    this.close(video); // device switch: release the previous stream first
+    const gen = ++this.generation;
     const stream = await this.media.getUserMedia({
       video: deviceId ? { deviceId: { exact: deviceId } } : true,
       audio: false,
     });
+    if (gen !== this.generation) {
+      // A newer open() or a close() superseded this request while the prompt was up.
+      for (const track of stream.getTracks()) track.stop();
+      throw new DOMException('camera request superseded', 'AbortError');
+    }
+    this.stopCurrent();
     this.current = stream;
     const track = stream.getVideoTracks()[0];
     const settledId = track?.getSettings().deviceId ?? deviceId ?? 'camera';
@@ -52,13 +63,18 @@ export class CameraFeedController {
     return { stream, deviceId: settledId, label: track?.label ?? '' };
   }
 
-  /** Stop every track + detach srcObject (camera light off). stop() fires no 'ended', so
-   *  deliberate switches never read as device loss. Safe when idle. */
-  close(video: HTMLVideoElement): void {
+  private stopCurrent(): void {
     if (this.current) {
       for (const track of this.current.getTracks()) track.stop();
       this.current = null;
     }
+  }
+
+  /** Stop every track + detach srcObject (camera light off), and cancel any in-flight
+   *  open(). stop() fires no 'ended', so deliberate switches never read as device loss. */
+  close(video: HTMLVideoElement): void {
+    this.generation++;
+    this.stopCurrent();
     if (video.srcObject) video.srcObject = null;
   }
 

@@ -47,6 +47,27 @@ function normalizeBank(raw: (PanelSnapshot | null)[] | null): (PanelSnapshot | n
   return out;
 }
 
+/**
+ * Strip still-blob references from an imported bank: still pixels do NOT travel in preset
+ * files, and the slot-scoped keys ('still:N') are not machine-unique — a kept reference
+ * would pair an imported slot with whatever unrelated LOCAL blob shares the key. Imported
+ * banks therefore always recall through the fresh-grab fallback.
+ */
+function stripStillRefs(slots: (PanelSnapshot | null)[]): (PanelSnapshot | null)[] {
+  return slots.map((slot) =>
+    slot && slot.positioner.stillId != null
+      ? { ...slot, positioner: { ...slot.positioner, stillId: null } }
+      : slot,
+  );
+}
+
+/** Minimal structural gate for an imported field preset (a malformed one must never persist). */
+function looksLikePanelSnapshot(data: unknown): boolean {
+  if (data === null || typeof data !== 'object') return false;
+  const p = data as Partial<PanelSnapshot>;
+  return typeof p.busA === 'object' && typeof p.transition === 'object' && typeof p.positioner === 'object';
+}
+
 export function createPersistence(backend: StorageBackend): Persistence {
   const self: Persistence = {
     loadSettings() {
@@ -80,7 +101,14 @@ export function createPersistence(backend: StorageBackend): Persistence {
       const savedPanel: PanelState | null = snap
         ? ({ ...snap, memory: freshMemory(), specialMode: freshSpecialMode() } as PanelState)
         : null;
-      const base = bootState(settings.reset, savedPanel);
+      // Crash-proof boot (the readEnvelope philosophy): a malformed saved snapshot must
+      // never brick start-up — fall back to the factory preset instead.
+      let base: PanelState;
+      try {
+        base = bootState(settings.reset, savedPanel);
+      } catch {
+        base = bootState(settings.reset, null);
+      }
       // The bank is layered on regardless of Reset policy, so memories survive a normal power
       // cycle even under Reset ON's factory restore; Special Mode always boots off.
       return { ...base, memory: { ...EMPTY_MEMORY, slots: self.loadBank() }, specialMode: freshSpecialMode() };
@@ -114,10 +142,17 @@ export function createPersistence(backend: StorageBackend): Persistence {
       const env = parsed as { schemaVersion?: unknown; target?: unknown; data?: unknown };
       if (typeof env.schemaVersion !== 'number') return { ok: false, reason: 'corrupt' };
       if (env.schemaVersion !== SCHEMA_VERSION) return { ok: false, reason: 'unsupported-version' };
-      if (env.target === 'bank') self.saveBank(normalizeBank((env.data as (PanelSnapshot | null)[]) ?? null));
-      else if (env.target === 'settings') self.saveSettings(env.data as Settings);
-      else if (env.target === 'fieldPreset') writeEnvelope(backend, KEY_FIELD_PRESET, env.data);
-      else return { ok: false, reason: 'corrupt' };
+      if (env.target === 'bank') {
+        if (env.data !== null && !Array.isArray(env.data)) return { ok: false, reason: 'corrupt' };
+        self.saveBank(stripStillRefs(normalizeBank((env.data as (PanelSnapshot | null)[]) ?? null)));
+      } else if (env.target === 'settings') {
+        self.saveSettings(env.data as Settings); // loadSettings re-validates on every read
+      } else if (env.target === 'fieldPreset') {
+        if (!looksLikePanelSnapshot(env.data)) return { ok: false, reason: 'corrupt' };
+        writeEnvelope(backend, KEY_FIELD_PRESET, env.data);
+      } else {
+        return { ok: false, reason: 'corrupt' };
+      }
       return { ok: true, target: env.target };
     },
   };

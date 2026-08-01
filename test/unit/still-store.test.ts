@@ -5,7 +5,7 @@ import { FACTORY_PRESET } from '../../src/state/state.js';
 import type { PanelState } from '../../src/state/state.js';
 import { MemoryBlobBackend, MemoryStorageBackend } from '../../src/persistence/backend.js';
 import { createPersistence } from '../../src/persistence/persistence.js';
-import { createStillStore } from '../../src/persistence/still-store.js';
+import { bankTouchesStills, createStillStore } from '../../src/persistence/still-store.js';
 import type { GpuStillPort } from '../../src/persistence/still-store.js';
 import { stillKeyForSlot } from '../../src/core/event-memory.js';
 import { alignedBytesPerRow, packTightRows } from '../../src/gpu/readback.js';
@@ -218,4 +218,55 @@ test('MemoryBlobBackend round-trips asynchronously and isolates per instance', a
   assert.deepEqual(await a.keys(), ['k']);
   await a.remove('k');
   assert.equal(await a.get('k'), null);
+});
+
+// --- review-fix regressions ---------------------------------------------------
+
+test('a LOAD_BANK import while a grab is live NEVER overwrites stored blobs (mint guard)', async () => {
+  const { journal, blobs, stills } = harness();
+  // A stored still exists in the blob tier for slot 5.
+  const original: StillRecord = {
+    width: 4, height: 2, pixels: new ArrayBuffer(32),
+    grab: { cu: 0.1, cv: 0.9, half: 0.25, compressed: true },
+  };
+  await blobs.set(stillKeyForSlot(5), original);
+  // The imported bank carries a slot-keyed stillId... (an exported bank round-trip)
+  const [, withStill] = storedStillStates();
+  const importedSlots = withStill.memory.slots;
+  // ...and the operator has an UNSAVED grab on screen (sceneGrabber true, live stillId null).
+  let live = structuredClone(FACTORY_PRESET);
+  live = reduce(live, { type: 'SET_TRANSITION_TYPE', transition: 'wipe' });
+  live = reduce(live, { type: 'PRESS_WIPE_FAMILY', family: 'square' });
+  live = reduce(live, { type: 'PRESS_POSITIONER' });
+  live = reduce(live, { type: 'PRESS_SCENE_GRABBER' });
+  assert.equal(live.positioner.stillId, null);
+  const next = reduce(live, { type: 'LOAD_BANK', slots: importedSlots });
+  journal.length = 0;
+  await stills.commitBank(next, live);
+  assert.equal(journal.filter((e) => e.indexOf('blob:set:') === 0).length, 0, 'no blob writes on import');
+  assert.deepEqual(await blobs.get(stillKeyForSlot(5)), original, 'the stored blob survives');
+});
+
+test('sweepOrphans keeps blobs referenced by an extra root (the restored live panel)', async () => {
+  const { blobs, stills } = harness();
+  const rec: StillRecord = { width: 1, height: 1, pixels: new ArrayBuffer(4), grab: { cu: 0, cv: 0, half: 0.1, compressed: false } };
+  await blobs.set(stillKeyForSlot(5), rec);
+  await stills.sweepOrphans([null, null, null, null, null, null, null, null], [stillKeyForSlot(5)]);
+  assert.notEqual(await blobs.get(stillKeyForSlot(5)), null);
+  await stills.sweepOrphans([null, null, null, null, null, null, null, null], [null]);
+  assert.equal(await blobs.get(stillKeyForSlot(5)), null);
+});
+
+test('bankTouchesStills routes still-less changes to the synchronous path', () => {
+  let plain = structuredClone(FACTORY_PRESET);
+  plain = reduce(plain, { type: 'PRESS_MEMORY' });
+  const plainStored = reduce(plain, { type: 'PRESS_EVENT_NO', button: 1, shift: false });
+  assert.equal(bankTouchesStills(plainStored, plain), false);
+  const [prev, withStill] = storedStillStates();
+  assert.equal(bankTouchesStills(withStill, prev), true);
+  // Overwriting a still-carrying slot with a plain snapshot still touches the tier (removal).
+  let release = reduce(withStill, { type: 'PRESS_SCENE_GRABBER' });
+  release = reduce(release, { type: 'PRESS_MEMORY' });
+  const overwritten = reduce(release, { type: 'PRESS_EVENT_NO', button: 1, shift: true });
+  assert.equal(bankTouchesStills(overwritten, release), true);
 });

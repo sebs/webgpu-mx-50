@@ -73,3 +73,38 @@ test('an imported bank goes live through LOAD_BANK and the subscriber re-mirrors
   assert.deepEqual(store.getSnapshot().memory.slots, a.loadBank());
   assert.deepEqual(b.loadBank(), a.loadBank()); // idempotent re-save, storage not clobbered
 });
+
+// --- review-fix regressions ---------------------------------------------------
+
+test('a bank import strips still references (stills do not travel; keys are not machine-unique)', () => {
+  const backendA = new MemoryStorageBackend();
+  const a = createPersistence(backendA);
+  const snap = panelSnapshot(structuredClone(FACTORY_PRESET));
+  const withStill = structuredClone(snap);
+  withStill.positioner = { ...withStill.positioner, sceneGrabber: true, stillId: 'still:1' };
+  a.saveBank([withStill, null, null, null, null, null, null, null]);
+  const b = createPersistence(new MemoryStorageBackend());
+  assert.deepEqual(b.importPreset(a.exportPreset({ kind: 'bank' })), { ok: true, target: 'bank' });
+  assert.equal(b.loadBank()[0]!.positioner.stillId, null);
+  assert.equal(b.loadBank()[0]!.positioner.sceneGrabber, true); // only the blob ref is stripped
+});
+
+test('a malformed fieldPreset payload is rejected as corrupt, and boot survives a bad snapshot', () => {
+  const b = createPersistence(new MemoryStorageBackend());
+  const bad = JSON.stringify({ schemaVersion: 1, target: 'fieldPreset', data: 42 });
+  assert.deepEqual(b.importPreset(bad), { ok: false, reason: 'corrupt' });
+  assert.equal(b.readFieldPreset(), null);
+  // Defence in depth: even a directly-persisted garbage snapshot must not brick boot.
+  const backend = new MemoryStorageBackend();
+  const c = createPersistence(backend);
+  c.saveSettings({ reset: 'off' });
+  backend.set('mx50:fieldPreset', JSON.stringify({ schemaVersion: 1, data: { busA: {}, transition: {}, positioner: {} } }));
+  const booted = c.restoreOnBoot(); // malformed but envelope-valid → factory fallback, no throw
+  assert.equal(booted.programOut, FACTORY_PRESET.programOut);
+});
+
+test('a non-array bank payload is rejected as corrupt', () => {
+  const b = createPersistence(new MemoryStorageBackend());
+  const bad = JSON.stringify({ schemaVersion: 1, target: 'bank', data: { not: 'an array' } });
+  assert.deepEqual(b.importPreset(bad), { ok: false, reason: 'corrupt' });
+});

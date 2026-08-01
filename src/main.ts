@@ -102,17 +102,32 @@ function wireFeedBindings(
   // Boot-bind the domain registry to reality: every feed starts on its procedural pattern.
   ([1, 2, 3, 4] as SourceSlot[]).forEach((slot) => engine.bindings.bind(slot, 'generated', `pattern:${slot}`));
 
+  // Per-slot binding generation: an image decode that resolves AFTER a newer provider
+  // choice is stale and must not install (it would put the still on air under the
+  // newer provider's label).
+  const bindGen = new Map<SourceSlot, number>();
+
   feeds.addEventListener('mx-feed-bound', (e) => {
     const detail = (e as CustomEvent<FeedBoundDetail>).detail;
     const slot = (detail.index + 1) as SourceSlot;
+    const gen = (bindGen.get(slot) ?? 0) + 1;
+    bindGen.set(slot, gen);
     engine.bindings.bind(slot, detail.kind, detail.providerId);
     audio?.attachSlotStream(slot, detail.kind === 'camera' ? (detail.stream ?? null) : null);
     if (detail.kind === 'image' && detail.file) {
       void createImageBitmap(detail.file).then(
         async (bitmap) => {
+          if (bindGen.get(slot) !== gen) {
+            bitmap.close(); // superseded while decoding: drop the stale still
+            return;
+          }
           const previous = registry.get(slot);
           const image = new ImageSource(device, bitmap);
           await image.acquire();
+          if (bindGen.get(slot) !== gen) {
+            image.release(); // superseded during the GPU upload
+            return;
+          }
           if (previous instanceof ImageSource) previous.release();
           registry.set(slot, image);
         },
@@ -178,9 +193,11 @@ async function boot(): Promise<void> {
   // Two-tier still persistence (ADR-0015): blob-first commits, recall reloads, boot sweep.
   const stills = createStillStore(blobs, persistence, renderer);
   attachPersistence(engine.store, persistence, stills);
-  void stills.sweepOrphans(engine.store.getSnapshot().memory.slots);
-  const p0 = engine.store.getSnapshot().positioner;
-  if (p0.sceneGrabber && p0.stillId != null) void stills.recallStill(p0.stillId);
+  const bootSnap = engine.store.getSnapshot();
+  void stills.sweepOrphans(bootSnap.memory.slots, [bootSnap.positioner.stillId]);
+  if (bootSnap.positioner.sceneGrabber && bootSnap.positioner.stillId != null) {
+    void stills.recallStill(bootSnap.positioner.stillId);
+  }
 
   // The operator console (ADR-0013, styled per docs/STYLEGUIDE.md), bound to the single
   // store. The tick provider lets AUTO TAKE / AUTO FADE stamp their press (ADR-0012).
@@ -210,8 +227,28 @@ async function boot(): Promise<void> {
   const coalescer = new SignalCoalescer();
   new KeyboardAdapter(bindings, coalescer).attach(window);
   const gamepad = new GamepadAdapter(bindings, coalescer);
-  if ('requestMIDIAccess' in navigator) void new MidiAdapter(bindings, coalescer).start();
-  if ('serial' in navigator) void new SerialGpiAdapter(bindings, coalescer).start();
+  if ('requestMIDIAccess' in navigator) {
+    new MidiAdapter(bindings, coalescer).start().catch(() => undefined); // permission denied → dormant
+  }
+  if ('serial' in navigator) {
+    // start() only re-attaches ALREADY-GRANTED ports (no prompt); the port chooser is
+    // gesture-gated behind the header's GPI button (requestPort needs a user gesture).
+    const gpi = new SerialGpiAdapter(bindings, coalescer);
+    void gpi.start();
+    const stat = document.querySelector('.mx-head .stat');
+    if (stat) {
+      const gpiBtn = document.createElement('button');
+      gpiBtn.type = 'button';
+      gpiBtn.className = 'mx-ghostbtn';
+      gpiBtn.textContent = 'GPI…';
+      gpiBtn.title = 'Connect a Web Serial GPI device (foot switch fires Auto Take)';
+      gpi.onPorts = (count) => {
+        gpiBtn.textContent = count > 0 ? `GPI ×${count}` : 'GPI…';
+      };
+      gpiBtn.addEventListener('click', () => void gpi.requestAndAttach());
+      stat.appendChild(gpiBtn);
+    }
+  }
 
   // Audio engine (ADR-0010): the Web Audio graph, driven live by the store, tapping the
   // feed videos for real per-source audio and getUserMedia for the mic (demand-driven,
@@ -225,7 +262,7 @@ async function boot(): Promise<void> {
       acquireMic: () => navigator.mediaDevices.getUserMedia({ audio: true }),
     });
   } catch {
-    setStatus('audio unavailable');
+    // Reported in the final ready status — boot continues video-only.
   }
   const tap = audio ? new AvSynchroTap(audio) : null;
   const resumeAudio = (): void => {
@@ -313,7 +350,7 @@ async function boot(): Promise<void> {
     }
   });
   loop.start();
-  setStatus('ready');
+  setStatus(audio ? 'ready' : 'ready · audio unavailable');
 }
 
 boot().catch((error) => showCapabilityMessage(String(error)));

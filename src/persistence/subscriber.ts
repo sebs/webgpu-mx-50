@@ -5,6 +5,7 @@
 // blob-first two-tier commit, and a recall that rehydrates a still reference triggers the
 // blob→GPU reload. Browser-wired from main.ts.
 
+import { bankTouchesStills } from './still-store.js';
 import type { PanelStore, Unsubscribe } from '../state/store.js';
 import type { Persistence } from './persistence.js';
 import type { StillStore } from './still-store.js';
@@ -17,7 +18,10 @@ export function attachPersistence(store: PanelStore, persistence: Persistence, s
   return store.subscribe((next, prev) => {
     if (next.system.reset !== prev.system.reset) persistence.saveSettings({ reset: next.system.reset });
     if (next.memory.slots !== prev.memory.slots) {
-      if (stills) void stills.commitBank(next, prev);
+      // Still-less changes are mirrored SYNCHRONOUSLY (no async window in which a tab
+      // close loses a plain store); only still-involved changes take the queued
+      // blob-first two-tier path.
+      if (stills && bankTouchesStills(next, prev)) void stills.commitBank(next, prev);
       else persistence.saveBank(next.memory.slots);
     } else if (
       // Recall discriminator: recallSlot preserves the slots array identity while a store
