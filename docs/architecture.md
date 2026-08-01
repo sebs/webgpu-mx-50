@@ -233,7 +233,7 @@ flowchart TB
     SOURCES -->|per-tick textures| GRAPH
     SOURCES -->|audio streams| AGRAPH
     STORE -->|gains / routing| AGRAPH
-    AGRAPH -->|A/V Synchro trigger| STORE
+    AGRAPH -->|A/V Synchro pulsed set, per frame| PASSES
     CLOCK -.shared lever/transition.-> AGRAPH
 
     TEST -.->|headless| STORE

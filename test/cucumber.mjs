@@ -323,7 +323,7 @@ export default {
     'Each eligible effect can be driven by A/V Synchro',
     'A/V Synchro cannot be combined with Trail',
     'Silence holds every armed effect off',
-    // fade-control (18; excludes the two selective VIDEO/DSK-only @integration pixel scenarios)
+    // fade-control (20; all — the selective VIDEO/DSK-only scenarios assert dskTitleOpacity)
     'The fade section is disabled when no enable button is lit',
     'Enabling a fade element means it participates in the fade',
     'Multiple enabled elements fade together from one lever move',
@@ -335,6 +335,8 @@ export default {
     'Fading to matte, white or black silences the program audio',
     'Fading to a bus keeps that bus audio plus the aux inputs',
     'Fading everything to B melts the composite back to clean B video and audio',
+    'Fading VIDEO only leaves the DSK title on screen',
+    'Fading DSK only removes the title while the picture stays',
     'The TRANSITION control sets the Auto Fade duration in 2-frame steps',
     'The TRANSITION control is quantised to 2-frame steps within 0 to 510',
     'AUTO FADE runs the fade automatically over the transition time',
@@ -372,13 +374,15 @@ export default {
     'Holding MEMORY and SHIFT through a power cycle clears all eight memories',
     'A normal power cycle does not clear the memories',
     'Stored memories persist across a reload',
-    // special-modes (16; excludes 2 compressed-image-pixel scenarios)
+    // special-modes (18; all — the two picture scenarios assert the pure macro geometry)
     'Entering Special Mode',
     'Selecting a macro with a plain Event button',
     'Selecting a high-numbered macro requires SHIFT',
     'Exiting Special Mode',
     'Arming each of the eight macros',
     'Macro transition character',
+    'Stream corner is chosen with the Positioner Joystick',
+    'Flip and Shutter reveal the Matte colour',
     'Shutter runs a horizontal split from B-bus to the Matte colour',
     'Shutter becomes a Circle Wipe variant when Square Wipe is active',
     'Shutter requires the lever at B before starting',
@@ -411,6 +415,8 @@ export default {
     'Border outlines the mosaic censor block',
     'Reverse and Mono highlight the spotlight region further',
     'The spotlight square resizes with the wipe lever',
+    'After Image leaves motion ghosts behind moving subjects',
+    'Lever position and Strobe TIME control the after-image strength',
     'A/V Synchro pulses the after image in time with the music',
     'Picture-in-Picture insets a compressed B picture over the A picture',
     'The wipe lever sets the size of the PiP inset',

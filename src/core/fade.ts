@@ -26,6 +26,17 @@ export function videoFadeAmount(fade: FadeState): number {
   return elementFadeAmount(fade, 'video');
 }
 
+/**
+ * The key-mask opacity the DSK keys the title with after the Fade stage's DSK element:
+ * 1 − elementFadeAmount(fade, 'dsk') while the DSK is on; 0 when the DSK itself is off
+ * (no title exists to fade). 1 = title fully on screen, 0 = title gone (reference §11
+ * selective fading: VIDEO-only leaves the title; DSK-only removes only the title).
+ */
+export function dskTitleOpacity(state: PanelState): number {
+  if (!state.dsk.on) return 0;
+  return 1 - elementFadeAmount(state.fade, 'dsk');
+}
+
 /** What the video fades to. A/B are the UNEFFECTED bus (effects + Mix/Wipe bypassed, §11). */
 export type FadeVideoResult =
   | { kind: 'colour'; rgb: [number, number, number] }

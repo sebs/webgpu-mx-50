@@ -15,6 +15,7 @@ import {
   fadeEnableLed,
   programFadeAudioMix,
   programFadeAudible,
+  dskTitleOpacity,
   HEADPHONE_MONITOR_BYPASSES_FADE,
 } from '../../src/core/fade.js';
 
@@ -109,4 +110,44 @@ test('fading to a bus keeps that bus + aux and drops the other bus at OUT', () =
 
 test('the headphone monitor is documented as pre-fade (never attenuated)', () => {
   assert.equal(HEADPHONE_MONITOR_BYPASSES_FADE, true);
+});
+
+// --- selective fading: dskTitleOpacity (reference §11) ----------------------
+
+const withDskOn = (partial: Partial<FadeState>): PanelState => {
+  const s = withFade(partial);
+  s.dsk = { ...s.dsk, on: true };
+  return s;
+};
+
+test('dskTitleOpacity is full during a video-only fade (the title survives)', () => {
+  const s = withDskOn({ video: true, dsk: false, lever: 1 });
+  assert.equal(dskTitleOpacity(s), 1);
+  assert.equal(videoFadeAmount(s.fade), 1);
+});
+
+test('dskTitleOpacity tracks 1 - lever when the DSK enable is lit', () => {
+  const s = withDskOn({ video: false, dsk: true, lever: 0.25 });
+  assert.equal(dskTitleOpacity(s), 0.75);
+  assert.equal(videoFadeAmount(s.fade), 0); // picture untouched in a DSK-only fade
+});
+
+test('dskTitleOpacity reaches 0 at full OUT with the DSK enable lit', () => {
+  assert.equal(dskTitleOpacity(withDskOn({ dsk: true, lever: 1 })), 0);
+});
+
+test('dskTitleOpacity is 0 whenever the DSK itself is off', () => {
+  assert.equal(dskTitleOpacity(withFade({ dsk: true, lever: 0.5 })), 0);
+  assert.equal(dskTitleOpacity(withFade({ dsk: true, lever: 0 })), 0);
+});
+
+test('video+dsk both lit at full OUT to a bus target: everything reaches the target', () => {
+  const s = withDskOn({ video: true, dsk: true, lever: 1, target: 'B' });
+  assert.equal(videoFadeAmount(s.fade), 1);
+  assert.equal(dskTitleOpacity(s), 0);
+  assert.equal(fadeVideoTarget(s).kind, 'bus');
+});
+
+test('the DSK enable alone still marks the fade section active', () => {
+  assert.equal(isFading(withFade({ dsk: true, lever: 0.5 }).fade), true);
 });

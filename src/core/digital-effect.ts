@@ -65,6 +65,64 @@ export function multiTilesPerAxis(count: number): number {
 /** Trail is capped at 16 progressively-placed copies (reference §8.8). */
 export const TRAIL_MAX_COPIES = 16;
 
+// --- Trail copy geometry (reference §8.8, ADR-0007) -------------------------
+// The pure math the trail accumulator (gpu/trail.ts) and the specs both consume:
+// a compressed live lead anchored at the joystick-chosen upper corner, trailing
+// progressively larger frozen copies that age out as new ones are baked.
+
+/** A copy rectangle in UV space (origin top-left, y down), consumed by gpu/trail.ts. */
+export interface TrailRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export type TrailCorner = DigitalEffectState['trailCorner'];
+
+/** The most-compressed (live lead) size, per axis, once the shrink completes (reference §8.8). */
+export const TRAIL_MIN_SCALE = 0.25;
+/** A copy's weight after TRAIL_MAX_COPIES further spawns — effectively invisible ("dropped"). */
+export const TRAIL_AGE_FLOOR = 1 / 32;
+/** Per-spawn accumulator decay so a copy hits TRAIL_AGE_FLOOR after exactly 16 spawns. */
+export const TRAIL_DECAY = Math.pow(TRAIL_AGE_FLOOR, 1 / TRAIL_MAX_COPIES);
+/** Ghost translucency of a freshly baked copy (the decaying trail shows through slightly). */
+export const TRAIL_BAKE_OPACITY = 0.8;
+
+/** Shrink-sequence step for a spawn counter: advances 0..15 then holds (spawning continues). */
+export function trailStep(spawnCount: number): number {
+  const cap = TRAIL_MAX_COPIES - 1;
+  const n = Math.floor(spawnCount);
+  return n < 0 ? 0 : n > cap ? cap : n;
+}
+
+/** Copy scale at step k: k=0 → 1.0 (full frame), k=15 → TRAIL_MIN_SCALE, linear between. */
+export function trailScale(step: number): number {
+  const t = trailStep(step) / (TRAIL_MAX_COPIES - 1);
+  return 1 - t * (1 - TRAIL_MIN_SCALE);
+}
+
+/**
+ * Corner-anchored square rect of the copy at step k. Upper corners: y = 0 always;
+ * upper-left anchors x = 0, upper-right anchors x + width = 1. Larger (older) rects nest
+ * the smaller ones, so the series "enlarges away from the corner".
+ */
+export function trailCopyRect(step: number, corner: TrailCorner): TrailRect {
+  const s = trailScale(step);
+  return { x: corner === 'upper-right' ? 1 - s : 0, y: 0, width: s, height: s };
+}
+
+/** Copies on screen for a spawn counter — capped at TRAIL_MAX_COPIES (reference §8.8). */
+export function trailVisibleCopies(spawnCount: number): number {
+  const n = Math.floor(spawnCount);
+  return n < 0 ? 0 : n > TRAIL_MAX_COPIES ? TRAIL_MAX_COPIES : n;
+}
+
+/** Remaining weight of a copy that is `age` spawns old. */
+export function trailCopyWeight(age: number): number {
+  return Math.pow(TRAIL_DECAY, age < 0 ? 0 : age);
+}
+
 // TIME interval endpoints in seconds (reference §8.6–§8.8).
 export const STROBE_MIN = 0.03;
 export const STROBE_MAX = 2.1;

@@ -5,11 +5,23 @@
 
 import { WORKING_FORMAT } from '../constants.js';
 import { busEffectWGSL } from './shaders/bus-effect.wgsl.js';
+import { TrailPass } from './trail.js';
 import { ccActive, joystickActive } from '../core/colour-correct.js';
-import { effectActiveOn, freezeActiveOn, intervalTicks, multiTilesPerAxis, strobeInterval } from '../core/digital-effect.js';
+import { freezeActiveOn, intervalTicks, multiTilesPerAxis, strobeInterval, trailInterval } from '../core/digital-effect.js';
+import {
+  IDLE_AV_STROBE_HOLD,
+  avSynchroPulsedOn,
+  effectiveFilterOn,
+  effectiveStillOn,
+  stepAvSynchroStrobe,
+} from '../core/av-synchro.js';
+import type { AvSynchroStrobeHold, AvSynchroStrobeStep } from '../core/av-synchro.js';
 import type { Size } from '../core/types.js';
 import type { BusId } from '../core/types.js';
-import type { PanelState } from '../state/state.js';
+import type { AvSynchroEffect, PanelState } from '../state/state.js';
+
+/** Shared empty pulsed set — avoids a per-frame allocation when A/V Synchro is disarmed. */
+export const NO_PULSE: readonly AvSynchroEffect[] = [];
 
 export class BusProcessor {
   private readonly pipeline: GPURenderPipeline;
@@ -20,6 +32,9 @@ export class BusProcessor {
   private readonly freeze: GPUTexture;
   private captured = false;
   private lastStrobeTick = Number.NEGATIVE_INFINITY;
+  private avStrobeHold: AvSynchroStrobeHold = IDLE_AV_STROBE_HOLD;
+  /** The Trail frame-memory accumulator (reference §8.8, ADR-0007). */
+  private readonly trail: TrailPass;
   private readonly scratch = new Float32Array(16);
 
   constructor(
@@ -45,14 +60,22 @@ export class BusProcessor {
       format: WORKING_FORMAT,
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
+    this.trail = new TrailPass(device, size);
   }
 
   /**
-   * Apply this bus's colour correction + active filters to `sourceTex`, then hold the
-   * frame if Still/Strobe is engaged (ADR-0007). Multi/Trail GPU is deferred; they render
-   * live for now. Returns the frame to composite for this bus.
+   * Apply this bus's colour correction + active filters to `sourceTex`, hold the frame if
+   * Still/Strobe is engaged or A/V Synchro is pulsing a freeze (ADR-0007, reference §8.9),
+   * then accumulate the Trail (reference §8.8). The filter flags are EFFECTIVE flags —
+   * latched ON or pulsed this frame (core/av-synchro.ts). Returns the frame to composite.
    */
-  render(sourceTex: GPUTexture, state: PanelState, bus: BusId, tick: number): GPUTexture {
+  render(
+    sourceTex: GPUTexture,
+    state: PanelState,
+    bus: BusId,
+    tick: number,
+    pulsed: readonly AvSynchroEffect[] = NO_PULSE,
+  ): GPUTexture {
     const { device } = this;
     const cc = bus === 'A' ? state.busA.colourCorrect : state.busB.colourCorrect;
     const de = state.digitalEffect;
@@ -64,10 +87,10 @@ export class BusProcessor {
     s[4] = cc.chroma;
     s[5] = cc.joystickX;
     s[6] = cc.joystickY;
-    s[7] = effectActiveOn(de, bus, 'nega') ? 1 : 0;
-    s[8] = effectActiveOn(de, bus, 'mosaic') ? 1 : 0;
-    s[9] = effectActiveOn(de, bus, 'mono') ? 1 : 0;
-    s[10] = effectActiveOn(de, bus, 'paint') ? 1 : 0;
+    s[7] = effectiveFilterOn(de, bus, 'nega', pulsed) ? 1 : 0;
+    s[8] = effectiveFilterOn(de, bus, 'mosaic', pulsed) ? 1 : 0;
+    s[9] = effectiveFilterOn(de, bus, 'mono', pulsed) ? 1 : 0;
+    s[10] = effectiveFilterOn(de, bus, 'paint', pulsed) ? 1 : 0;
     s[11] = de.mosaicSize;
     s[12] = de.paintLevel;
     s[13] = de.bus === bus && de.freeze.multi > 0 ? multiTilesPerAxis(de.freeze.multi) : 1;
@@ -94,36 +117,61 @@ export class BusProcessor {
     pass.end();
     device.queue.submit([encoder.finish()]);
 
-    // Freeze family: Still holds one captured frame; Strobe re-captures on its interval
-    // (ADR-0007). Both sample the freeze texture between captures.
-    const still = freezeActiveOn(de, bus, 'still');
-    const strobe = freezeActiveOn(de, bus, 'strobe');
-    if (!still && !strobe) {
-      this.captured = false;
-      this.lastStrobeTick = Number.NEGATIVE_INFINITY;
-      return this.output;
+    // Freeze family: Still (latched or pulsed) holds one captured frame; latched Strobe
+    // re-captures on its interval; a PULSED Strobe captures on the audio trigger edge and
+    // holds for the Effect Interval Timer window (ADR-0007, reference §8.9). All sample
+    // the freeze texture between captures.
+    const stillOn = effectiveStillOn(de, bus, pulsed);
+    const strobeLatched = freezeActiveOn(de, bus, 'strobe');
+    const period = intervalTicks(strobeInterval(de.strobeTime));
+    let step: AvSynchroStrobeStep;
+    if (strobeLatched) {
+      // Latched Strobe dominates; kill any residual pulsed window.
+      this.avStrobeHold = IDLE_AV_STROBE_HOLD;
+      step = { hold: IDLE_AV_STROBE_HOLD, capture: false, holding: false };
+    } else {
+      // The stepper advances EVERY frame so pulse edge detection never desyncs.
+      step = stepAvSynchroStrobe(this.avStrobeHold, avSynchroPulsedOn(de, bus, 'strobe', pulsed), tick, period);
+      this.avStrobeHold = step.hold;
     }
 
-    let capture = false;
-    if (still) {
-      capture = !this.captured;
+    let held: GPUTexture;
+    if (!stillOn && !strobeLatched && !step.holding) {
+      this.captured = false;
+      this.lastStrobeTick = Number.NEGATIVE_INFINITY;
+      held = this.output;
     } else {
-      const period = intervalTicks(strobeInterval(de.strobeTime));
-      if (tick - this.lastStrobeTick >= period) {
-        capture = true;
-        this.lastStrobeTick = tick;
+      let capture = false;
+      if (stillOn) {
+        capture = !this.captured;
+      } else if (strobeLatched) {
+        if (tick - this.lastStrobeTick >= period) {
+          capture = true;
+          this.lastStrobeTick = tick;
+        }
+      } else {
+        capture = step.capture || !this.captured;
       }
+      if (capture) {
+        this.captured = true;
+        const copy = device.createCommandEncoder();
+        copy.copyTextureToTexture(
+          { texture: this.output },
+          { texture: this.freeze },
+          { width: this.size.width, height: this.size.height },
+        );
+        device.queue.submit([copy.finish()]);
+      }
+      held = this.freeze;
     }
-    if (capture) {
-      this.captured = true;
-      const copy = device.createCommandEncoder();
-      copy.copyTextureToTexture(
-        { texture: this.output },
-        { texture: this.freeze },
-        { width: this.size.width, height: this.size.height },
-      );
-      device.queue.submit([copy.finish()]);
+
+    // Trail (reference §8.8, ADR-0007): trails whatever the freeze family yields — live
+    // output, the Still-held frame (LED-blink case), or the Strobe-refreshed frame — with
+    // zero special cases.
+    if (!freezeActiveOn(de, bus, 'trail')) {
+      this.trail.reset();
+      return held;
     }
-    return this.freeze;
+    return this.trail.render(held, de.trailCorner, intervalTicks(trailInterval(de.trailTime)), tick);
   }
 }

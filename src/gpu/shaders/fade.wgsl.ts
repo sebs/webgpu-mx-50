@@ -1,6 +1,7 @@
-// The Fade stage (reference §11, ADR-0004 `fade` stage): the LAST pass before present. It
-// mixes the post-DSK composite toward the fade target by the video-fade amount — a flat
-// colour (matte/white/black) or the uneffected A/B bus texture. Linear light (ADR-0005).
+// The Fade stage (reference §11, ADR-0004 `fade` stage): mixes the PRE-DSK composite
+// toward the fade target by the VIDEO-element fade amount — a flat colour
+// (matte/white/black) or the uneffected A/B bus texture. Linear light (ADR-0005). The DSK
+// element fades separately, as key opacity inside the DSK pass (selective fading §11).
 // The domain (core/fade.ts) decides the target + amount; this shader realises the pixels.
 
 export const fadeWGSL = /* wgsl */ `

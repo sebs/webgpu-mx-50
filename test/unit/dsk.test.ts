@@ -13,6 +13,10 @@ import {
   dskEdgeColour,
   dskEdgeColourSelectable,
   dskKeySource,
+  dskEdgeGeometry,
+  dskEdgeGraded,
+  edgeHasBorderOrShadow,
+  DSK_EDGE_MODE,
 } from '../../src/core/dsk.js';
 import { matteIndexByName } from '../../src/core/matte.js';
 
@@ -77,4 +81,54 @@ test('dskKeySource: ext-camera passes through; a Matte bus resolves to the subst
   s = reduce(s, { type: 'ASSIGN_SOURCE', bus: 'B', source: 3 }); // substitute := 3
   s = reduce(s, { type: 'ASSIGN_SOURCE', bus: 'B', source: 'matte' });
   assert.equal(dskKeySource(s), 3);
+});
+
+// --- edge-style geometry (reference §10) ------------------------------------
+
+test('edge geometry agrees with edgeHasBorderOrShadow across the six styles', () => {
+  for (const s of DSK_EDGE_STYLES) {
+    assert.equal(dskEdgeGeometry(s).kind === 'none', !edgeHasBorderOrShadow(s), s);
+  }
+  assert.equal(dskEdgeGeometry('normal').kind, 'none');
+});
+
+test('edge geometry: wide variants exceed narrow', () => {
+  assert.ok(dskEdgeGeometry('wide-border').borderWidth > dskEdgeGeometry('narrow-border').borderWidth);
+  assert.ok(dskEdgeGeometry('narrow-border').borderWidth > 0);
+  assert.ok(dskEdgeGeometry('wide-shadow').shadowOffset[0] > dskEdgeGeometry('narrow-shadow').shadowOffset[0]);
+  assert.ok(dskEdgeGeometry('wide-shadow').shadowOffset[1] > dskEdgeGeometry('narrow-shadow').shadowOffset[1]);
+});
+
+test('borders ring, shadows offset: the unused axis is zeroed', () => {
+  for (const s of ['narrow-border', 'wide-border'] as const) {
+    const g = dskEdgeGeometry(s);
+    assert.deepEqual(g.shadowOffset, [0, 0]);
+    assert.equal(g.shadowOpacity, 0);
+  }
+  for (const s of ['narrow-shadow', 'wide-shadow', 'drop-shadow'] as const) {
+    const g = dskEdgeGeometry(s);
+    assert.equal(g.borderWidth, 0);
+    assert.ok(g.shadowOffset[0] > 0 && g.shadowOffset[1] > 0); // down-right
+  }
+});
+
+test('drop shadow is hard and detached, attached shadows are soft', () => {
+  assert.equal(dskEdgeGeometry('drop-shadow').shadowOpacity, 1);
+  assert.equal(dskEdgeGeometry('drop-shadow').kind, 'drop-shadow');
+  assert.equal(dskEdgeGeometry('narrow-shadow').shadowOpacity, 0.75);
+  assert.equal(dskEdgeGeometry('wide-shadow').shadowOpacity, 0.75);
+  assert.equal(dskEdgeGeometry('narrow-shadow').kind, 'shadow');
+});
+
+test('DSK_EDGE_MODE maps the shader enum 0..3', () => {
+  assert.deepEqual(DSK_EDGE_MODE, { none: 0, border: 1, shadow: 2, 'drop-shadow': 3 });
+  assert.equal(DSK_EDGE_MODE[dskEdgeGeometry('normal').kind], 0);
+});
+
+test('dskEdgeGraded: white fill + GRADATION only', () => {
+  const s = fresh();
+  const gradMatte = { ...s.matte, gradation: true };
+  assert.equal(dskEdgeGraded({ ...s.dsk, fill: 'white' }, gradMatte), true);
+  assert.equal(dskEdgeGraded({ ...s.dsk, fill: 'matte' }, gradMatte), false); // forced-black edge never grades
+  assert.equal(dskEdgeGraded({ ...s.dsk, fill: 'white' }, s.matte), false);
 });

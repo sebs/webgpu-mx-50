@@ -168,7 +168,10 @@ async function boot(): Promise<void> {
     // no-op: the reducer returns the same snapshot and the store skips notification.
     engine.store.dispatch({ type: 'ADVANCE_TIMELINE', tick });
     const snapshot = engine.store.getSnapshot();
-    renderer.render(snapshot, tick);
+    // A/V Synchro (§8.9): measure the envelope once and gate the bus effects with it —
+    // a transient per-frame signal, never dispatched or stored (ADR-0010).
+    const avPulsed = tap.activeEffects(snapshot.digitalEffect);
+    renderer.render(snapshot, tick, avPulsed);
     // Timecode chip on the Program monitor: the logical clock as mm:ss:ff at 60.
     if (timecode) {
       const seconds = Math.floor(tick / 60);
@@ -178,9 +181,8 @@ async function boot(): Promise<void> {
         lastTimecode = text;
       }
     }
-    // A/V Synchro (§8.9): reflect the audio-gated effects as a transient per-frame signal.
-    // Full per-frame GPU picture-gating is a deferred browser-only integration (see ROADMAP).
-    const active = tap.activeEffects(snapshot.digitalEffect).join(' ');
+    // Console LED cue for the same pulsed set (the gating itself happened in render above).
+    const active = avPulsed.join(' ');
     if (active !== lastAvSynchro) {
       controls.dataset.avSynchroActive = active;
       lastAvSynchro = active;

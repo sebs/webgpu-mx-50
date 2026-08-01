@@ -23,6 +23,7 @@ import {
   fadeEnableLed,
   programFadeAudioMix,
   programFadeAudible,
+  dskTitleOpacity,
   HEADPHONE_MONITOR_BYPASSES_FADE,
 } from '../../../src/core/fade.js';
 
@@ -227,4 +228,21 @@ Then('it completes over the remaining portion of the transition time', function 
   this.advanceFrames(60);
   assert.equal(runnerComplete(fade(this).auto), true);
   assert.equal(fade(this).lever, 1);
+});
+
+// --- Selective fading (§11): VIDEO-only leaves the title; DSK-only removes only it ---
+
+Then('the program video fades to black', function (this: MixerWorld) {
+  const s = this.snapshot();
+  assert.equal(videoFadeAmount(s.fade), 1);
+  assert.deepEqual(fadeVideoTarget(s), { kind: 'colour', rgb: [0, 0, 0] });
+});
+Then('the DSK title remains fully on screen', function (this: MixerWorld) {
+  assert.equal(dskTitleOpacity(this.snapshot()), 1);
+});
+Then('the DSK title fades off screen', function (this: MixerWorld) {
+  assert.equal(dskTitleOpacity(this.snapshot()), 0);
+});
+Then('the composite picture remains at full level', function (this: MixerWorld) {
+  assert.equal(videoFadeAmount(this.snapshot().fade), 0);
 });

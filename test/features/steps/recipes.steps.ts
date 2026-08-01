@@ -15,6 +15,7 @@ import { hasBorder, complementaryMatteName, squareVariantForShape } from '../../
 import { matteColorName } from '../../../src/core/matte.js';
 import { positionerAvailable, isStorablePip } from '../../../src/core/positioner.js';
 import { avSynchroEffectApplied, ENVELOPE_LOUD } from '../../../src/core/av-synchro.js';
+import { afterImageRecipe, afterImageLook, afterImageStrength } from '../../../src/core/after-image.js';
 
 const de = (w: MixerWorld) => w.snapshot().digitalEffect;
 const wipe = (w: MixerWorld) => w.snapshot().transition.wipe;
@@ -147,7 +148,7 @@ Then('when the lever is moved toward its full-A position the mosaic square shrin
 // Recipe 3 — After Image, A/V-Synchro slice only (S10)
 // ===========================================================================
 
-Given('an After Image is active with Strobe and MIX', function (this: MixerWorld) {
+Given(/^an After Image is active with Strobe(?: on the A-bus)? and MIX$/, function (this: MixerWorld) {
   this.dispatch({ type: 'ASSIGN_SOURCE', bus: 'A', source: 1 as SourceSlot });
   this.dispatch({ type: 'ASSIGN_SOURCE', bus: 'B', source: 1 as SourceSlot });
   this.dispatch({ type: 'SELECT_EFFECT_BUS', bus: 'A' });
@@ -250,4 +251,45 @@ Then('only the square-wipe PiP is documented as storable', function (this: Mixer
   ref.transition = { ...ref.transition, type: 'wipe', wipe: { ...ref.transition.wipe, family: 'square', modifiers: { ...ref.transition.wipe.modifiers, compression: 1 } } };
   ref.positioner = { ...ref.positioner, on: true };
   assert.equal(isStorablePip(ref), true);
+});
+
+// ===========================================================================
+// Recipe 3 — After Image, ghost scenarios (S8/S9): the double-exposure look is a
+// pure function of the setup (core/after-image.ts), so the ghost clauses assert
+// the exact balance/spacing the strobe-freeze + MIX render realises.
+// ===========================================================================
+
+Given('the transition mode is MIX', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_TRANSITION_TYPE', transition: 'mix' });
+});
+Given('the wipe lever is held at a partial position mixing A over B', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_LEVER', position: 0.35 });
+});
+When('the source contains motion', function () {
+  // Motion is the source's business — it has no store representation.
+});
+Then('moving elements leave ghost after-images trailing behind them', function (this: MixerWorld) {
+  const s = this.snapshot();
+  assert.equal(afterImageRecipe(s), true);
+  const look = afterImageLook(s)!;
+  assert.ok(look.ghostAlpha > 0 && look.liveAlpha > 0); // both exposures contribute
+});
+Then('the ghost density is tuned by the Strobe TIME and the lever position', function (this: MixerWorld) {
+  const before = afterImageLook(this.snapshot())!;
+  this.dispatch({ type: 'SET_STROBE_TIME', position: 0.9 });
+  assert.ok(afterImageLook(this.snapshot())!.spacingSeconds > before.spacingSeconds);
+  this.dispatch({ type: 'SET_LEVER', position: 0.7 });
+  assert.notEqual(afterImageLook(this.snapshot())!.ghostAlpha, before.ghostAlpha);
+});
+When('the Strobe TIME is {string} and the lever is at {string}', function (this: MixerWorld, time: string, lever: string) {
+  this.dispatch({ type: 'SET_STROBE_TIME', position: time === 'short' ? 0.1 : 0.9 });
+  this.dispatch({ type: 'SET_LEVER', position: lever === 'centre' ? 0.5 : 0.15 });
+});
+Then('the after-image trail is {string}', function (this: MixerWorld, strength: string) {
+  const expected = /many faint/.test(strength)
+    ? 'many-faint-close'
+    : /widely spaced/.test(strength)
+      ? 'few-wide'
+      : 'subtle-lopsided';
+  assert.equal(afterImageStrength(afterImageLook(this.snapshot())!), expected);
 });

@@ -1,5 +1,6 @@
-// The Fade pass (ADR-0004 `fade` stage, reference §11): the LAST GPU pass, mixing the
-// post-DSK composite toward the fade target by the video-fade amount. Owns its output
+// The Fade pass (ADR-0004 `fade` stage, reference §11): mixes the PRE-DSK composite
+// toward the fade target by the VIDEO-element amount (the DSK element is applied inside
+// the DSK pass as key opacity — selective fading, reference §11). Owns its output
 // texture. The target (flat colour vs bus texture) and amount come from core/fade.ts; the
 // caller binds the uneffected A/B bus texture for the bus targets. Pixel verification is
 // deferred (no headless-WebGPU runner), like the other GPU passes.

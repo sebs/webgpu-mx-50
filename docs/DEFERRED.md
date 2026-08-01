@@ -1,9 +1,10 @@
 # Deferred work & known limitations
 
-web-mx-50's **domain model is complete** (Phases 0–8): 208 `node:test` units and 537 Gherkin
-scenarios (3937 steps) pass headlessly, and `banira compile` builds the whole app. This document
-is the single consolidated inventory of what is **not** built or **not** CI-verified, and — the
-part that matters — **which of it can still be built**.
+web-mx-50's **domain model is complete** (Phases 0–8) and, as of the Phase-9 GPU sweep, **every
+deferred picture pass is written**: 280 `node:test` units and 545 Gherkin scenarios (3996 steps)
+pass headlessly, and `banira compile` builds the whole app. This document is the single
+consolidated inventory of what is **not** built or **not** CI-verified, and — the part that
+matters — **which of it can still be built**.
 
 Each item is tagged:
 
@@ -22,21 +23,23 @@ Each item is tagged:
 
 ---
 
-## 🟢 Buildable — GPU rendering not yet written
+## ✅ Built — the former "GPU rendering not yet written" bucket (Phase 9)
 
-The domain math/state exists and is tested; only the WGSL + pass wiring is missing. Verify by
-browser smoke (`npm run dev`).
+All eight rows landed in one sweep. Each one follows the house pattern: the geometry/state math
+is a **pure `src/core/` function** the headless specs pin, and the WGSL consumes the same
+formula. Pixel confirmation remains browser smoke (`npm run dev`) until a headless-WebGPU runner
+exists (ADR-0016).
 
-| Item | Where | Notes |
-|---|---|---|
-| Trail ping-pong accumulator | `src/gpu/bus-processor.ts:52`, `src/ui/control-strip.ts:338` | Trail state modeled; the frame-memory accumulation buffer isn't rendered. |
-| Compression / Slide / Blinds wipe geometry | `src/gpu/shaders/wipe.wgsl.ts:7` | Modifiers are in the domain; the shader falls through to the base field. |
-| Five non-Normal DSK edge styles (border/shadow) | `src/gpu/dsk.ts:3`, `src/gpu/shaders/dsk.wgsl.ts:4` | Normal fill only; the EDGE cycle + colours are modeled. |
-| A/V-Synchro → picture gating | `src/main.ts:115`, `src/audio/av-synchro-tap.ts` | The tap already computes the pulsed-effect set per frame; feed it into the bus-effect shader to force those effects on. |
-| Scene-Grabber freeze-in-place | `src/core/positioner.ts` (domain done) | GPU freeze of the pixels inside the moving inset. |
-| Selective VIDEO-only / DSK-only fade | `src/gpu/fade.ts` | Needs a pre-DSK composite + key-mask so the title and picture fade independently. Unblocks `features/fade-control.feature` "Fading VIDEO only…", "Fading DSK only…". |
-| Special-Mode compressed-image macros (geometry) | `src/core/special-mode.ts:5` | The 8-macro state machine is done; the compressed-inset looks (Stream/Cork Screw/Bounce/Flip/Shutter/Satellite) aren't. Unblocks `special-modes.feature` "Stream corner…", "Flip and Shutter reveal the Matte colour". |
-| Combination-recipe looks (After-Image ghosts, Mosaic-Spotlight / PiP inset pixels) | `features/combination-recipes.feature` S8/S9 | Setups are composable + green at the domain level; the ghost/inset *pixels* aren't rendered. |
+| Item | Where it landed |
+|---|---|
+| Trail ping-pong accumulator | `src/gpu/trail.ts` + `trail.wgsl.ts` (per-bus, fed by `BusProcessor`); copy geometry in `core/digital-effect.ts` (`trailCopyRect` et al.) |
+| Compression / Slide / Blinds wipe geometry | affine remaps in `core/wipe.ts` (`revealRect`, `compressionAffine`, `slideAffine`, `blindsAxes`), consumed by `wipe.wgsl.ts`; centred Split/Square REVERSE now runs inward |
+| Five non-Normal DSK edge styles | `core/dsk.ts` (`dskEdgeGeometry`) + multi-tap border/shadow rendering in `dsk.wgsl.ts`, GRADATION-graded white-fill edges |
+| A/V-Synchro → picture gating | pulsed set threaded `main.ts` → `Renderer.render` → `BusProcessor`; merge logic in `core/av-synchro.ts` (`effectiveFilterOn`, `stepAvSynchroStrobe` — Strobe holds on the Effect Interval Timer) |
+| Scene-Grabber freeze-in-place | grab-edge blit + latched inset geometry in `gpu/wipe.ts` (`trackGrab`); sample math in `core/positioner.ts` (`grabCapture`, `grabSampleUV`); the inset is now lever-sized (`effectiveInsetSize`) |
+| Selective VIDEO-only / DSK-only fade | renderer fades the PRE-DSK composite by the VIDEO amount; the DSK element rides the key mask (`dskFade` uniform, `core/fade.ts dskTitleOpacity`). Unblocked both `fade-control.feature` selective scenarios |
+| Special-Mode compressed-image macros | `core/special-mode-geometry.ts` (`macroFrame`/`specialFrame`) + `gpu/special-fx.ts` + `special-fx.wgsl.ts`. Unblocked the two `special-modes.feature` picture scenarios |
+| Combination-recipe looks | After-Image = Strobe+MIX (selectors in `core/after-image.ts`, S8/S9 scenarios wired); PiP compressed-inset pixels via the wipe posOn branch; Mosaic-Spotlight REVERSE via the inset mask flip |
 
 ## 🟢 Buildable — browser I/O (some already written, CI-excluded)
 
@@ -87,12 +90,13 @@ Building these means changing the domain model against a spec-derived rule the t
 
 ## Suggested next steps (highest leverage first)
 
-1. **Real audio-input capture** + **A/V-Synchro → bus-effect gating** — small, and they make the
-   instrument audibly/visibly "come alive"; both build on already-computed state.
-2. **Remaining picture shaders** — Compression/Slide/Blinds wipe, the five DSK edge styles, Trail
-   ping-pong — pure WGSL over finished domain logic.
-3. **IndexedDB still tier + file import/export glue** — small; unblocks the two still `@integration`
-   scenarios and gives portable presets a UI.
-4. **Wire the 3 program-output `@integration` scenarios** — pure step-definition work, no new code.
+1. **Real audio-input capture** (`src/audio/engine.ts`) — replace the stand-in oscillators with
+   `MediaStream` sources; the A/V-Synchro picture gating it feeds is already live.
+2. **IndexedDB still tier + file import/export glue** — small; unblocks the two still
+   `@integration` scenarios and gives portable presets a UI. `WipePass.freeze` is the designed
+   readback/injection point for the Scene-Grabber still.
+3. **Wire the 3 program-output `@integration` scenarios** — pure step-definition work, no new code.
+4. **A headless-WebGPU runner** (Deno `--webgpu` or a native harness) — would let every
+   now-rendering pass be pixel-pinned in `test/golden/`, retiring the last environment limit.
 
 Nothing in the 🟠/⚪ buckets should be built without first revisiting the ADR it rests on.

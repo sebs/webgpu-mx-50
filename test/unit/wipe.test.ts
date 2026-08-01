@@ -18,6 +18,15 @@ import {
   isSymmetricalWiping,
   squareShapeName,
   PLAIN_WIPE_NUMBER,
+  revealAnchors,
+  revealRect,
+  compressionAffine,
+  slideAffine,
+  incomingRemap,
+  outgoingRemap,
+  outgoingCompressionAffine,
+  outgoingSlideAffine,
+  blindsAxes,
 } from '../../src/core/wipe.js';
 import { FACTORY_PRESET } from '../../src/state/state.js';
 
@@ -96,4 +105,124 @@ test('direction: default alternates, ONE-WAY holds, REVERSE mirrors, both = symm
 
 test('the Square family variants map to square/circle/oval/diamond', () => {
   assert.deepEqual([0, 1, 2, 3].map(squareShapeName), ['square', 'circle', 'oval', 'diamond']);
+});
+
+// --- compression / slide / blinds geometry (reference §9.4) -----------------
+
+const plainWipe = (family: Parameters<typeof revealRect>[0], variant = 0, mods = {}) => ({
+  ...FACTORY_PRESET.transition.wipe,
+  family,
+  variant,
+  modifiers: { ...FACTORY_PRESET.transition.wipe.modifiers, ...mods },
+});
+
+test('revealRect: straight bands per variant', () => {
+  assert.deepEqual(revealRect('straight', 0, 0.3, 0), { x0: 0, x1: 0.3, y0: 0, y1: 1 });
+  assert.deepEqual(revealRect('straight', 1, 0.3, 0), { x0: 0.7, x1: 1, y0: 0, y1: 1 });
+  assert.deepEqual(revealRect('straight', 2, 0.3, 0), { x0: 0, x1: 1, y0: 0, y1: 0.3 });
+  assert.deepEqual(revealRect('straight', 3, 0.3, 0), { x0: 0, x1: 1, y0: 0.7, y1: 1 });
+});
+
+test('revealRect: corner squares anchor to each corner', () => {
+  assert.deepEqual(revealRect('corner', 3, 0.25, 0), { x0: 0.75, x1: 1, y0: 0.75, y1: 1 });
+  assert.deepEqual(revealRect('corner', 0, 0.25, 0), { x0: 0, x1: 0.25, y0: 0, y1: 0.25 });
+});
+
+test('revealRect: diagonal doubles progress and clamps', () => {
+  assert.deepEqual(revealRect('diagonal', 0, 0.25, 0), { x0: 0, x1: 0.5, y0: 0, y1: 0.5 });
+  assert.deepEqual(revealRect('diagonal', 0, 0.6, 0), { x0: 0, x1: 1, y0: 0, y1: 1 });
+});
+
+test('revealRect: triangle envelope (1.5x travel, centred across)', () => {
+  const r = revealRect('triangle', 0, 0.2, 0);
+  assert.ok(Math.abs(r.x0 - 0.2) < 1e-9 && Math.abs(r.x1 - 0.8) < 1e-9);
+  assert.ok(Math.abs(r.y0 - 0.7) < 1e-9 && r.y1 === 1);
+});
+
+test('revealRect: split opens from centre; cross is the centred core', () => {
+  assert.deepEqual(revealRect('split', 0, 0.5, 0), { x0: 0.25, x1: 0.75, y0: 0, y1: 1 });
+  assert.deepEqual(revealRect('split', 2, 0.5, 0), { x0: 0.25, x1: 0.75, y0: 0.25, y1: 0.75 });
+});
+
+test('revealRect: square tracks 0.75p, aspect skews, oval squashes y, clamps at half-frame', () => {
+  const r = revealRect('square', 0, 0.4, 0);
+  assert.ok(Math.abs(r.x0 - 0.2) < 1e-9 && Math.abs(r.x1 - 0.8) < 1e-9);
+  const oval = revealRect('square', 2, 0.4, 0);
+  assert.ok(oval.y1 - oval.y0 < r.y1 - r.y0);
+  const stretched = revealRect('square', 0, 1, 0.5);
+  assert.ok(Math.abs(stretched.x0 - 0) < 1e-9 && Math.abs(stretched.y0 - 0) < 1e-9);
+});
+
+test('compressionAffine maps the full frame into the rect', () => {
+  const a = compressionAffine({ x0: 0, x1: 0.25, y0: 0, y1: 1 });
+  assert.ok(Math.abs(a.sx - 4) < 1e-9 && a.ox === 0 && a.sy === 1 && a.oy === 0);
+  const b = compressionAffine({ x0: 0.75, x1: 1, y0: 0, y1: 1 });
+  assert.ok(Math.abs(b.sx - 4) < 1e-9 && Math.abs(b.ox + 3) < 1e-9);
+  // Frame corners land on rect corners: uv 0.75 → 0, uv 1 → 1.
+  assert.ok(Math.abs(0.75 * b.sx + b.ox - 0) < 1e-9);
+  assert.ok(Math.abs(1 * b.sx + b.ox - 1) < 1e-9);
+});
+
+test('compressionAffine survives progress 0', () => {
+  const a = compressionAffine(revealRect('straight', 0, 0, 0));
+  for (const v of [a.sx, a.sy, a.ox, a.oy]) assert.ok(Number.isFinite(v));
+});
+
+test('slideAffine: the incoming frame edge rides the boundary', () => {
+  const v0 = slideAffine(revealAnchors('straight', 0), revealRect('straight', 0, 0.25, 0));
+  assert.ok(Math.abs(v0.ox - 0.75) < 1e-9 && v0.sx === 1);
+  assert.ok(Math.abs(0.25 + v0.ox - 1) < 1e-9); // screen x=p samples B x=1
+  const v1 = slideAffine(revealAnchors('straight', 1), revealRect('straight', 1, 0.25, 0));
+  assert.ok(Math.abs(v1.ox + 0.75) < 1e-9);
+});
+
+test('incomingRemap: precedence and off', () => {
+  const both = incomingRemap(plainWipe('straight', 0, { compression: 1, slide: 1 }), 0.25, 0);
+  assert.ok(both && both.sx > 1); // compression wins
+  assert.equal(incomingRemap(plainWipe('straight'), 0.25, 0), null);
+  const slide = incomingRemap(plainWipe('straight', 0, { slide: 1 }), 0.25, 0);
+  assert.ok(slide && slide.sx === 1 && slide.ox !== 0);
+});
+
+test('outgoingRemap: both-compressed only where the complement is a rect', () => {
+  const straight = outgoingRemap(plainWipe('straight', 0, { compression: 2 }), 0.25, 0);
+  assert.ok(straight && Math.abs(straight.sx - 1 / 0.75) < 1e-9 && Math.abs(straight.ox + 0.25 / 0.75) < 1e-9);
+  assert.equal(outgoingRemap(plainWipe('corner', 0, { compression: 2 }), 0.25, 0), null);
+  assert.equal(outgoingRemap(plainWipe('square', 0, { compression: 2 }), 0.25, 0), null);
+  assert.equal(outgoingCompressionAffine(revealAnchors('square', 0), revealRect('square', 0, 0.25, 0)), null);
+});
+
+test('outgoingRemap: slide x2 pushes A out by the boundary displacement', () => {
+  const v0 = outgoingRemap(plainWipe('straight', 0, { slide: 2 }), 0.25, 0);
+  assert.ok(v0 && Math.abs(v0.ox + 0.25) < 1e-9);
+  const v1 = outgoingRemap(plainWipe('straight', 1, { slide: 2 }), 0.25, 0);
+  assert.ok(v1 && Math.abs(v1.ox - 0.25) < 1e-9);
+  const corner = outgoingSlideAffine(revealAnchors('corner', 0), revealRect('corner', 0, 0.25, 0));
+  assert.ok(Math.abs(corner.ox + 0.25) < 1e-9 && Math.abs(corner.oy + 0.25) < 1e-9);
+  const cross = outgoingRemap(plainWipe('split', 2, { slide: 2 }), 0.25, 0);
+  assert.ok(cross && cross.ox === 0 && cross.oy === 0);
+});
+
+test('blindsAxes: strips run along the travel axis; illegal families get none', () => {
+  assert.deepEqual(blindsAxes('straight', 0), { x: true, y: false });
+  assert.deepEqual(blindsAxes('straight', 2), { x: false, y: true });
+  assert.deepEqual(blindsAxes('corner', 1), { x: true, y: true });
+  assert.deepEqual(blindsAxes('diagonal', 3), { x: true, y: true });
+  assert.deepEqual(blindsAxes('triangle', 0), { x: false, y: true });
+  assert.deepEqual(blindsAxes('triangle', 2), { x: true, y: false });
+  assert.deepEqual(blindsAxes('split', 0), { x: true, y: false });
+  assert.deepEqual(blindsAxes('split', 2), { x: true, y: true });
+  assert.deepEqual(blindsAxes('square', 0), { x: false, y: false });
+  assert.deepEqual(blindsAxes('mosaic', 0), { x: false, y: false });
+});
+
+test('the reveal rect agrees with the straight field sign (oracle probe)', () => {
+  // straightField v0: f = p - uv.x; inside the rect ⇔ f > 0.
+  for (const p of [0.2, 0.5, 0.8]) {
+    const rect = revealRect('straight', 0, p, 0);
+    for (const x of [0.1, 0.4, 0.6, 0.9]) {
+      const inside = x > rect.x0 && x < rect.x1;
+      assert.equal(p - x > 0, inside, `p=${p} x=${x}`);
+    }
+  }
 });

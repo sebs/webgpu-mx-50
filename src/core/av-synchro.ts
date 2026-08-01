@@ -5,8 +5,9 @@
 // assert the whole truth table headlessly. The audio envelope is always a runtime argument,
 // never stored in PanelState.
 
-import { strobeInterval } from './digital-effect.js';
-import type { AvSynchroEffect, DigitalEffectState } from '../state/state.js';
+import { effectActiveOn, freezeActiveOn, strobeInterval } from './digital-effect.js';
+import type { AvSynchroEffect, DigitalEffectState, FilterEffect } from '../state/state.js';
+import type { BusId } from './types.js';
 
 /** The effects A/V Synchro may pulse (reference §8.9): the four filters plus Still and Strobe. */
 export const AV_SYNCHRO_EFFECTS: readonly AvSynchroEffect[] = [
@@ -87,4 +88,72 @@ export function avSynchroIntervalSeconds(de: DigitalEffectState): number {
  */
 export function avSynchroPulseTrain(level: number, envelopes: readonly number[]): boolean[] {
   return envelopes.map((e) => avSynchroTriggered(level, e));
+}
+
+// --- per-frame picture gating (reference §8.9, ADR-0010) --------------------
+// The transient signal the render loop threads into the bus processors: which
+// effects the audio is pulsing on THIS frame, and how they merge with the
+// latched ON flags. Pulses force effects on; they never suppress a latched one.
+
+/** Every effect A/V Synchro is pulsing on for a measured envelope (the tap delegates here). */
+export function avSynchroActiveEffects(de: DigitalEffectState, envelope: number): AvSynchroEffect[] {
+  return AV_SYNCHRO_EFFECTS.filter((e) => avSynchroEffectApplied(de, e, envelope));
+}
+
+/** Whether a pulsed effect lands on a bus: pulses target the block's single bus only. */
+export function avSynchroPulsedOn(
+  de: DigitalEffectState,
+  bus: BusId,
+  effect: AvSynchroEffect,
+  pulsed: readonly AvSynchroEffect[],
+): boolean {
+  return de.bus === bus && pulsed.indexOf(effect) !== -1;
+}
+
+/** The EFFECTIVE filter flag the bus shader renders: latched ON, or pulsed this frame. */
+export function effectiveFilterOn(
+  de: DigitalEffectState,
+  bus: BusId,
+  effect: FilterEffect,
+  pulsed: readonly AvSynchroEffect[],
+): boolean {
+  return effectActiveOn(de, bus, effect) || avSynchroPulsedOn(de, bus, effect, pulsed);
+}
+
+/** Effective Still: latched, or pulsed (audio-duration hold — releases with the envelope). */
+export function effectiveStillOn(de: DigitalEffectState, bus: BusId, pulsed: readonly AvSynchroEffect[]): boolean {
+  return freezeActiveOn(de, bus, 'still') || avSynchroPulsedOn(de, bus, 'still', pulsed);
+}
+
+/**
+ * Pulsed-Strobe hold bookkeeping (plain JSON, tick-driven per ADR-0012). Strobe's hold is
+ * governed by the Effect Interval Timer, not the audio duration: a rising pulse captures a
+ * frame and opens a window of `periodTicks`; a sustained pulse neither re-captures nor
+ * extends it; a release-and-re-cross opens a fresh window (one freeze per beat).
+ */
+export interface AvSynchroStrobeHold {
+  holdUntilTick: number;
+  prevPulsed: boolean;
+}
+
+export const IDLE_AV_STROBE_HOLD: AvSynchroStrobeHold = {
+  holdUntilTick: Number.NEGATIVE_INFINITY,
+  prevPulsed: false,
+};
+
+export interface AvSynchroStrobeStep {
+  hold: AvSynchroStrobeHold;
+  capture: boolean;
+  holding: boolean;
+}
+
+export function stepAvSynchroStrobe(
+  prev: AvSynchroStrobeHold,
+  pulsed: boolean,
+  tick: number,
+  periodTicks: number,
+): AvSynchroStrobeStep {
+  const rising = pulsed && !prev.prevPulsed;
+  const holdUntilTick = rising ? tick + Math.max(1, periodTicks) : prev.holdUntilTick;
+  return { hold: { holdUntilTick, prevPulsed: pulsed }, capture: rising, holding: tick < holdUntilTick };
 }

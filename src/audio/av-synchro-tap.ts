@@ -7,7 +7,7 @@
 // Browser-only: it depends on the live AnalyserNode. The gate itself (avSynchroEffectApplied)
 // is pure and fully unit-tested; only the envelope measurement is untestable headlessly.
 
-import { AV_SYNCHRO_EFFECTS, avSynchroEffectApplied } from '../core/av-synchro.js';
+import { avSynchroActiveEffects, avSynchroEffectApplied } from '../core/av-synchro.js';
 import type { AvSynchroEffect, DigitalEffectState } from '../state/state.js';
 import type { AudioEngine } from './engine.js';
 
@@ -26,10 +26,10 @@ export class AvSynchroTap {
 
   /**
    * Every effect A/V Synchro is pulsing on this frame — empty when disarmed or below the
-   * LEVEL threshold. Measures the envelope once and evaluates all eligible effects against it.
+   * LEVEL threshold. Measures the envelope once; the render loop passes the result to
+   * Renderer.render (the pure set logic lives in core/av-synchro.ts).
    */
   activeEffects(de: DigitalEffectState): AvSynchroEffect[] {
-    const env = this.envelope();
-    return AV_SYNCHRO_EFFECTS.filter((effect) => avSynchroEffectApplied(de, effect, env));
+    return avSynchroActiveEffects(de, this.envelope());
   }
 }

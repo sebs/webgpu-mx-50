@@ -14,6 +14,12 @@ import {
   avSynchroHold,
   avSynchroIntervalSeconds,
   avSynchroPulseTrain,
+  avSynchroActiveEffects,
+  avSynchroPulsedOn,
+  effectiveFilterOn,
+  effectiveStillOn,
+  stepAvSynchroStrobe,
+  IDLE_AV_STROBE_HOLD,
   ENVELOPE_SILENT,
   ENVELOPE_QUIET,
   ENVELOPE_MODERATE,
@@ -21,6 +27,7 @@ import {
   LEVEL_TOWARD_MAX,
   LEVEL_TOWARD_MIN,
 } from '../../src/core/av-synchro.js';
+import { effectActiveOn, intervalTicks } from '../../src/core/digital-effect.js';
 
 const fresh = (): PanelState => structuredClone(FACTORY_PRESET);
 
@@ -151,4 +158,119 @@ test('SET_AV_SYNCHRO_EFFECT toggles one member without touching the armed flag o
   assert.equal(next.digitalEffect.avSynchroEffects.mosaic, false);
   assert.equal(next.digitalEffect.avSynchro, false, 'selecting an effect does not arm');
   assert.equal(reduce(next, { type: 'SET_AV_SYNCHRO_EFFECT', effect: 'nega', on: true }), next, 'no-op');
+});
+
+// --- per-frame picture gating (reference §8.9, ADR-0010) --------------------
+
+/** Latch a filter effect ON via the panel (SELECT bus + CHOOSE + ON). */
+function latch(s: PanelState, effect: 'nega' | 'mosaic' | 'mono' | 'paint', bus: 'A' | 'B' = 'A'): PanelState {
+  let t = reduce(s, { type: 'SELECT_EFFECT_BUS', bus });
+  t = reduce(t, { type: 'CHOOSE_EFFECT', effect });
+  return reduce(t, { type: 'PRESS_EFFECT_ON' });
+}
+
+test('avSynchroActiveEffects returns exactly the armed+selected effects above threshold', () => {
+  const s = arm(['nega', 'paint']);
+  assert.deepEqual(avSynchroActiveEffects(s.digitalEffect, ENVELOPE_LOUD), ['nega', 'paint']);
+  assert.equal(avSynchroActiveEffects(s.digitalEffect, ENVELOPE_LOUD).indexOf('mosaic'), -1);
+});
+
+test('avSynchroActiveEffects is empty when disarmed, unselected, or below threshold', () => {
+  const disarmed = reduce(arm(['nega']), { type: 'ATTEMPT_AV_SYNCHRO', on: false });
+  assert.equal(avSynchroActiveEffects(disarmed.digitalEffect, ENVELOPE_LOUD).length, 0);
+  const unselected = reduce(fresh(), { type: 'ATTEMPT_AV_SYNCHRO', on: true });
+  assert.equal(avSynchroActiveEffects(unselected.digitalEffect, ENVELOPE_LOUD).length, 0);
+  const armed = arm(['nega']);
+  assert.equal(avSynchroActiveEffects(armed.digitalEffect, ENVELOPE_QUIET).length, 0);
+  assert.equal(avSynchroActiveEffects(armed.digitalEffect, ENVELOPE_SILENT).length, 0);
+});
+
+test('effectiveFilterOn: unlatched and unpulsed leaves the bus untreated', () => {
+  const s = arm(['nega']);
+  const pulsed = avSynchroActiveEffects(s.digitalEffect, ENVELOPE_QUIET);
+  assert.equal(effectiveFilterOn(s.digitalEffect, 'A', 'nega', pulsed), false);
+});
+
+test('effectiveFilterOn: a pulsed effect applies on the target bus only', () => {
+  const s = arm(['nega']); // digitalEffect.bus = 'A' from factory
+  assert.equal(effectiveFilterOn(s.digitalEffect, 'A', 'nega', ['nega']), true);
+  assert.equal(effectiveFilterOn(s.digitalEffect, 'B', 'nega', ['nega']), false);
+  assert.equal(avSynchroPulsedOn(s.digitalEffect, 'B', 'nega', ['nega']), false);
+});
+
+test('effectiveFilterOn: a latched effect stays live regardless of the pulsed set', () => {
+  const s = latch(fresh(), 'nega');
+  assert.equal(effectiveFilterOn(s.digitalEffect, 'A', 'nega', []), true);
+});
+
+test('effectiveFilterOn equals effectActiveOn when the pulsed set is empty', () => {
+  const s = latch(fresh(), 'mosaic', 'B');
+  for (const bus of ['A', 'B'] as const) {
+    for (const e of ['nega', 'mosaic', 'mono', 'paint'] as const) {
+      assert.equal(effectiveFilterOn(s.digitalEffect, bus, e, []), effectActiveOn(s.digitalEffect, bus, e));
+    }
+  }
+});
+
+test('effectiveStillOn mirrors the latched-or-pulsed rule on the target bus', () => {
+  const latched = reduce(fresh(), { type: 'ENGAGE_FREEZE', effect: 'still', on: true });
+  assert.equal(effectiveStillOn(latched.digitalEffect, 'A', []), true);
+  const s = fresh();
+  assert.equal(effectiveStillOn(s.digitalEffect, 'A', ['still']), true);
+  assert.equal(effectiveStillOn(s.digitalEffect, 'B', ['still']), false);
+  assert.equal(effectiveStillOn(s.digitalEffect, 'A', []), false);
+});
+
+test('stepAvSynchroStrobe: a rising pulse captures and opens a hold window', () => {
+  const step = stepAvSynchroStrobe(IDLE_AV_STROBE_HOLD, true, 100, 30);
+  assert.equal(step.capture, true);
+  assert.equal(step.holding, true);
+  assert.equal(step.hold.holdUntilTick, 130);
+});
+
+test('stepAvSynchroStrobe: a sustained pulse neither re-captures nor extends the window', () => {
+  let hold = stepAvSynchroStrobe(IDLE_AV_STROBE_HOLD, true, 100, 30).hold;
+  for (let tick = 101; tick < 130; tick++) {
+    const step = stepAvSynchroStrobe(hold, true, tick, 30);
+    assert.equal(step.capture, false);
+    assert.equal(step.hold.holdUntilTick, 130);
+    hold = step.hold;
+  }
+});
+
+test('stepAvSynchroStrobe: the hold expires on schedule even while audio stays up', () => {
+  let hold = stepAvSynchroStrobe(IDLE_AV_STROBE_HOLD, true, 100, 30).hold;
+  hold = stepAvSynchroStrobe(hold, true, 115, 30).hold;
+  const expired = stepAvSynchroStrobe(hold, true, 130, 30);
+  assert.equal(expired.holding, false);
+  assert.equal(expired.capture, false);
+});
+
+test('stepAvSynchroStrobe: a release and re-cross retriggers a fresh capture and window', () => {
+  let hold = stepAvSynchroStrobe(IDLE_AV_STROBE_HOLD, true, 100, 30).hold;
+  hold = stepAvSynchroStrobe(hold, false, 131, 30).hold;
+  const retrigger = stepAvSynchroStrobe(hold, true, 140, 30);
+  assert.equal(retrigger.capture, true);
+  assert.equal(retrigger.hold.holdUntilTick, 170);
+  // A re-cross INSIDE the window also re-captures and resets it (one freeze per beat).
+  let h2 = stepAvSynchroStrobe(IDLE_AV_STROBE_HOLD, true, 100, 30).hold;
+  h2 = stepAvSynchroStrobe(h2, false, 105, 30).hold;
+  const inside = stepAvSynchroStrobe(h2, true, 110, 30);
+  assert.equal(inside.capture, true);
+  assert.equal(inside.hold.holdUntilTick, 140);
+});
+
+test('stepAvSynchroStrobe: idle input never captures or holds', () => {
+  let hold = IDLE_AV_STROBE_HOLD;
+  for (let tick = 0; tick < 100; tick += 10) {
+    const step = stepAvSynchroStrobe(hold, false, tick, 30);
+    assert.equal(step.capture, false);
+    assert.equal(step.holding, false);
+    hold = step.hold;
+  }
+});
+
+test('the pulsed-strobe period is the Effect Interval Timer in ticks', () => {
+  const s = arm(['strobe']);
+  assert.equal(intervalTicks(avSynchroIntervalSeconds(s.digitalEffect)), intervalTicks(strobeInterval(s.digitalEffect.strobeTime)));
 });

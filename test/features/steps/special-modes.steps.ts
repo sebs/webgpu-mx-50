@@ -18,6 +18,7 @@ import {
   memoryLedBlinking,
   VIBRATE_FRAMES,
 } from '../../../src/core/special-mode.js';
+import { specialFrame, streamCorner } from '../../../src/core/special-mode-geometry.js';
 
 const sm = (w: MixerWorld) => w.snapshot().specialMode;
 const squareActive = (w: MixerWorld): boolean => w.snapshot().transition.wipe.family === 'square';
@@ -188,4 +189,36 @@ Then('the compressed B-bus image continues to orbit indefinitely', function (thi
 });
 When('I select a different mode or function', function (this: MixerWorld) {
   this.selectMacro(1, false); // re-arm a different macro → stops the orbit (function change)
+});
+
+// --- compressed-image macro geometry (core/special-mode-geometry.ts) --------
+// The pixels are pure functions of the state + tick, so the two picture scenarios
+// assert the exact geometry the special-fx shader consumes.
+
+When('I set the Positioner Joystick toward a selectable corner', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_POSITIONER_JOYSTICK', x: -1, y: -1 }); // upper-left
+});
+Then('the compressed image zooms in from that corner', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_LEVER', position: 0.5 }); // mid-zoom
+  const f = specialFrame(this.snapshot(), this.now)!;
+  assert.equal(f.fg, 'B');
+  assert.ok(Math.abs(f.center[0] - f.half[0]) < 1e-9); // inset corner pinned at the
+  assert.ok(Math.abs(f.center[1] - f.half[1]) < 1e-9); // chosen upper-left screen corner
+});
+Then('two corners are selectable via the joystick', function (this: MixerWorld) {
+  assert.equal(streamCorner(-1), 'upper-left');
+  assert.equal(streamCorner(1), 'upper-right');
+  this.dispatch({ type: 'SET_POSITIONER_JOYSTICK', x: 1, y: -1 });
+  const f = specialFrame(this.snapshot(), this.now)!;
+  assert.ok(Math.abs(f.center[0] + f.half[0] - 1) < 1e-9); // now pinned upper-right
+});
+Given('the Matte colour is configured', function (this: MixerWorld) {
+  this.dispatch({ type: 'SET_MATTE_COLOR', colorIndex: 6 }); // Red
+});
+Then('the compressed wipe splits over the Matte colour', function (this: MixerWorld) {
+  this.advanceToFrame(20); // default 60-frame take → lever 1/3, mid-split
+  const f = specialFrame(this.snapshot(), this.now)!;
+  assert.equal(f.bg, 'matte'); // the Matte revealed behind the split
+  assert.ok(f.half[0] > 0 && f.half[0] < 0.5); // horizontally compressed…
+  assert.equal(f.half[1], 0.5); // …about the vertical split axis
 });

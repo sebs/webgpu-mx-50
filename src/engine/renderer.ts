@@ -1,26 +1,35 @@
 // The two-bus GPU renderer (ADR-0004 signal flow). Each frame it reads a panel snapshot
 // and drives: resolve A/B sources (mixWipe context, so Matte is allowed) → per-bus
-// pass-through stages → Mix/NAM combine → downstream pass-through → present. Program Out
-// A/B short-circuit to the raw direct-out bus, bypassing every stage (reference §2).
+// pass-through stages (with the A/V-Synchro pulsed set, reference §8.9) → Mix/NAM/Wipe
+// combine — or a Special-Mode macro picture (reference §14) — → VIDEO-element fade →
+// Downstream Key → present. Program Out A/B short-circuit to the raw direct-out bus,
+// bypassing every stage (reference §2).
+//
+// The Fade stage is observationally still last (STAGE_ORDER untouched): the VIDEO element
+// fades the pre-DSK composite and the DSK element is applied inside the DSK pass as
+// key-mask opacity, which commutes with keying — that is what lets a VIDEO-only fade
+// leave the title on screen and a DSK-only fade remove only the title (reference §11).
 //
 // It reads the store snapshot but never calls into the UI (ADR-0011/0012).
 
 import { resolveBusSource } from '../core/resolve.js';
 import { compositeRule } from '../core/transition.js';
 import { directOutSource } from '../core/program.js';
-import { isFading, fadeVideoTarget } from '../core/fade.js';
-import { BusProcessor } from '../gpu/bus-processor.js';
+import { fadeVideoTarget, videoFadeAmount } from '../core/fade.js';
+import { specialFrame } from '../core/special-mode-geometry.js';
+import { BusProcessor, NO_PULSE } from '../gpu/bus-processor.js';
 import { CombinePass } from '../gpu/combine.js';
 import { WipePass } from '../gpu/wipe.js';
 import { DskPass } from '../gpu/dsk.js';
 import { FadePass } from '../gpu/fade.js';
 import { PresentPass } from '../gpu/present.js';
+import { SpecialFxPass } from '../gpu/special-fx.js';
 import type { Size } from '../core/types.js';
 import type { GpuContext } from '../gpu/device.js';
 import type { SourceRegistry } from '../sources/registry.js';
 import type { GeneratedSource } from '../sources/generated-source.js';
 import type { MatteSource } from '../sources/matte-source.js';
-import type { PanelState } from '../state/state.js';
+import type { AvSynchroEffect, PanelState } from '../state/state.js';
 
 export interface RendererDeps {
   gpu: GpuContext;
@@ -38,6 +47,7 @@ export class Renderer {
   private readonly busProcB: BusProcessor;
   private readonly combine: CombinePass;
   private readonly wipe: WipePass;
+  private readonly specialFx: SpecialFxPass;
   private readonly dsk: DskPass;
   private readonly fade: FadePass;
   private readonly present: PresentPass;
@@ -47,12 +57,17 @@ export class Renderer {
     this.busProcB = new BusProcessor(deps.gpu.device, deps.size);
     this.combine = new CombinePass(deps.gpu.device, deps.size);
     this.wipe = new WipePass(deps.gpu.device, deps.size);
+    this.specialFx = new SpecialFxPass(deps.gpu.device, deps.size);
     this.dsk = new DskPass(deps.gpu.device, deps.size);
     this.fade = new FadePass(deps.gpu.device, deps.size);
     this.present = new PresentPass(deps.gpu.device, deps.gpu.srgbView);
   }
 
-  render(state: PanelState, tick: number): void {
+  /**
+   * Render one frame. `avPulsed` is the transient per-frame A/V-Synchro set (ADR-0010) —
+   * never stored, never dispatched; the render loop measures it and threads it here.
+   */
+  render(state: PanelState, tick: number, avPulsed: readonly AvSynchroEffect[] = NO_PULSE): void {
     const { gpu, registry, generated, matte } = this.deps;
     const device = gpu.device;
 
@@ -70,10 +85,19 @@ export class Renderer {
     // EFFECT: full composite through the signal graph.
     const aSrc = registry.get(resolveBusSource(state.busA, 'mixWipe')).getFrameTexture(device);
     const bSrc = registry.get(resolveBusSource(state.busB, 'mixWipe')).getFrameTexture(device);
-    const aTex = this.busProcA.render(aSrc, state, 'A', tick);
-    const bTex = this.busProcB.render(bSrc, state, 'B', tick);
-    const composite =
-      state.transition.type === 'wipe'
+    const aTex = this.busProcA.render(aSrc, state, 'A', tick, avPulsed);
+    const bTex = this.busProcB.render(bSrc, state, 'B', tick, avPulsed);
+
+    // Scene Grabber (reference §7): track the grab edge every effect frame so the capture
+    // fires the instant SCENE GRABBER is pressed, whatever the current transition type.
+    this.wipe.trackGrab(bTex, state);
+
+    // Combine stage: a Special-Mode macro picture (reference §14) replaces the normal
+    // Mix/NAM/Wipe composite while one drives the picture.
+    const sf = specialFrame(state, tick);
+    const composite = sf
+      ? this.specialFx.render(aTex, bTex, matte.getFrameTexture(device), sf)
+      : state.transition.type === 'wipe'
         ? this.wipe.render(aTex, bTex, state)
         : this.combine.render(
             aTex,
@@ -84,24 +108,27 @@ export class Renderer {
             state.transition.hue,
           );
 
-    // Downstream Key (reference §10): key a title over the composite. Key source is the
-    // External Camera (not yet bound — falls back to the composite) or the A/B bus texture.
-    let keyed = composite;
-    if (state.dsk.on) {
-      const keyTex = state.dsk.keySource === 'A' ? aTex : state.dsk.keySource === 'B' ? bTex : composite;
-      keyed = this.dsk.render(composite, keyTex, state);
-    }
-
-    // Fade (reference §11): the final stage, mixing the post-DSK composite toward the target.
-    // Fade-to-A/B binds the RAW (uneffected) source texture, bypassing effects and Mix/Wipe.
-    let out = keyed;
-    if (isFading(state.fade)) {
+    // Fade (reference §11), VIDEO element — realised before the key so the title can
+    // survive a video-only fade. Fade-to-A/B binds the RAW (uneffected) source texture,
+    // bypassing effects and Mix/Wipe.
+    let base = composite;
+    if (videoFadeAmount(state.fade) > 0) {
       const target = fadeVideoTarget(state);
       const targetTex =
         target.kind === 'bus'
           ? registry.get(target.source).getFrameTexture(device)
           : matte.getFrameTexture(device); // flat-colour path ignores the texture; matte is a valid bind
-      out = this.fade.render(keyed, targetTex, state);
+      base = this.fade.render(composite, targetTex, state);
+    }
+
+    // Downstream Key (reference §10) over the (possibly faded) picture; the DSK fade
+    // element dissolves the title independently inside the pass. Key source is the
+    // External Camera (not yet bound — falls back to the UNFADED composite, so the key
+    // window stays stable during a video-only fade) or the A/B bus texture.
+    let out = base;
+    if (state.dsk.on) {
+      const keyTex = state.dsk.keySource === 'A' ? aTex : state.dsk.keySource === 'B' ? bTex : composite;
+      out = this.dsk.render(base, keyTex, state);
     }
     this.present.render(gpu.context, out, gpu.srgbView);
   }

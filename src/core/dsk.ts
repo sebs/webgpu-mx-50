@@ -46,6 +46,48 @@ export function edgeHasBorderOrShadow(style: DskEdgeStyle): boolean {
   return style !== 'normal';
 }
 
+// --- edge-style geometry (reference §10) ------------------------------------
+// The ring/shadow measurements the DSK shader renders. Borders are a coloured ring
+// hugging the keyed characters; shadows are a darkened offset copy behind them
+// (attached via a contact edge); Drop Shadow is a hard detached offset silhouette.
+
+export type DskEdgeKind = 'none' | 'border' | 'shadow' | 'drop-shadow';
+
+export interface DskEdgeGeometry {
+  kind: DskEdgeKind;
+  /** Ring dilation radius, uv frame-height units. */
+  borderWidth: number;
+  /** Shadow offset in uv, +x right / +y down. */
+  shadowOffset: [number, number];
+  /** 0 = n/a, 0.75 = soft attached shadow, 1 = hard drop shadow. */
+  shadowOpacity: number;
+}
+
+export function dskEdgeGeometry(style: DskEdgeStyle): DskEdgeGeometry {
+  switch (style) {
+    case 'normal':
+      return { kind: 'none', borderWidth: 0, shadowOffset: [0, 0], shadowOpacity: 0 };
+    case 'narrow-border':
+      return { kind: 'border', borderWidth: 0.004, shadowOffset: [0, 0], shadowOpacity: 0 };
+    case 'wide-border':
+      return { kind: 'border', borderWidth: 0.01, shadowOffset: [0, 0], shadowOpacity: 0 };
+    case 'narrow-shadow':
+      return { kind: 'shadow', borderWidth: 0, shadowOffset: [0.006, 0.006], shadowOpacity: 0.75 };
+    case 'wide-shadow':
+      return { kind: 'shadow', borderWidth: 0, shadowOffset: [0.014, 0.014], shadowOpacity: 0.75 };
+    case 'drop-shadow':
+      return { kind: 'drop-shadow', borderWidth: 0, shadowOffset: [0.014, 0.014], shadowOpacity: 1 };
+  }
+}
+
+/** The shader enum for an edge kind — single source for the uniform value. */
+export const DSK_EDGE_MODE: Record<DskEdgeKind, number> = { none: 0, border: 1, shadow: 2, 'drop-shadow': 3 };
+
+/** GRADATION grades the edge only where a matte edge colour is selectable (white fill). */
+export function dskEdgeGraded(dsk: DskState, matte: MatteState): boolean {
+  return dsk.fill === 'white' && matte.gradation;
+}
+
 /** The Low/High Level Key sliders as a sorted luminance window (reference §10). */
 export function dskKeyWindow(dsk: DskState): { lo: number; hi: number } {
   return { lo: Math.min(dsk.low, dsk.high), hi: Math.max(dsk.low, dsk.high) };

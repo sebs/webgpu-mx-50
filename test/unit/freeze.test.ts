@@ -15,6 +15,15 @@ import {
   STROBE_MIN,
   STROBE_MAX,
   MULTI_MIN,
+  MULTI_MAX,
+  TRAIL_MAX_COPIES,
+  TRAIL_MIN_SCALE,
+  TRAIL_AGE_FLOOR,
+  trailStep,
+  trailScale,
+  trailCopyRect,
+  trailVisibleCopies,
+  trailCopyWeight,
 } from '../../src/core/digital-effect.js';
 
 const fresh = () => structuredClone(FACTORY_PRESET);
@@ -103,4 +112,69 @@ test('TIME positions map to the reference intervals; seconds convert to ticks', 
 test('Trail makes the Compression Wipe unreliable', () => {
   assert.equal(compressionReliable(fresh()), true);
   assert.equal(compressionReliable(engage(fresh(), 'trail')), false);
+});
+
+// --- Trail copy geometry (reference §8.8, ADR-0007) -------------------------
+
+test('trailScale spans full frame down to the compressed lead', () => {
+  assert.equal(trailScale(0), 1);
+  assert.equal(trailScale(TRAIL_MAX_COPIES - 1), TRAIL_MIN_SCALE);
+  for (let k = 1; k < TRAIL_MAX_COPIES; k++) assert.ok(trailScale(k) < trailScale(k - 1));
+  assert.equal(trailScale(99), TRAIL_MIN_SCALE);
+  assert.equal(trailScale(-1), 1);
+});
+
+test('trailCopyRect anchors to the chosen upper corner', () => {
+  for (const k of [0, 7, 15]) {
+    const ul = trailCopyRect(k, 'upper-left');
+    assert.equal(ul.x, 0);
+    assert.equal(ul.y, 0);
+    const ur = trailCopyRect(k, 'upper-right');
+    assert.ok(Math.abs(ur.x + ur.width - 1) < 1e-12);
+    assert.equal(ur.y, 0);
+    assert.equal(ul.width, trailScale(k));
+    assert.equal(ul.height, trailScale(k));
+  }
+});
+
+test('older (larger) copies nest the newer ones away from the corner', () => {
+  for (const corner of ['upper-left', 'upper-right'] as const) {
+    for (let k = 1; k < TRAIL_MAX_COPIES; k++) {
+      const newer = trailCopyRect(k, corner);
+      const older = trailCopyRect(k - 1, corner);
+      assert.ok(older.x <= newer.x + 1e-12);
+      assert.ok(older.x + older.width >= newer.x + newer.width - 1e-12);
+      assert.ok(older.height >= newer.height);
+    }
+  }
+});
+
+test('a mid-trail corner change staggers only the anchor', () => {
+  for (let k = 0; k < TRAIL_MAX_COPIES; k++) {
+    const ul = trailCopyRect(k, 'upper-left');
+    const ur = trailCopyRect(k, 'upper-right');
+    assert.equal(ul.y, ur.y);
+    assert.equal(ul.width, ur.width);
+    assert.equal(ul.height, ur.height);
+    if (trailScale(k) < 1) assert.notEqual(ul.x, ur.x);
+  }
+});
+
+test('the trail is capped at 16 copies', () => {
+  assert.equal(trailVisibleCopies(3), 3);
+  assert.equal(trailVisibleCopies(16), 16);
+  assert.equal(trailVisibleCopies(500), TRAIL_MAX_COPIES);
+  assert.equal(trailStep(500), TRAIL_MAX_COPIES - 1);
+});
+
+test('a copy ages out after 16 further spawns', () => {
+  assert.equal(trailCopyWeight(0), 1);
+  for (let a = 1; a <= TRAIL_MAX_COPIES; a++) assert.ok(trailCopyWeight(a) < trailCopyWeight(a - 1));
+  assert.ok(Math.abs(trailCopyWeight(TRAIL_MAX_COPIES) - TRAIL_AGE_FLOOR) < 1e-9);
+  assert.ok(trailCopyWeight(TRAIL_MAX_COPIES) < 1 / 16);
+});
+
+test('the trail spawn cadence reuses the tested TIME interval', () => {
+  assert.equal(intervalTicks(trailInterval(0)), intervalTicks(MULTI_MIN));
+  assert.equal(intervalTicks(trailInterval(1)), intervalTicks(MULTI_MAX));
 });
