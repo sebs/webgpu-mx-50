@@ -2,7 +2,7 @@
 
 web-mx-50's **domain model is complete** (Phases 0–8) and, as of the Phase-9 GPU sweep and the
 Phase-10 browser-I/O sweep, **every deferred picture pass and every browser-I/O tier is
-written**: 330 `node:test` units and 563 Gherkin scenarios (4137 steps) pass headlessly, and
+written**: the `node:test` unit suite and 563 Gherkin scenarios (4137 steps) pass headlessly, and
 `banira compile` builds the whole app. This document is the single consolidated inventory of
 what is **not** built or **not** CI-verified, and — the part that matters — **which of it can
 still be built**.

@@ -9,8 +9,8 @@ and rendered on WebGPU — with its behaviour pinned by executable specs derived
 The **domain model is complete and verified headlessly**; the GPU renders the core signal path,
 with the most complex visuals documented as deferred (see below).
 
-> **Status:** proof of concept · Phases 0–8 complete · **208 unit tests + 537 Gherkin scenarios
-> (3937 steps)** green · no UI framework, no bundler.
+> **Status:** proof of concept · Phases 0–8 complete · **unit suite + 563 Gherkin scenarios
+> (4137 steps)** green · no UI framework, no bundler.
 
 ## What it reproduces
 

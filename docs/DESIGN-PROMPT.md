@@ -43,7 +43,7 @@ console — while staying inside the architecture decisions recorded in this rep
 - The build has an old ES lib floor: avoid `Array.prototype.includes`,
   `String.prototype.padStart` and other post-ES2015 built-ins in `src/` (use `indexOf`,
   manual padding). Syntax is fine; newer built-in methods are not.
-- `npm test` (typecheck + 208 units + 537 Gherkin scenarios) must stay green. The
+- `npm test` (typecheck + units + Gherkin scenarios) must stay green. The
   existing headless tests never touch the DOM, so your changes live in `src/ui/` +
   `index.html` and must not alter domain/state modules.
 

@@ -12,7 +12,7 @@ Features are ordered below by the hardware signal flow:
 
 - **@deferred** — Not built in the clean-modern v1. The control grouping is preserved for faithfulness, but the underlying behaviour is moot in a full-resolution RGBA build with no analog artifacts (see ADR-0005).
 - **@integration** — Cross-feature recipe. Composes multiple blocks into a documented "power user" look rather than specifying a single block in isolation.
-- **@wip** — Needs design. Scenario captures intent but a decision is still open. *(No feature currently carries this tag.)*
+- **@wip** — Needs design. Scenario captures intent but a decision is still open. *(Currently three scenarios: two in `wipe-patterns.feature` — panel-only pattern numbering and blank Pattern-Table cells — and one in `matte-generator.feature` — the White GRADATION brightness axis. All three need data mined from the reference Pattern Table; see [`docs/DEFERRED.md`](../docs/DEFERRED.md).)*
 
 Untagged features are in scope for the clean-modern v1 build.
 
