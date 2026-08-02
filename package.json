@@ -2,16 +2,22 @@
   "name": "web-mx-50",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "description": "A WebGPU browser recreation of the Panasonic WJ-MX50 two-bus digital A/V mixer.",
   "scripts": {
     "dev": "banira dev src/main.ts --root . --ts",
     "build": "banira compile src/main.ts --output dist",
     "typecheck": "tsc --noEmit",
+    "site:data": "tsx scripts/site-data.ts",
+    "site:build": "npm run site:data && tsx scripts/build-site.ts",
+    "site:serve": "npm run site:build && npx banira serve _site",
     "test": "npm run typecheck && npm run test:unit && npm run test:features && npm run test:golden",
     "test:unit": "node --import tsx --test test/unit/*.test.ts",
     "test:features": "tsx node_modules/@cucumber/cucumber/bin/cucumber.js --config test/cucumber.mjs",
-    "test:golden": "node --import tsx --test test/golden/*.test.ts"
+    "test:golden": "node --import tsx --test test/golden/*.test.ts",
+    "site:check": "tsx scripts/check-site.ts",
+    "site:smoke": "node scripts/smoke-site.mjs"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^11.2.0",

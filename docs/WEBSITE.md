@@ -1,6 +1,11 @@
 # Website concept — web-mx-50
 
-> **Status: concept.** A proposal for the public site for this repo. Nothing here is built yet.
+> **Status: W0–W2 built, W3–W4 outstanding.** The site exists in [`site/`](../site/), builds with
+> `npm run site:build`, and deploys to GitHub Pages from
+> [`.github/workflows/pages.yml`](../.github/workflows/pages.yml). All nine routes, the four
+> generated data artifacts, and every Tier-2 demo are live; the Tier-1 GPU benches (§5) and
+> scenario replay (D13) are not — see §10 for what each phase actually delivered.
+>
 > It inherits the repo's hard constraints (ADR-0003 no framework/no bundler, ADR-0013 web
 > components, [`STYLEGUIDE.md`](STYLEGUIDE.md)) and reuses `src/` directly — **the site never
 > re-implements domain logic, it imports it.**
@@ -519,8 +524,11 @@ Small section, real consequences.
   photography, or manual scans. `docs/wj-mx50-feature-reference.md` is an **original paraphrase**
   organised by section number, not a reproduction — that is what makes it publishable under §4.5
   if we choose to publish it.
-- **Licence**: the repo has none yet. Pick one before publishing — the site invites reading and
-  reuse, and "no licence" means "all rights reserved" by default, which contradicts the invitation.
+- **Licence**: **AGPL-3.0-only** ([`LICENSE`](../LICENSE)). The choice matters for a site like this
+  one: §13 requires that users interacting with a modified version *over a network* be offered its
+  source. Publishing the console at `/console/` is exactly that kind of network interaction, so the
+  footer carries the licence and a link to the repository on every page — that link is the
+  compliance mechanism, not decoration, and it must not be dropped in a redesign.
 
 ## 9. Accessibility, performance, quality bar
 
@@ -542,13 +550,31 @@ Small section, real consequences.
 
 Every catalogued demo appears exactly once below.
 
-| Phase | Scope | Result |
+| Phase | Scope | Status |
 |---|---|---|
-| **W0** | Shell, theme reuse, routing, deploy pipeline, `stats.json`; Overview with spine (**D18**) + numbers + footer; `/status/` and `/decisions/` as plain markdown renders | A real site exists, and the honesty pages the footer links to actually resolve |
-| **W1** | The 7 stage pages + `/machine/audio-memory-control/` with Tier-2 demos: **D2, D3, D5, D6b, D12, D14, D15, D16, D17, D19, D20, D21** | Full descriptive coverage, works without WebGPU. CC / DSK / Fade / Program Out ship **description-only** this phase |
-| **W2** | `/specs/` + World instrumentation + `scenarios.json` + **D13** replay | The fidelity claim becomes checkable — highest value per hour |
-| **W3** | Tier-1 benches **D4, D6, D7, D8, D9**, the device/feed/pause refactors (§5), capability fallbacks, committed captures (§7.5) — filling W1's four description-only pages | The site becomes a showcase |
-| **W4** | `/console/` + attract mode (**D1**) incl. the automation extension and ephemeral boot (§4.1); `/architecture/` demos **D10, D11**; ADR stage mapping and per-stage cross-links | Complete |
+| **W0** | Shell, theme reuse, routing, deploy pipeline, `stats.json`; Overview with spine (**D18**) + numbers + footer; `/status/` and `/decisions/` as markdown renders | ✅ **Built.** Nine routes, each a real directory with its own ESM entry — deep links work on Pages with no 404 rewrite |
+| **W1** | The stage pages + `/machine/audio-memory-control/` with Tier-2 demos: **D2, D3, D5, D6b, D12, D14, D15, D16, D17, D19, D20, D21** | ✅ **Built** (plus **D10, D11** pulled forward onto `/architecture/`). CC / DSK / Fade / Program Out ship **description-only**, as planned |
+| **W2** | `/specs/` + `scenarios.json` + **D13** replay | 🟡 **Partly built.** Browse, group, tag-filter, search and the executed/authored split are live. **D13 replay is not** — it needs the World instrumentation described in §5 Tier 3 |
+| **W3** | Tier-1 benches **D4, D6, D7, D8, D9**, the device/feed/pause refactors (§5), capability fallbacks, committed captures (§7.5) | ⬜ **Outstanding.** The renderer already draws all of it; what is missing is the site-side harness |
+| **W4** | `/console/` + attract mode (**D1**) incl. the automation extension and ephemeral boot (§4.1); `/architecture/` demos **D10, D11**; ADR stage mapping | 🟡 **Partly built.** `/console/` runs the real app in its own document behind a runtime capability check, and D10/D11 shipped in W1. **Attract mode is not built** — the three pieces it needs are listed in §4.1 |
+
+### What was learned building it
+
+- The §7.2 output-layout prediction held exactly: `banira compile` on `site/pages/*.ts` plus
+  `src/main.ts` emits `_site/site/…` alongside `_site/src/…` with relative specifiers intact, and
+  **no import map is needed anywhere**.
+- Two verification scripts turned out to matter more than expected and are now in the deploy
+  pipeline: [`scripts/check-site.ts`](../scripts/check-site.ts) walks every module specifier and
+  fetched asset the way a browser would (a no-bundler site's most likely failure is a specifier
+  that typechecks but points at a file the build never emitted), and
+  [`scripts/smoke-site.mjs`](../scripts/smoke-site.mjs) loads all nine routes in headless Chrome and
+  fails on any console error, dead request, or demo element that does not render.
+- `tsconfig.json` now includes `site` and `scripts`, so `npm test`'s typecheck covers them — the
+  src↔site coupling §11 Q9 asks about is closed for compile-time breakage.
+- The counts in `stats.json` are computed by parsing the feature files directly, and they had to be
+  taught two things to agree with cucumber: Background steps count once per scenario, and the
+  `name:` include-list entries are **regular expressions**, not exact strings. They now reproduce a
+  dry run exactly (563/4137 executed, 594/4349 authored).
 
 W0–W2 is a genuinely good site on its own and needs zero WebGPU work. Note the reason is *not*
 that rendering is unfinished: per `DEFERRED.md`, the GPU passes are built. W3 is **wiring and
@@ -563,7 +589,10 @@ block it.
    option: render recorded traces only, with no live re-execution?
 3. **Prose voice** — the repo's docs are dense and technical. Keep exactly that on the site, or
    soften the Overview for the video-people audience and stay dense underneath (proposed)?
-4. **Licence** (§8) — needed before publishing.
+4. ~~**Licence** (§8) — needed before publishing.~~ **Decided: AGPL-3.0-only.** Remaining detail: the
+   SPDX id is pinned to `-only` rather than `-or-later`; flip it if future versions should apply
+   automatically. Per-file SPDX headers are not present — the `LICENSE` file plus the
+   `package.json` field is the whole declaration today.
 5. **Domain** — `sebs.github.io/webgpu-mx-50/` or a custom domain?
 6. **Spine endpoints** (§2) — accept `Source` / `Program Out` as authored furniture, or export
    them from `signal-graph.ts` so the whole diagram is generated?

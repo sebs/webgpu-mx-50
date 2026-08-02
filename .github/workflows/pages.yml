@@ -1,0 +1,65 @@
+name: Deploy site to GitHub Pages
+
+# The deploy is gated on the test run. The site's central claim is that the suite is green,
+# so it must not be able to publish while it isn't (docs/WEBSITE.md §7.3).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # The gate: typecheck (which now covers site/ and scripts/), unit tests, the Gherkin
+      # suite, and the golden scaffolding. If this fails, nothing publishes.
+      - name: Test
+        run: npm test
+
+      - name: Build site
+        run: npm run site:build
+
+      # Resolves every module specifier and fetched asset in _site the way a browser would.
+      - name: Check site
+        run: npm run site:check
+
+      # Loads every route in headless Chrome and fails on any console error or dead request.
+      - name: Smoke-test site
+        run: npm run site:smoke
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

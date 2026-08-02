@@ -3,5 +3,9 @@ dist/
 *.log
 .DS_Store
 
+# Built site + its CI-generated data (both are reproducible: npm run site:build).
+_site/
+site/generated/
+
 # Local demo clips (hundreds of MB) — load them via the console, never commit them.
 videos/

@@ -57,6 +57,19 @@ npm run build   # no-bundler ESM output to dist/
 
 Individual gates: `npm run typecheck` · `npm run test:unit` · `npm run test:features`.
 
+**The website** — descriptions and runnable demos for every block, built from this same tree
+(the demos import `src/` directly rather than copying it):
+
+```bash
+npm run site:build    # static output to _site/ — no bundler, one ESM entry per route
+npm run site:serve    # build, then serve it locally
+npm run site:check    # resolve every module specifier + fetched asset
+npm run site:smoke    # load every route in headless Chrome, fail on any console error
+```
+
+It deploys to GitHub Pages from `.github/workflows/pages.yml`, gated on `npm test` — see
+[docs/WEBSITE.md](docs/WEBSITE.md) for the concept and what is still outstanding.
+
 **Blend video feeds:** on load, all four Sources are live video feeds with their own monitors
 (self-contained procedural clips — swap any of them for your own files with the monitor's
 *Load clip…* button; *Pattern* brings the clip back). Bus A starts on Source 1, Bus B on
@@ -90,6 +103,15 @@ short: the rendered-**pixel** outcomes and **browser-only** surfaces are *builda
 because this environment has no headless-WebGPU runner or device access — verify by browser smoke);
 a small set is genuinely not buildable without breaking fidelity (model-constrained scenarios) or
 is out of scope (analog/interlace behaviour, dropped by the clean-modern decision, ADR-0005).
+
+## Licence
+
+**GNU Affero General Public License v3.0** — see [`LICENSE`](LICENSE) (SPDX: `AGPL-3.0-only`).
+
+The Affero clause is the deliberate part: §13 requires that anyone interacting with a modified
+version **over a network** be offered its source. If you host a fork of this mixer, that obligation
+applies to your users — the published site keeps a licence and source link in its footer for
+exactly that reason.
 
 ## Repository layout
 
