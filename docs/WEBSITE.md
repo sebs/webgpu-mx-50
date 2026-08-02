@@ -1,10 +1,17 @@
 # Website concept — web-mx-50
 
-> **Status: W0–W2 built, W3–W4 outstanding.** The site exists in [`site/`](../site/), builds with
+> **Status: built, and narrowed.** The site exists in [`site/`](../site/), builds with
 > `npm run site:build`, and deploys to GitHub Pages from
-> [`.github/workflows/pages.yml`](../.github/workflows/pages.yml). All nine routes, the four
-> generated data artifacts, and every Tier-2 demo are live; the Tier-1 GPU benches (§5) and
-> scenario replay (D13) are not — see §10 for what each phase actually delivered.
+> [`.github/workflows/pages.yml`](../.github/workflows/pages.yml).
+>
+> **Scope decision (superseding §3, §4.5 and §4.6):** the three meta routes — `/specs/`,
+> `/decisions/` and `/status/` — were **removed by owner decision**. The site is now six routes
+> focused on the machine itself, with two nav items. The material they carried has not been
+> deleted from the project: it lives in [`features/`](../features/), [`adr/`](../adr/) and
+> [`DEFERRED.md`](DEFERRED.md), and the site links out to each. The scenario counts on the
+> Overview are still generated and still show the authored-vs-executed split — that honesty was in
+> the numbers, not in the browser page. §4.5, §4.6 and the `/specs/` replay design (D13) are kept
+> below as a record of the design, not as a description of what ships.
 >
 > It inherits the repo's hard constraints (ADR-0003 no framework/no bundler, ADR-0013 web
 > components, [`STYLEGUIDE.md`](STYLEGUIDE.md)) and reuses `src/` directly — **the site never
@@ -110,24 +117,30 @@ description-only in which phase, rather than pretending the rule holds from day 
 
 ## 3. Information architecture
 
-**Five nav items** — The Machine · Architecture · Specs · Decisions · Status — plus a persistent
-**Launch console** button, top right, the one call to action. Overview hangs off the wordmark;
-the wipe deep-dive and the off-spine page nest under The Machine.
+**Two nav items** — The Machine · Architecture — plus a persistent **Launch console** button, top
+right, the one call to action. Overview hangs off the wordmark; the wipe deep-dive and the
+off-spine page nest under The Machine.
 
 | Route | Nav | Page | Role |
 |---|---|---|---|
-| `/` | wordmark | **Overview** | Hero, the pitch, the interactive signal spine, the numbers, three doors into the depth |
-| `/machine/` | ✅ | **The Machine** | One page per signal stage (7), each a stack of block cards. The bulk of the descriptions and demos |
+| `/` | wordmark | **Overview** | Hero, the pitch, the generated signal spine, the numbers, three doors into the depth |
+| `/machine/` | ✅ | **The Machine** | Every signal stage, anchored, each a stack of block cards. The bulk of the descriptions and demos |
 | `/machine/wipes/` | sub | **The wipe engine** | The showpiece deep-dive: 7 families, compositional variants, RS-422 numbering, borders/soft edges |
 | `/machine/audio-memory-control/` | sub | **Audio, Memory & Control** | The off-spine blocks (§4.8): the 7-input audio mixer, Event Memory, Special Modes, inputs & devices |
 | `/architecture/` | ✅ | **How it's built** | One store, one graph, one clock, headless-first testing — each claim with a demo that proves it |
-| `/specs/` | ✅ | **The specs** | Browsable, replayable Gherkin across all 26 feature files |
-| `/decisions/` | ✅ | **Decisions** | The 16 ADRs, rendered, cross-linked to the stages they govern |
-| `/status/` | ✅ | **Status & what's deferred** | The honest page: what's built, what's environment-limited, what's out of model, what's out of scope |
-| `/console/` | button | **The console** | The real app, full-bleed, with a keyboard/controller map and a "what to try" strip |
+| `/console/` | button | **The console** | The real app in its own document, behind a runtime capability check, with the control map and a "try this" strip |
 
-`/status/` being in the nav rather than buried is deliberate: for the engineer audience, an
-honest deferred inventory is a stronger signal than a longer feature list.
+**On the removed meta routes.** `/specs/`, `/decisions/` and `/status/` were cut. The reasoning
+that put them in the nav still stands as reasoning — an honest deferred inventory *is* a strong
+signal — but a site can carry that signal by linking to the repository rather than by re-hosting
+it, and three meta pages against four content pages was a poor ratio for a site whose subject is a
+mixer. What replaced them:
+
+- the Overview's numbers strip keeps the **authored vs executed** split and links to `features/`
+  and `adr/` on GitHub;
+- every block card names the scenario that pins it and links to its feature file;
+- the footer carries "here is what isn't built" straight to `DEFERRED.md`;
+- pages with no demo yet say so in the demo pane instead of deferring to a status page.
 
 ## 4. Page-by-page
 
@@ -552,11 +565,15 @@ Every catalogued demo appears exactly once below.
 
 | Phase | Scope | Status |
 |---|---|---|
-| **W0** | Shell, theme reuse, routing, deploy pipeline, `stats.json`; Overview with spine (**D18**) + numbers + footer; `/status/` and `/decisions/` as markdown renders | ✅ **Built.** Nine routes, each a real directory with its own ESM entry — deep links work on Pages with no 404 rewrite |
+| **W0** | Shell, theme reuse, routing, deploy pipeline, `stats.json`; Overview with spine (**D18**) + numbers + footer | ✅ **Built.** Six routes, each a real directory with its own ESM entry — deep links work on Pages with no 404 rewrite |
 | **W1** | The stage pages + `/machine/audio-memory-control/` with Tier-2 demos: **D2, D3, D5, D6b, D12, D14, D15, D16, D17, D19, D20, D21** | ✅ **Built** (plus **D10, D11** pulled forward onto `/architecture/`). CC / DSK / Fade / Program Out ship **description-only**, as planned |
-| **W2** | `/specs/` + `scenarios.json` + **D13** replay | 🟡 **Partly built.** Browse, group, tag-filter, search and the executed/authored split are live. **D13 replay is not** — it needs the World instrumentation described in §5 Tier 3 |
+| **W2** | `/specs/` + `scenarios.json` + **D13** replay | ⛔ **Cut.** The page was built, then removed with `/decisions/` and `/status/` by owner decision (see the status note at the top). D13 was never built |
 | **W3** | Tier-1 benches **D4, D6, D7, D8, D9**, the device/feed/pause refactors (§5), capability fallbacks, committed captures (§7.5) | ⬜ **Outstanding.** The renderer already draws all of it; what is missing is the site-side harness |
-| **W4** | `/console/` + attract mode (**D1**) incl. the automation extension and ephemeral boot (§4.1); `/architecture/` demos **D10, D11**; ADR stage mapping | 🟡 **Partly built.** `/console/` runs the real app in its own document behind a runtime capability check, and D10/D11 shipped in W1. **Attract mode is not built** — the three pieces it needs are listed in §4.1 |
+| **W4** | `/console/` + attract mode (**D1**) incl. the automation extension and ephemeral boot (§4.1); `/architecture/` demos **D10, D11** | 🟡 **Partly built.** `/console/` runs the real app in its own document behind a runtime capability check, and D10/D11 shipped in W1. **Attract mode is not built** — the three pieces it needs are listed in §4.1 |
+
+Demo accounting after the cut: **D13 is the only catalogued demo with no home**, since it existed
+only to serve `/specs/`. D1, D4, D6, D7, D8 and D9 remain outstanding as W3/W4 work. Every other
+demo in §5 ships.
 
 ### What was learned building it
 

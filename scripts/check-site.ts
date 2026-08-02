@@ -54,28 +54,26 @@ function walkModule(file: string, from: string): void {
 
 /** Assets pages fetch at runtime rather than import. */
 function checkFetchedAssets(): void {
-  const required = [
-    'site/generated/stats.json',
-    'site/generated/scenarios.json',
-    'site/generated/spine.json',
-    'site/generated/adr.json',
-    'site/generated/DEFERRED.md',
-    'app/index.html',
-    '404.html',
-    '.nojekyll',
-  ];
+  const required = ['site/generated/stats.json', 'app/index.html', '404.html', '.nojekyll'];
   for (const rel of required) {
     if (!existsSync(join(OUT, rel))) problems.push(`missing asset: ${rel}`);
   }
 
-  // every ADR named in adr.json must have its markdown alongside
-  const adrIndex = join(OUT, 'site/generated/adr.json');
-  if (existsSync(adrIndex)) {
-    const data = JSON.parse(readFileSync(adrIndex, 'utf8')) as { adrs: Array<{ file: string }> };
-    for (const a of data.adrs) {
-      if (!existsSync(join(OUT, 'site/generated/adr', a.file))) {
-        problems.push(`missing ADR source: ${a.file}`);
-      }
+  // The Overview interpolates these; a stats file missing a field would render "undefined"
+  // rather than fail, so check the shape rather than just the file.
+  const statsFile = join(OUT, 'site/generated/stats.json');
+  if (existsSync(statsFile)) {
+    const stats = JSON.parse(readFileSync(statsFile, 'utf8')) as Record<string, unknown>;
+    const scenarios = stats.scenarios as { authored?: number; executed?: number } | undefined;
+    const steps = stats.steps as { authored?: number; executed?: number } | undefined;
+    if (!scenarios || typeof scenarios.executed !== 'number' || typeof scenarios.authored !== 'number') {
+      problems.push('stats.json: missing scenarios.executed / scenarios.authored');
+    }
+    if (!steps || typeof steps.executed !== 'number' || typeof steps.authored !== 'number') {
+      problems.push('stats.json: missing steps.executed / steps.authored');
+    }
+    if (typeof stats.featureFiles !== 'number' || typeof stats.adrs !== 'number') {
+      problems.push('stats.json: missing featureFiles / adrs');
     }
   }
 }

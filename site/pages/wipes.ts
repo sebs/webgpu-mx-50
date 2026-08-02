@@ -3,7 +3,7 @@
 // The showpiece deep-dive. Everything here runs without a GPU, which is the point: the
 // compositional claim is provable from the domain code alone.
 
-import { mountShell, section, body, el, href, srcLink } from '../shell.js';
+import { mountShell, section, body, el, href, srcLink, REPO } from '../shell.js';
 import '../demos/wipe.js';
 
 const main = mountShell({ route: 'machine/wipes/' });
@@ -113,8 +113,7 @@ body(edges).appendChild(
 );
 const src = el('p', { class: 'mx-dim' });
 src.innerHTML = `Source: ${srcLink('src/core/wipe.ts')} · ${srcLink('src/gpu/shaders/wipe.wgsl.ts')} ·
-  specs: ${srcLink('features/wipe-patterns.feature')}, ${srcLink('features/wipe-edge-and-direction.feature')} ·
-  <a href="${href('specs/')}?q=wipe">open the wipe scenarios &rarr;</a>`;
+  specs: ${srcLink('features/wipe-patterns.feature')}, ${srcLink('features/wipe-edge-and-direction.feature')}`;
 body(edges).appendChild(src);
 main.appendChild(edges);
 
@@ -130,8 +129,8 @@ body(gpu).appendChild(
        device across several canvases and the procedural feed patterns extracted from the console's
        monitor wall — which is scheduled work, not finished work.</p>
        <p class="mx-dim">The renderer itself already draws every one of these patterns; what is
-       missing is the site-side harness. See <a href="${href('status/')}">Status</a> for the full
-       inventory of what is and is not built here.</p>`,
+       missing is the site-side harness — the full inventory of what is and is not built lives in
+       <a href="${REPO}/blob/main/docs/DEFERRED.md">DEFERRED.md</a>.</p>`,
   }),
 );
 main.appendChild(gpu);

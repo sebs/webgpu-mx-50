@@ -67,10 +67,12 @@ void loadGenerated<Stats>('stats.json').then((stats) => {
     strip.innerHTML = `<p class="mx-dim">Counts unavailable — run <code>npm run site:data</code>.</p>`;
     return;
   }
-  strip.appendChild(stat(String(stats.scenarios.executed), 'scenarios execute', `of ${stats.scenarios.authored} authored`, href('specs/')));
-  strip.appendChild(stat(String(stats.steps.executed), 'steps execute', `of ${stats.steps.authored} authored`, href('specs/')));
-  strip.appendChild(stat(String(stats.featureFiles), 'feature files', 'the living specification', href('specs/')));
-  strip.appendChild(stat(String(stats.adrs), 'decisions recorded', 'ADRs, cross-linked', href('decisions/')));
+  const FEATURES = REPO + '/tree/main/features';
+  const ADRS = REPO + '/tree/main/adr';
+  strip.appendChild(stat(String(stats.scenarios.executed), 'scenarios execute', `of ${stats.scenarios.authored} authored`, FEATURES));
+  strip.appendChild(stat(String(stats.steps.executed), 'steps execute', `of ${stats.steps.authored} authored`, FEATURES));
+  strip.appendChild(stat(String(stats.featureFiles), 'feature files', 'the living specification', FEATURES));
+  strip.appendChild(stat(String(stats.adrs), 'decisions recorded', 'in the repository', ADRS));
 
   const marker = heroWrap.querySelector('[data-executed]');
   if (marker) marker.textContent = String(stats.scenarios.executed);
@@ -80,7 +82,8 @@ void loadGenerated<Stats>('stats.json').then((stats) => {
     `<strong>${stats.scenarios.executed}</strong> scenarios execute headlessly in the gate, while ` +
     `<strong>${stats.scenarios.authored - stats.scenarios.executed}</strong> more are authored and deliberately ` +
     `deferred (interlace behaviour with no analogue in a progressive build, and pattern-table data that isn't ` +
-    `derivable from the reference). Which is which is on the <a href="${href('specs/')}">specs page</a>. ` +
+    `derivable from the reference). Which is which is recorded in ` +
+    `<a href="${REPO}/blob/main/docs/DEFERRED.md">DEFERRED.md</a>. ` +
     `There is no unit-test count here on purpose: it moves with every commit and tells you nothing.`;
 });
 
@@ -142,11 +145,11 @@ doorGrid.appendChild(
 );
 doorGrid.appendChild(
   door(
-    'For the sceptical',
-    'The specs',
-    'The fidelity claim, checkable: every Gherkin scenario in the project, with the ones that actually execute marked as such.',
-    href('specs/'),
-    'Read the specs',
+    'For the curious',
+    'The wipe engine',
+    'Seven families composed into every pattern rather than drawn — with the RS-422 numbering oracle answering live, and the geometry the shader actually receives.',
+    href('machine/wipes/'),
+    'Open the deep dive',
   ),
 );
 doorGrid.appendChild(
@@ -174,10 +177,12 @@ honestBody.appendChild(
       `browser — driven by one state store, rendered on WebGPU, and held in place by executable specs written ` +
       `from the manual.</p>` +
       `<p>The domain model is complete and verified headlessly. Some things are deliberately not built, and some ` +
-      `cannot be verified in this environment at all. All of it is inventoried, with file and line pointers, on ` +
-      `the <a href="${href('status/')}">status page</a> — including the parts of this very site that are still ` +
-      `description-only.</p>` +
-      `<p class="mx-dim">Source: <a href="${REPO}">github.com/sebs/webgpu-mx-50</a></p>`,
+      `cannot be verified in this environment at all — the golden-image tier skips here for want of a headless ` +
+      `WebGPU adapter, and a handful of blocks on this site ship description-only until their GPU benches land. ` +
+      `All of it is inventoried with file and line pointers in ` +
+      `<a href="${REPO}/blob/main/docs/DEFERRED.md">DEFERRED.md</a>.</p>` +
+      `<p class="mx-dim">Source: <a href="${REPO}">github.com/sebs/webgpu-mx-50</a> · ` +
+      `<a href="${REPO}/blob/main/LICENSE">GNU AGPL v3.0</a></p>`,
   }),
 );
 main.appendChild(honest);

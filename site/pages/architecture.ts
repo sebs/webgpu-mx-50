@@ -23,7 +23,7 @@ introWrap.innerHTML = `
   </p>
   <p class="mx-prose mx-dim" style="max-width:62ch">
     The long-form version lives in ${srcLink('docs/architecture.md', 'docs/architecture.md')}; the
-    decisions themselves are on <a href="${href('decisions/')}">Decisions</a>.
+    decisions themselves are the 16 ADRs in <a href="${REPO}/tree/main/adr">adr/</a>.
   </p>`;
 intro.appendChild(introWrap);
 main.appendChild(intro);
@@ -115,7 +115,7 @@ main.appendChild(
        <em>skips</em> here, because this environment has no headless-WebGPU adapter. That is an
        environment limit rather than a code limit, and saying so is better than quietly omitting the
        tier.</p>
-      <p><a href="${href('specs/')}">Browse all the scenarios &rarr;</a></p>`,
+      <p><a href="${REPO}/tree/main/features">Read the feature files &rarr;</a></p>`,
   }),
 );
 

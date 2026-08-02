@@ -5,7 +5,7 @@
 //      trees with their specifiers intact.
 //   2. write a real index.html per route (deep links work on Pages with no 404 rewrite)
 //   3. write app/index.html — the console itself, in its own document
-//   4. copy the generated JSON, the ADR sources, and DEFERRED.md
+//   4. copy the generated JSON the pages fetch at runtime
 //
 // Run: npm run site:build   (site:data must have run first)
 
@@ -119,15 +119,6 @@ function main(): void {
   const genOut = join(OUT, 'site', 'generated');
   mkdirSync(genOut, { recursive: true });
   cpSync(gen, genOut, { recursive: true });
-
-  // ADR markdown, fetched on demand by /decisions/
-  const adrOut = join(genOut, 'adr');
-  mkdirSync(adrOut, { recursive: true });
-  const adrFiles = readdirSync(join(ROOT, 'adr')).filter((f) => f.slice(-3) === '.md');
-  for (const f of adrFiles) cpSync(join(ROOT, 'adr', f), join(adrOut, f));
-
-  // DEFERRED.md, rendered by /status/
-  cpSync(join(ROOT, 'docs', 'DEFERRED.md'), join(genOut, 'DEFERRED.md'));
 
   // Pages must not run the output through Jekyll — it would drop nothing here today, but
   // an underscore-prefixed path later would vanish silently.

@@ -20,9 +20,6 @@ const ROUTES = [
   '/machine/wipes/',
   '/machine/audio-memory-control/',
   '/architecture/',
-  '/specs/',
-  '/decisions/',
-  '/status/',
   '/console/',
 ];
 

@@ -62,30 +62,6 @@ export const ROUTES: readonly RouteDef[] = [
     description: 'One pure store, an explicit signal graph, a deterministic clock, headless-first specs — each claim with a demo that proves it.',
   },
   {
-    path: 'specs/',
-    entry: 'pages/specs.js',
-    title: 'The specs — web-mx-50',
-    nav: true,
-    navLabel: 'Specs',
-    description: 'Every Gherkin scenario in the project, browsable and searchable, with the executed/authored split made explicit.',
-  },
-  {
-    path: 'decisions/',
-    entry: 'pages/decisions.js',
-    title: 'Decisions (ADRs) — web-mx-50',
-    nav: true,
-    navLabel: 'Decisions',
-    description: 'The architecture decision records behind the project, rendered and cross-linked.',
-  },
-  {
-    path: 'status/',
-    entry: 'pages/status.js',
-    title: 'Status & what is deferred — web-mx-50',
-    nav: true,
-    navLabel: 'Status',
-    description: 'What is built, what is environment-limited, what is out of model, and what is deliberately out of scope.',
-  },
-  {
     path: 'console/',
     entry: 'pages/console.js',
     title: 'The console — web-mx-50',
@@ -211,7 +187,7 @@ export function mountShell(opts: ShellOptions): HTMLElement {
       <p style="margin:0 0 8px"><strong>web-mx-50</strong> — a proof of concept.
       Not affiliated with, endorsed by, or connected to Panasonic; "WJ-MX50" names the
       hardware this project studies.</p>
-      <p style="margin:0"><a href="${href('status/')}">Here is what isn't built &rarr;</a></p>
+      <p style="margin:0"><a href="${REPO}/blob/main/docs/DEFERRED.md">Here is what isn't built &rarr;</a></p>
     </div>
     <div>
       <p class="mx-label" style="margin:0 0 8px">Source &amp; licence</p>
@@ -291,8 +267,9 @@ export function blockCard(spec: BlockCardSpec): HTMLElement {
   } else {
     p2.innerHTML =
       `<span class="mx-label">The demo</span>` +
-      `<p class="mx-dim" style="margin:0">This block ships description-only in the current phase; its ` +
-      `bench needs WebGPU and lands with the Tier-1 pass. See <a href="${href('status/')}">Status</a>.</p>`;
+      `<p class="mx-dim" style="margin:0">This block ships description-only for now; its bench needs WebGPU ` +
+      `and lands with the Tier-1 pass. The renderer already draws it — what's missing is the harness. ` +
+      `<a href="${REPO}/blob/main/docs/WEBSITE.md">The plan is in the repo.</a></p>`;
   }
   bodyEl.appendChild(p2);
 
@@ -311,11 +288,13 @@ export function blockCard(spec: BlockCardSpec): HTMLElement {
     p4.innerHTML =
       `<span class="mx-label">The spec that pins it</span>` +
       `<p style="margin:0 0 8px"><code>${esc(spec.spec.scenario)}</code></p>` +
-      `<p class="mx-dim" style="margin:0">${srcLink('features/' + spec.spec.feature)} · ` +
-      `<a href="${href('specs/')}?q=${encodeURIComponent(spec.spec.scenario)}">open in the spec browser &rarr;</a></p>`;
+      `<p class="mx-dim" style="margin:0">A real Gherkin scenario, executed headlessly against this code in CI — ` +
+      `read it in ${srcLink('features/' + spec.spec.feature)}.</p>`;
   } else {
-    p4.innerHTML = `<span class="mx-label">The spec that pins it</span><p class="mx-dim" style="margin:0">See the ` +
-      `<a href="${href('specs/')}">spec browser</a>.</p>`;
+    p4.innerHTML =
+      `<span class="mx-label">The spec that pins it</span>` +
+      `<p class="mx-dim" style="margin:0">The behaviour contract lives in ` +
+      `<a href="${REPO}/tree/main/features">features/</a>.</p>`;
   }
   bodyEl.appendChild(p4);
 

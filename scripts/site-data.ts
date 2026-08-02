@@ -261,10 +261,11 @@ async function main(): Promise<void> {
     note: 'Inner stages generated from src/core/signal-graph.ts; endpoints are authored diagram furniture.',
   };
 
+  // Only stats.json is consumed by a page (the Overview numbers strip). spine.json is kept
+  // as a build artifact for the wipe-wall work; the D18 diagram reads signal-graph.ts at
+  // runtime instead, which is strictly better — it cannot go stale between builds.
   writeFileSync(join(OUT, 'stats.json'), JSON.stringify(stats, null, 2));
-  writeFileSync(join(OUT, 'scenarios.json'), JSON.stringify({ scenarios: marked }, null, 2));
   writeFileSync(join(OUT, 'spine.json'), JSON.stringify(spine, null, 2));
-  writeFileSync(join(OUT, 'adr.json'), JSON.stringify({ adrs }, null, 2));
 
   process.stdout.write(
     `site data written to site/generated/\n` +
