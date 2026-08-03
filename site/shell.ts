@@ -56,10 +56,11 @@ export const ROUTES: readonly RouteDef[] = [
   {
     path: 'architecture/',
     entry: 'pages/architecture.js',
-    title: 'How it is built — web-mx-50',
+    title: 'Architecture — web-mx-50',
     nav: true,
     navLabel: 'Architecture',
-    description: 'One pure store, an explicit signal graph, a deterministic clock, headless-first specs — each claim with a demo that proves it.',
+    description:
+      'State store, signal graph, fixed-timestep clock, WebGPU render path, headless test layer, and the no-bundler build.',
   },
   {
     path: 'console/',
