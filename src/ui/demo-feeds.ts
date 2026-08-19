@@ -71,14 +71,12 @@ function drawFeedOne(ctx: CanvasRenderingContext2D, t: number, frame: number): v
   ctx.arc(x, y, 26, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = 'rgba(0,0,0,0.72)';
-  ctx.fillRect(0, FEED_H - 64, FEED_W, 64);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 40px system-ui, sans-serif';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('FEED 1', 18, FEED_H - 32);
+  ctx.fillRect(FEED_W - 210, FEED_H - 64, 210, 64);
   const totalSeconds = Math.floor(frame / 60);
   const tc = `${pad2(Math.floor(totalSeconds / 60))}:${pad2(totalSeconds % 60)}:${pad2(frame % 60)}`;
+  ctx.fillStyle = '#ffffff';
   ctx.font = '32px ui-monospace, monospace';
+  ctx.textBaseline = 'middle';
   ctx.fillText(tc, FEED_W - 190, FEED_H - 32);
 }
 
@@ -108,10 +106,6 @@ function drawFeedTwo(ctx: CanvasRenderingContext2D, t: number, _frame: number): 
   ctx.lineWidth = 5;
   ctx.strokeRect(-55, -55, 110, 110);
   ctx.restore();
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 40px system-ui, sans-serif';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('FEED 2', 18, 40);
 }
 
 /** Feed 3 — teal ground with pulsing concentric rings. */
@@ -133,10 +127,6 @@ function drawFeedThree(ctx: CanvasRenderingContext2D, t: number, _frame: number)
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 40px system-ui, sans-serif';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('FEED 3', 18, 40);
 }
 
 /** Feed 4 — a warm scrolling checkerboard with a roaming diamond. */
@@ -155,12 +145,6 @@ function drawFeedFour(ctx: CanvasRenderingContext2D, t: number, _frame: number):
   ctx.fillStyle = '#ffd98a';
   ctx.fillRect(-45, -45, 90, 90);
   ctx.restore();
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(0, 0, 170, 64);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 40px system-ui, sans-serif';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('FEED 4', 18, 34);
 }
 
 interface Feed {
