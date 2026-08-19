@@ -20,11 +20,15 @@
     "site:smoke": "node scripts/smoke-site.mjs"
   },
   "devDependencies": {
-    "@cucumber/cucumber": "^11.2.0",
-    "@types/node": "^22.9.0",
-    "@webgpu/types": "^0.1.51",
+    "@cucumber/cucumber": "^13.2.1",
+    "@types/node": "^26.2.0",
+    "@webgpu/types": "^0.1.72",
     "banira": "^0.6.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true
   }
 }
