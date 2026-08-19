@@ -1,32 +1,21 @@
-// Browser entry point. Feature-detects WebGPU (ADR-0002), initialises the device and
-// sRGB swapchain, builds the four Source slots (all live video feeds with their own
-// monitors) + Matte, wires the headless store to the two-bus renderer and the operator
-// console, and runs the render loop. The monitor bridge (source monitors + Program
-// monitor chrome) is display-only and store-driven.
+// Browser entry point for the demo page — the first consumer of the public embedding
+// API (ADR-0017). The <mx-mixer> host in index.html owns WebGPU, the engine, and the
+// render loop; the <mx-console for="mixer"> connects itself through the context
+// protocol. This script defines both elements, then wires everything demo-specific
+// around the host: the four-source monitor wall, the External Camera In monitor, the
+// audio engine, the control-surface adapters, and the monitor-bridge chrome.
 
-import { detectWebGPU, WEBGPU_REQUIREMENT_MESSAGE } from './gpu/capabilities.js';
-import { initGpu } from './gpu/device.js';
-import type { GpuContext } from './gpu/device.js';
-import { MatteSource } from './sources/matte-source.js';
+import { defineMixer } from './ui/mixer.js';
+import { defineConsole } from './ui/console.js';
 import { VideoSource } from './sources/video-source.js';
 import { ImageSource } from './sources/image-source.js';
 import { CameraSource } from './sources/camera-source.js';
-import { SourceRegistry } from './sources/registry.js';
 import { listVideoInputs, onDeviceChange } from './sources/device-list.js';
-import { Renderer } from './engine/renderer.js';
-import { RenderLoop } from './engine/loop.js';
-import { createEngine } from './app.js';
-import { createConsole } from './ui/console.js';
 import { createDemoFeeds } from './ui/demo-feeds.js';
 import { createExtCameraMonitor } from './ui/ext-camera-monitor.js';
 import { ensureTheme } from './ui/theme.js';
 import { AudioEngine } from './audio/engine.js';
 import { AvSynchroTap } from './audio/av-synchro-tap.js';
-import { createPersistence } from './persistence/persistence.js';
-import { IndexedDbBlobBackend, LocalStorageBackend } from './persistence/backend.js';
-import { attachPersistence } from './persistence/subscriber.js';
-import { createStillStore } from './persistence/still-store.js';
-import { createPresetFileIo } from './persistence/file-io.js';
 import { BindingTable } from './control/bindings.js';
 import { SignalCoalescer } from './control/resolver.js';
 import { KeyboardAdapter } from './control/keyboard.js';
@@ -35,10 +24,12 @@ import { MidiAdapter } from './control/midi.js';
 import { SerialGpiAdapter } from './control/serial.js';
 import { resolveBusSource } from './core/resolve.js';
 import { directOutSource } from './core/program.js';
-import type { FeedBoundDetail, FeedUnavailableDetail, MxDemoFeeds, TallyState } from './ui/demo-feeds.js';
+import type { MxMixer } from './ui/mixer.js';
+import type { SourceRegistry } from './sources/registry.js';
 import type { Engine } from './app.js';
-import type { PanelState } from './state/state.js';
-import type { Size, SourceSlot } from './core/types.js';
+import type { FeedBoundDetail, FeedUnavailableDetail, MxDemoFeeds, TallyState } from './ui/demo-feeds.js';
+import type { PanelState, AvSynchroEffect } from './state/state.js';
+import type { SourceSlot } from './core/types.js';
 
 function showCapabilityMessage(text: string): void {
   const message = document.getElementById('capability');
@@ -148,63 +139,29 @@ function wireFeedBindings(
   });
 }
 
-async function boot(): Promise<void> {
-  ensureTheme();
-  const capability = detectWebGPU();
-  if (!capability.ok) {
-    showCapabilityMessage(WEBGPU_REQUIREMENT_MESSAGE);
-    return;
-  }
-
-  const canvas = document.getElementById('program') as HTMLCanvasElement | null;
-  if (!canvas) throw new Error('#program canvas element not found.');
-
-  let gpu: GpuContext;
-  try {
-    gpu = await initGpu(canvas);
-  } catch (error) {
-    showCapabilityMessage(`${WEBGPU_REQUIREMENT_MESSAGE} (${String(error)})`);
-    return;
-  }
-
-  // Persistence (ADR-0015): boot the store from storage (Reset policy + saved bank/field
-  // preset), then mirror future changes back. The module owns all localStorage access;
-  // captured stills live in the IndexedDB blob tier. attachPersistence waits until the
-  // renderer exists — it is the GpuStillPort the still-store reads back through.
-  const persistence = createPersistence(new LocalStorageBackend(window.localStorage));
-  const blobs = new IndexedDbBlobBackend();
-  const engine = createEngine(persistence.restoreOnBoot());
-  const size: Size = { width: canvas.width, height: canvas.height };
+/**
+ * Everything demo-specific, wired around the running host. Called from the host's
+ * 'mx-ready' window — synchronously before the first frame, so the real feed sources
+ * land in the registry with no matte frame ever presented (ADR-0008/0017).
+ */
+function wireDemo(mixer: MxMixer): void {
+  const engine = mixer.engine!;
+  const gpu = mixer.gpu!;
+  const registry = mixer.registry!;
+  const persistence = mixer.persistence; // present: the demo host sets `persist`
 
   // Source 1–4: live video feeds (ADR-0008 video path) shown on the source monitor
   // wall — distinct procedural clips by default, each swappable for a local video file
-  // via its monitor's picker. Matte is the internal generator. Blend with the lever.
+  // via its monitor's picker. acquire() never waits on media readiness (ADR-0008).
   const feeds = createDemoFeeds();
   const videoSources = feeds.feedVideos.map((video) => new VideoSource(gpu.device, video));
-  const matte = new MatteSource(gpu.device, size);
-
-  const registry = new SourceRegistry();
   ([1, 2, 3, 4] as SourceSlot[]).forEach((slot, i) => registry.set(slot, videoSources[i]!));
-  registry.set('matte', matte);
-  await registry.acquireAll();
-
-  const renderer = new Renderer({ gpu, registry, generated: [], matte, size });
-
-  // Two-tier still persistence (ADR-0015): blob-first commits, recall reloads, boot sweep.
-  const stills = createStillStore(blobs, persistence, renderer);
-  attachPersistence(engine.store, persistence, stills);
-  const bootSnap = engine.store.getSnapshot();
-  void stills.sweepOrphans(bootSnap.memory.slots, [bootSnap.positioner.stillId]);
-  if (bootSnap.positioner.sceneGrabber && bootSnap.positioner.stillId != null) {
-    void stills.recallStill(bootSnap.positioner.stillId);
-  }
-
-  // The operator console (ADR-0013, styled per docs/STYLEGUIDE.md), bound to the single
-  // store. The tick provider lets AUTO TAKE / AUTO FADE stamp their press (ADR-0012).
+  void Promise.all(videoSources.map((source) => source.acquire()));
   document.getElementById('mx-sources')?.appendChild(feeds);
-  const presetIo = createPresetFileIo({ persistence, store: engine.store, now: () => new Date() });
-  const controls = createConsole(engine.store, () => engine.clock.tick, presetIo);
-  document.getElementById('mx-console-mount')?.appendChild(controls);
+
+  // The console connected itself via `for="mixer"` (ADR-0017); the demo only needs the
+  // element reference for the transient display datasets below.
+  const controls = document.querySelector('mx-console') as HTMLElement | null;
 
   // Monitor-bridge chrome: program chip, transition caption, and the source tallies
   // reflect every store change; the timecode advances with the logical clock below.
@@ -223,7 +180,10 @@ async function boot(): Promise<void> {
   // Control-input mapping (ADR-0014): every remappable surface normalises onto logical-control
   // signals, coalesced and resolved into store commands once per tick. Bindings persist (ADR-0015);
   // pointer/touch stays on the console's direct path. Non-keyboard surfaces are capability-detected.
-  const bindings = new BindingTable(persistence.loadBindings() ?? undefined, persistence.saveBindings);
+  const bindings = new BindingTable(
+    persistence?.loadBindings() ?? undefined,
+    persistence ? persistence.saveBindings : () => undefined,
+  );
   const coalescer = new SignalCoalescer();
   new KeyboardAdapter(bindings, coalescer).attach(window);
   const gamepad = new GamepadAdapter(bindings, coalescer);
@@ -262,7 +222,7 @@ async function boot(): Promise<void> {
       acquireMic: () => navigator.mediaDevices.getUserMedia({ audio: true }),
     });
   } catch {
-    // Reported in the final ready status — boot continues video-only.
+    // Reported in the final ready status — the demo continues video-only.
   }
   const tap = audio ? new AvSynchroTap(audio) : null;
   const resumeAudio = (): void => {
@@ -272,6 +232,17 @@ async function boot(): Promise<void> {
   };
   window.addEventListener('pointerdown', resumeAudio);
   window.addEventListener('keydown', resumeAudio);
+
+  // A/V Synchro (§8.9): the host renders with whatever the avPulse seam measures — a
+  // transient per-frame signal, never dispatched or stored (ADR-0010). The last
+  // measurement is kept so the console LED cue below reuses it instead of re-measuring.
+  let lastPulse: readonly AvSynchroEffect[] = [];
+  if (tap) {
+    mixer.avPulse = (snapshot) => {
+      lastPulse = tap.activeEffects(snapshot.digitalEffect);
+      return lastPulse;
+    };
+  }
 
   // Real device bindings for the four feeds (ADR-0008): mirror the monitor-wall picker
   // into the headless registries, swap image-backed slots in the SourceRegistry, and
@@ -287,7 +258,7 @@ async function boot(): Promise<void> {
   registry.set('ext-camera', extCamera);
   extCamera.onLifecycle = (s) => {
     extMonitor.setPhase(s);
-    controls.dataset.extCameraLive = s.phase === 'live' ? '1' : '';
+    if (controls) controls.dataset.extCameraLive = s.phase === 'live' ? '1' : '';
     if (s.phase === 'live' && s.deviceId) {
       engine.bindings.bindExtCamera('camera', s.deviceId);
       void listVideoInputs().then((d) => {
@@ -310,23 +281,19 @@ async function boot(): Promise<void> {
     ),
   );
 
+  // Input pump (ADR-0014): poll gamepads and flush coalesced signals to store commands
+  // before the host advances the timeline and renders — the one place resolveSignal fires.
+  mixer.beforeFrame((tick) => {
+    gamepad.poll();
+    coalescer.flush(engine.store.getSnapshot(), tick, (command) => engine.store.dispatch(command));
+  });
+
+  // Display chrome after each rendered frame: timecode, A/V-Synchro LED cue, mic status.
   const timecode = document.getElementById('mx-timecode');
   let lastTimecode = '';
   let lastAvSynchro = '';
   let lastMicState = '';
-  const loop = new RenderLoop(engine.clock, (_alpha, tick) => {
-    // Poll gamepads and flush coalesced input signals to store commands (ADR-0014) — the one
-    // place resolveSignal fires, passing the tick purely. Then advance the timeline runners.
-    gamepad.poll();
-    coalescer.flush(engine.store.getSnapshot(), tick, (command) => engine.store.dispatch(command));
-    // Advance the Auto Take / Auto Fade runners for this logical tick (ADR-0012). Idle is a
-    // no-op: the reducer returns the same snapshot and the store skips notification.
-    engine.store.dispatch({ type: 'ADVANCE_TIMELINE', tick });
-    const snapshot = engine.store.getSnapshot();
-    // A/V Synchro (§8.9): measure the envelope once and gate the bus effects with it —
-    // a transient per-frame signal, never dispatched or stored (ADR-0010).
-    const avPulsed = tap ? tap.activeEffects(snapshot.digitalEffect) : [];
-    renderer.render(snapshot, tick, avPulsed);
+  mixer.onFrame((_snapshot, tick) => {
     // Timecode chip on the Program monitor: the logical clock as mm:ss:ff at 60.
     if (timecode) {
       const seconds = Math.floor(tick / 60);
@@ -336,21 +303,45 @@ async function boot(): Promise<void> {
         lastTimecode = text;
       }
     }
-    // Console LED cue for the same pulsed set (the gating itself happened in render above).
-    const active = avPulsed.join(' ');
-    if (active !== lastAvSynchro) {
+    // Console LED cue for the pulsed set the host just rendered with (avPulse above).
+    const active = lastPulse.join(' ');
+    if (controls && active !== lastAvSynchro) {
       controls.dataset.avSynchroActive = active;
       lastAvSynchro = active;
     }
     // Mic capture status, display-only (same transient-dataset precedent).
     const mic = audio ? audio.micStatus() : 'idle';
-    if (mic !== lastMicState) {
+    if (controls && mic !== lastMicState) {
       controls.dataset.micState = mic;
       lastMicState = mic;
     }
   });
-  loop.start();
+
   setStatus(audio ? 'ready' : 'ready · audio unavailable');
 }
 
-boot().catch((error) => showCapabilityMessage(String(error)));
+function boot(): void {
+  ensureTheme();
+  defineMixer();
+  defineConsole();
+
+  const mixer = document.getElementById('mixer') as MxMixer | null;
+  if (!mixer) throw new Error('#mixer host element not found.');
+
+  mixer.addEventListener('mx-unavailable', (e) => {
+    e.preventDefault(); // the demo renders its own page-level capability box
+    showCapabilityMessage((e as CustomEvent<string>).detail);
+  });
+
+  const wire = (): void => {
+    try {
+      wireDemo(mixer);
+    } catch (error) {
+      showCapabilityMessage(String(error));
+    }
+  };
+  if (mixer.context) wire();
+  else mixer.addEventListener('mx-ready', wire, { once: true });
+}
+
+boot();

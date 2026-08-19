@@ -46,8 +46,8 @@
         <div class="mx-srcmons" id="mx-sources"></div>
         <div>
           <div class="mx-monitor mx-pgm">
-            <!-- Program Out canvas — the effected composite. -->
-            <canvas id="program" width="1280" height="720" aria-label="Program output"></canvas>
+            <!-- Program Out host (ADR-0017) — owns the engine, GPU, and render loop. -->
+            <mx-mixer id="mixer" persist width="1280" height="720"></mx-mixer>
             <div class="scan"></div>
             <div class="mx-chip-row">
               <span class="mx-chip" id="mx-pgm-label">PROGRAM OUT</span>
@@ -62,8 +62,8 @@
         </div>
       </div>
 
-      <!-- The operator console (mx-console) mounts here. -->
-      <div id="mx-console-mount"></div>
+      <!-- The operator console, connected to the host by reference (ADR-0017 tier 2). -->
+      <mx-console for="mixer"></mx-console>
 
       <div id="capability" role="alert" hidden></div>
     </main>

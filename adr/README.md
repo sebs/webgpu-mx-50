@@ -26,6 +26,7 @@ choice is made.
 | [ADR-0014](0014-control-input-mapping.md) | Control input mapping layer | Accepted | Insert a remappable input mapping layer between physical/virtual controls and panel state. |
 | [ADR-0015](0015-persistence-event-memory.md) | Persistence for Event Memory and settings | Accepted | Persist the 8 Event Memory snapshots and settings across sessions, mirroring the hardware's power-cycle state. |
 | [ADR-0016](0016-testing-strategy.md) | Testing strategy: Gherkin domain specs plus golden-image shader tests | Accepted | Cover deterministic domain logic with Gherkin specs and pixel-producing shaders with golden-image tests. |
+| [ADR-0017](0017-composable-embedding-host-element.md) | Composable embedding — mixer host element and context protocol | Accepted | Make `<mx-mixer>` the host that owns engine/GPU/loop and let components discover it via a context-request protocol, `for=`, or imperative binding. |
 
 ## About the format
 

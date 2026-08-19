@@ -64,6 +64,7 @@ body { margin: 0; background: var(--mx-bg-deep); }
 .mx-bridge { display: grid; grid-template-columns: minmax(300px, 474px) 1fr; gap: 10px; margin-bottom: 12px; align-items: start; }
 .mx-monitor { position: relative; aspect-ratio: 16 / 9; border-radius: 4px; overflow: hidden; border: 1px solid var(--mx-line); background: #000; }
 .mx-monitor canvas, .mx-monitor video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+.mx-monitor mx-mixer { position: absolute; inset: 0; }
 .mx-monitor .scan { position: absolute; inset: 0; pointer-events: none;
   background: repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 3px); }
 .mx-monitor .mon-label { position: absolute; left: 8px; bottom: 8px; font: 500 9px/1 var(--mx-font); letter-spacing: 0.16em; color: rgba(255,255,255,0.82); }
