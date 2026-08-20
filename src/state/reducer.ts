@@ -6,7 +6,7 @@
 
 import { EMPTY_MEMORY, freshSpecialMode, panelSnapshot, IDLE_RUNNER } from './state.js';
 import { MATTE_COLOR_COUNT } from './state.js';
-import { blindsLegal, pressBorder, pressSoft, VARIANT_COUNT } from '../core/wipe.js';
+import { blindsLegal, forwardNumber, numberToPattern, pressBorder, pressSoft, VARIANT_COUNT, WIPE_FAMILIES } from '../core/wipe.js';
 import { wrapUnit } from '../core/key.js';
 import { nextDskEdgeStyle } from '../core/dsk.js';
 import { quantizeTransitionFrames, startRunner, advanceRunner, runnerLever, runnerActive } from '../core/timeline.js';
@@ -255,6 +255,29 @@ export function reduce(state: PanelState, command: Command): PanelState {
       const variant = ((command.variant % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT;
       if (variant === w.variant) return state;
       return withWipe(state, { ...w, variant });
+    }
+
+    case 'SET_WIPE_PATTERN': {
+      // Direct pattern select by number (ADR-0018), the §9.7 external address space:
+      // forward 1..28, +128 = the same wipe reversed. Same side-constraints as a
+      // family press: illegal Blinds drop, leaving Square disengages the Positioner.
+      const forward = forwardNumber(command.number);
+      if (forward < 1 || forward > WIPE_FAMILIES.length * VARIANT_COUNT) return state;
+      const target = numberToPattern(command.number);
+      const w = state.transition.wipe;
+      if (w.family === target.family && w.variant === target.variant && w.reverse === target.reverse) return state;
+      const blinds = w.modifiers.blinds && blindsLegal(target.family);
+      let next = withWipe(state, {
+        ...w,
+        family: target.family,
+        variant: target.variant,
+        reverse: target.reverse,
+        modifiers: { ...w.modifiers, blinds },
+      });
+      if (target.family !== 'square' && state.positioner.on) {
+        next = { ...next, positioner: { ...state.positioner, on: false, sceneGrabber: false } };
+      }
+      return next;
     }
 
     case 'PRESS_COMPRESSION': {

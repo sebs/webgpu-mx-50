@@ -30,7 +30,12 @@ export type LogicalControlId =
   // Event Memory verbs (ADR-0018): preset store/recall as remappable vocabulary.
   | 'memory.storeArm'
   | 'memory.slot'
-  | 'memory.recall';
+  | 'memory.recall'
+  // Wipe pattern selection (ADR-0018): a CC sweep / step across the 7×4 matrix
+  // (`set` = 0..1 position, `nudge` = ±pattern steps, both keep the Reverse toggle),
+  // or a direct §9.7-style number (forward 1..28, +128 = reversed) from a note.
+  | 'wipe.pattern'
+  | 'wipe.patternNumber';
 
 /**
  * How a signal acts on its control:

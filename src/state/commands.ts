@@ -55,6 +55,7 @@ export type Command =
   // --- wipe (reference §9.4, ADR-0009) ---
   | { type: 'PRESS_WIPE_FAMILY'; family: WipeFamily } // select family, or cycle its variant
   | { type: 'SET_WIPE_VARIANT'; variant: number }
+  | { type: 'SET_WIPE_PATTERN'; number: number } // direct pattern select (ADR-0018): forward 1..28, +128 = reversed (§9.7 number space)
   | { type: 'PRESS_COMPRESSION' } // 0 → 1 → 2 → 0
   | { type: 'PRESS_SLIDE' } // 0 → 1 → 2 → 0
   | { type: 'SET_WIPE_MULTI'; mode: number } // 0 = off, 1..6

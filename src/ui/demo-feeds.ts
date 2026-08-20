@@ -2,8 +2,9 @@
 // docs/STYLEGUIDE.md: each feed is a monitor card — video, scanline veil, corner
 // label, tally — with a caption row holding the feed controls. The feed itself is an
 // HTMLVideoElement the VideoSource reads: by default a self-contained procedural clip
-// (animated 2D canvas via captureStream — no assets, no network); the file picker
-// swaps in any local video file without touching the Source binding.
+// (animated 2D canvas via captureStream — no assets, no network); the caption buttons
+// swap in a local video file, a still, a camera, or a WGSL shader feed
+// (feed-shaders.ts, same captureStream route) without touching the Source binding.
 //
 // Tallies are display-only and driven from outside (main.ts derives them from the
 // store snapshot): 'onair' when the source feeds Program Out, 'ready' when it is
@@ -14,6 +15,8 @@
 
 import { ensureTheme } from './theme.js';
 import { CameraFeedController } from '../sources/camera.js';
+import { FeedShaderRunner, nextShader } from './feed-shaders.js';
+import type { FeedShaderName } from './feed-shaders.js';
 
 const FEED_W = 640;
 const FEED_H = 360;
@@ -165,6 +168,9 @@ interface Feed {
   /** Camera capture (kind 'camera'); constructed lazily on the first click. */
   camera: CameraFeedController | null;
   deviceSelect: HTMLSelectElement | null;
+  /** WGSL shader feed (kind 'generated'); the runner is built lazily on the first click. */
+  shader: FeedShaderRunner | null;
+  shaderName: FeedShaderName | null;
 }
 
 export class MxDemoFeeds extends HTMLElement {
@@ -209,6 +215,7 @@ export class MxDemoFeeds extends HTMLElement {
       const frame = Math.floor(t * 60);
       for (const feed of this.feeds) {
         if (feed.onPattern) feed.draw(feed.ctx, t, frame);
+        else if (feed.shaderName && feed.shader) feed.shader.render(t);
       }
       this.raf = requestAnimationFrame(tick);
     };
@@ -239,6 +246,7 @@ export class MxDemoFeeds extends HTMLElement {
     const feed: Feed = {
       video, canvas, ctx, draw, fileUrl: null, onPattern: true, label: null, tally: null, clipName: 'Pattern',
       still: null, stillUrl: null, stillFile: null, camera: null, deviceSelect: null,
+      shader: null, shaderName: null,
     };
     draw(ctx, 0, 0); // First frame before the loop starts, so the stream is never blank.
     this.usePattern(feed, false); // construction: no listeners yet, nothing to emit
@@ -251,9 +259,10 @@ export class MxDemoFeeds extends HTMLElement {
     this.dispatchEvent(new CustomEvent<FeedBoundDetail>('mx-feed-bound', { detail, bubbles: true }));
   }
 
-  /** Park camera and still overlays before switching provider. */
+  /** Park camera, shader, and still overlays before switching provider. */
   private parkExtras(feed: Feed): void {
     feed.camera?.close(feed.video);
+    feed.shaderName = null; // the runner is kept for instant re-use; drawing stops
     if (feed.still) feed.still.hidden = true;
     if (feed.stillUrl) {
       URL.revokeObjectURL(feed.stillUrl);
@@ -313,6 +322,7 @@ export class MxDemoFeeds extends HTMLElement {
     try {
       const result = await feed.camera.open(feed.video, deviceId);
       feed.onPattern = false;
+      feed.shaderName = null; // the camera stream now owns the element
       feed.clipName = result.label || 'Camera';
       if (feed.fileUrl) {
         URL.revokeObjectURL(feed.fileUrl);
@@ -333,6 +343,41 @@ export class MxDemoFeeds extends HTMLElement {
     }
   }
 
+  /** WGSL shader feed: first click binds the first shader, further clicks cycle them.
+   *  The shader renders into its own WebGPU canvas whose captureStream feeds the same
+   *  video element every other provider uses — downstream stays the ADR-0008 video path. */
+  private async useShader(feed: Feed): Promise<void> {
+    const name = nextShader(feed.shaderName);
+    if (!feed.shader) {
+      try {
+        feed.shader = await FeedShaderRunner.create(FEED_W, FEED_H);
+      } catch {
+        feed.clipName = 'No WebGPU';
+        this.updateLabel(feed);
+        return; // the feed keeps its current content; the button stays clickable
+      }
+    }
+    this.parkExtras(feed);
+    feed.onPattern = false;
+    feed.shaderName = name;
+    feed.shader.use(name);
+    feed.shader.render(0); // first frame before the loop picks it up, so the stream is never blank
+    feed.clipName = 'Shader · ' + name;
+    if (feed.fileUrl) {
+      URL.revokeObjectURL(feed.fileUrl);
+      feed.fileUrl = null;
+    }
+    feed.video.removeAttribute('src');
+    feed.video.loop = false;
+    const canvas = feed.shader.canvas as CapturableCanvas;
+    if (canvas.captureStream) {
+      feed.video.srcObject = canvas.captureStream(60);
+      void feed.video.play().catch(() => undefined);
+    }
+    this.updateLabel(feed);
+    this.emitBound(feed, 'generated', 'shader:' + name);
+  }
+
   private fillDevices(feed: Feed, devices: readonly { id: string; label: string }[]): void {
     const select = feed.deviceSelect;
     if (!select) return;
@@ -350,6 +395,7 @@ export class MxDemoFeeds extends HTMLElement {
   private useStill(feed: Feed, file: File): void {
     feed.camera?.close(feed.video);
     feed.onPattern = false;
+    feed.shaderName = null;
     feed.clipName = file.name;
     if (feed.fileUrl) {
       URL.revokeObjectURL(feed.fileUrl);
@@ -455,7 +501,14 @@ export class MxDemoFeeds extends HTMLElement {
     pattern.textContent = 'Pattern';
     pattern.addEventListener('click', () => this.usePattern(feed));
 
-    caption.append(name, load, stillBtn, cameraBtn, deviceSelect, pattern, picker, stillPicker);
+    const shaderBtn = document.createElement('button');
+    shaderBtn.type = 'button';
+    shaderBtn.className = 'mx-ghostbtn';
+    shaderBtn.textContent = 'Shader';
+    shaderBtn.title = 'WGSL shader feed — click again to cycle plasma → tunnel → waves';
+    shaderBtn.addEventListener('click', () => void this.useShader(feed));
+
+    caption.append(name, load, stillBtn, cameraBtn, deviceSelect, pattern, shaderBtn, picker, stillPicker);
     panel.append(monitor, caption);
     return panel;
   }

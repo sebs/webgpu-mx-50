@@ -5,6 +5,7 @@
 //
 // banira lib floor: local clamp helpers, Map for coalescing (no Array.includes / **).
 
+import { forwardIndex, REVERSE_OFFSET, VARIANT_COUNT, WIPE_FAMILIES } from '../core/wipe.js';
 import type { Command } from '../state/commands.js';
 import type { PanelState, ProgramOut, TransitionType } from '../state/state.js';
 import type { BusSource } from '../core/types.js';
@@ -105,6 +106,28 @@ export function resolveSignal(signal: ControlSignal, state: PanelState, tick: nu
       const slot = Math.round(v);
       return slot >= 1 && slot <= 8 ? { type: 'RECALL_EVENT', slot } : null;
     }
+    // --- Wipe pattern selection (ADR-0018) ---
+    case 'wipe.pattern': {
+      // A sweep/step over the forward 7×4 matrix; the Reverse toggle is left alone
+      // (the number's +128 bit mirrors the CURRENT reverse, so only family/variant move).
+      const count = WIPE_FAMILIES.length * VARIANT_COUNT;
+      const reverseBit = state.transition.wipe.reverse ? REVERSE_OFFSET : 0;
+      if (mode === 'set') {
+        const index = Math.min(count - 1, Math.floor(clamp01(v) * count));
+        return { type: 'SET_WIPE_PATTERN', number: index + 1 + reverseBit };
+      }
+      if (mode === 'nudge') {
+        const step = Math.round(v);
+        if (step === 0) return null;
+        const current = forwardIndex(state.transition.wipe.family, state.transition.wipe.variant);
+        const next = ((((current - 1 + step) % count) + count) % count) + 1;
+        return { type: 'SET_WIPE_PATTERN', number: next + reverseBit };
+      }
+      return null;
+    }
+    case 'wipe.patternNumber':
+      // Direct §9.7-style address: the number is authoritative, reverse bit included.
+      return mode === 'set' ? { type: 'SET_WIPE_PATTERN', number: Math.round(v) } : null;
     default: {
       const _never: never = control;
       return _never;

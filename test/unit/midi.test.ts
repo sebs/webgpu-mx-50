@@ -198,3 +198,38 @@ test('learnedBinding builds bindings by target nature and capture evidence', () 
     { control: 'memory.recall', mode: 'set', value: 3 },
   );
 });
+
+// --- wipe pattern selection (ADR-0018) ---
+
+test('wipe.pattern sweep maps a CC position onto the 7×4 matrix, keeping Reverse', () => {
+  assert.deepEqual(resolveSignal({ control: 'wipe.pattern', mode: 'set', value: 0 }, fresh(), 0), { type: 'SET_WIPE_PATTERN', number: 1 });
+  assert.deepEqual(resolveSignal({ control: 'wipe.pattern', mode: 'set', value: 1 }, fresh(), 0), { type: 'SET_WIPE_PATTERN', number: 28 });
+  const reversed = fresh();
+  reversed.transition.wipe.reverse = true;
+  assert.deepEqual(resolveSignal({ control: 'wipe.pattern', mode: 'set', value: 0 }, reversed, 0), { type: 'SET_WIPE_PATTERN', number: 129 });
+});
+
+test('wipe.pattern nudge steps and wraps the matrix; a sub-step nudge is a no-op', () => {
+  assert.deepEqual(resolveSignal({ control: 'wipe.pattern', mode: 'nudge', value: 1 }, fresh(), 0), { type: 'SET_WIPE_PATTERN', number: 2 });
+  assert.deepEqual(resolveSignal({ control: 'wipe.pattern', mode: 'nudge', value: -1 }, fresh(), 0), { type: 'SET_WIPE_PATTERN', number: 28 });
+  assert.equal(resolveSignal({ control: 'wipe.pattern', mode: 'nudge', value: 0.001 }, fresh(), 0), null);
+});
+
+test('SET_WIPE_PATTERN applies the direct number: family, variant, and the reverse bit', () => {
+  assert.deepEqual(resolveSignal({ control: 'wipe.patternNumber', mode: 'set', value: 134 }, fresh(), 0), { type: 'SET_WIPE_PATTERN', number: 134 });
+  const s = reduce(fresh(), { type: 'SET_WIPE_PATTERN', number: 134 }); // 6 + 128: Corner v2, reversed
+  assert.equal(s.transition.wipe.family, 'corner');
+  assert.equal(s.transition.wipe.variant, 1);
+  assert.equal(s.transition.wipe.reverse, true);
+  // Same pattern again and out-of-range numbers are same-reference no-ops.
+  assert.equal(reduce(s, { type: 'SET_WIPE_PATTERN', number: 134 }), s);
+  assert.equal(reduce(s, { type: 'SET_WIPE_PATTERN', number: 29 }), s);
+  assert.equal(reduce(s, { type: 'SET_WIPE_PATTERN', number: 0 }), s);
+});
+
+test('the profile drives the wipe matrix: CC15 sweep, the note bank, and prev/next', () => {
+  assert.deepEqual(flushed(new BindingTable(ABLETON_PROFILE), fresh(), [[0xb0, 15, 127]]), [{ type: 'SET_WIPE_PATTERN', number: 28 }]);
+  assert.deepEqual(flushed(new BindingTable(ABLETON_PROFILE), fresh(), [[0x90, 24, 100]]), [{ type: 'SET_WIPE_PATTERN', number: 1 }]);
+  assert.deepEqual(flushed(new BindingTable(ABLETON_PROFILE), fresh(), [[0x90, 51, 100]]), [{ type: 'SET_WIPE_PATTERN', number: 28 }]);
+  assert.deepEqual(flushed(new BindingTable(ABLETON_PROFILE), fresh(), [[0x90, 74, 100]]), [{ type: 'SET_WIPE_PATTERN', number: 2 }]);
+});

@@ -8,7 +8,7 @@ import type { Binding } from './bindings.js';
 import type { LearnedInput } from './midi.js';
 import type { LogicalControlId } from './logical-control.js';
 
-export type LearnKind = 'continuous' | 'trigger' | 'toggle' | 'valued';
+export type LearnKind = 'continuous' | 'trigger' | 'toggle' | 'valued' | 'step';
 
 export interface LearnTarget {
   control: LogicalControlId;
@@ -34,6 +34,9 @@ export const LEARN_TARGETS: readonly LearnTarget[] = [
   { control: 'audio.aux1', label: 'Audio Aux1', kind: 'continuous' },
   { control: 'audio.micAux2', label: 'Audio Mic/Aux2', kind: 'continuous' },
   { control: 'audio.master', label: 'Audio master', kind: 'continuous' },
+  { control: 'wipe.pattern', label: 'Wipe pattern (sweep)', kind: 'continuous' },
+  { control: 'wipe.pattern', label: 'Wipe pattern prev', kind: 'step', value: -1 },
+  { control: 'wipe.pattern', label: 'Wipe pattern next', kind: 'step', value: 1 },
   // Momentary + cycling.
   { control: 'autoTake.trigger', label: 'Auto take', kind: 'trigger' },
   { control: 'autoFade.trigger', label: 'Auto fade', kind: 'trigger' },
@@ -69,6 +72,7 @@ export function learnedBinding(target: LearnTarget, learned: LearnedInput): Bind
   if (target.kind === 'trigger') return { control: target.control, mode: 'trigger' };
   if (target.kind === 'toggle') return { control: target.control, mode: 'toggle' };
   if (target.kind === 'valued') return { control: target.control, mode: 'set', value: target.value };
+  if (target.kind === 'step') return { control: target.control, mode: 'nudge', value: target.value };
   // Continuous.
   if (learned.kind === 'cc') {
     if (learned.relative) return { control: target.control, mode: 'set', relative: true };

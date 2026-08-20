@@ -52,9 +52,18 @@ export const DEFAULT_BINDINGS: BindingMap = {
  * The published DAW profile (ADR-0018): a stable map an Ableton session template can target
  * forever. Continuous controls on low CCs (lever and fade lever in 14-bit via the CC n/n+32
  * MSB/LSB pair), sources and transport on notes around middle C, Program Change 0–7 as
- * immediate preset recall. Channel 1 (index 0) throughout.
+ * immediate preset recall, and the wipe matrix as a note bank two octaves down (notes
+ * 24–51 → patterns 001–028, the §9.7 forward number space). Channel 1 (index 0) throughout.
  */
-export const ABLETON_PROFILE: BindingMap = {
+function withWipePatternNotes(map: BindingMap): BindingMap {
+  const out: BindingMap = { ...map };
+  for (let n = 1; n <= 28; n++) {
+    out[`midi:note/0/${23 + n}`] = { control: 'wipe.patternNumber', mode: 'set', value: n };
+  }
+  return out;
+}
+
+export const ABLETON_PROFILE: BindingMap = withWipePatternNotes({
   // Continuous — CC values arrive 0..127 (or 0..16383 when fine).
   'midi:cc/0/1': { control: 'lever.position', mode: 'set', fine: true },
   'midi:cc/0/2': { control: 'fade.lever', mode: 'set', fine: true },
@@ -70,6 +79,10 @@ export const ABLETON_PROFILE: BindingMap = {
   'midi:cc/0/12': { control: 'ccA.chroma', mode: 'set' },
   'midi:cc/0/13': { control: 'ccB.chroma', mode: 'set' },
   'midi:cc/0/14': { control: 'positioner.size', mode: 'set' },
+  // Wipe pattern: CC15 sweeps the 7×4 matrix; notes 73/74 step prev/next.
+  'midi:cc/0/15': { control: 'wipe.pattern', mode: 'set' },
+  'midi:note/0/73': { control: 'wipe.pattern', mode: 'nudge', value: -1 },
+  'midi:note/0/74': { control: 'wipe.pattern', mode: 'nudge', value: 1 },
   // Sources + program out — notes from middle C.
   'midi:note/0/60': { control: 'busA.source', mode: 'set', value: 1 },
   'midi:note/0/61': { control: 'busA.source', mode: 'set', value: 2 },
@@ -94,7 +107,7 @@ export const ABLETON_PROFILE: BindingMap = {
   'midi:pc/0/5': { control: 'memory.recall', mode: 'set', value: 6 },
   'midi:pc/0/6': { control: 'memory.recall', mode: 'set', value: 7 },
   'midi:pc/0/7': { control: 'memory.recall', mode: 'set', value: 8 },
-};
+});
 
 /** A runtime, mutable binding table backed by a BindingMap. Rebind/reset fire onChange (persist). */
 export class BindingTable {
