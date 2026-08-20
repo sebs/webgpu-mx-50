@@ -13,6 +13,7 @@ import { CameraSource } from './sources/camera-source.js';
 import { listVideoInputs, onDeviceChange } from './sources/device-list.js';
 import { createDemoFeeds } from './ui/demo-feeds.js';
 import { createExtCameraMonitor } from './ui/ext-camera-monitor.js';
+import { createMidiPanel } from './ui/midi-panel.js';
 import { ensureTheme } from './ui/theme.js';
 import { AudioEngine } from './audio/engine.js';
 import { AvSynchroTap } from './audio/av-synchro-tap.js';
@@ -188,7 +189,12 @@ function wireDemo(mixer: MxMixer): void {
   new KeyboardAdapter(bindings, coalescer).attach(window);
   const gamepad = new GamepadAdapter(bindings, coalescer);
   if ('requestMIDIAccess' in navigator) {
-    new MidiAdapter(bindings, coalescer).start().catch(() => undefined); // permission denied → dormant
+    const midi = new MidiAdapter(bindings, coalescer);
+    midi.start().catch(() => undefined); // permission denied → dormant
+    // MIDI setup panel (ADR-0018): profile switch, MPE toggle, and learn — page-level
+    // chrome below the console, attached imperatively (the adapters are page-owned).
+    const consoleEl = document.querySelector('mx-console');
+    if (consoleEl) consoleEl.insertAdjacentElement('afterend', createMidiPanel(bindings, midi));
   }
   if ('serial' in navigator) {
     // start() only re-attaches ALREADY-GRANTED ports (no prompt); the port chooser is

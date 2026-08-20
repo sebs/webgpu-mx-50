@@ -9,7 +9,7 @@ WebGPU.
 This document is a map of the system: the fidelity stance, the tech stack, the
 signal graph the renderer executes, and the module boundaries that separate the
 render loop from the UI, the audio engine, and persistence. It summarises the
-seventeen accepted ADRs in `adr/`; each claim below links to the ADR that owns it.
+nineteen accepted ADRs in `adr/`; each claim below links to the ADR that owns it.
 For the ADRs themselves, start at `adr/0001-record-architecture-decisions.md`.
 
 ---

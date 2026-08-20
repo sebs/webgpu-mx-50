@@ -26,7 +26,11 @@ export type LogicalControlId =
   | 'audio.b'
   | 'audio.aux1'
   | 'audio.micAux2'
-  | 'audio.master';
+  | 'audio.master'
+  // Event Memory verbs (ADR-0018): preset store/recall as remappable vocabulary.
+  | 'memory.storeArm'
+  | 'memory.slot'
+  | 'memory.recall';
 
 /**
  * How a signal acts on its control:

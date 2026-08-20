@@ -686,6 +686,13 @@ export function reduce(state: PanelState, command: Command): PanelState {
       return { ...state, memory: { ...state.memory, armedSlot: slot } };
     }
 
+    case 'RECALL_EVENT':
+      // Immediate recall (ADR-0018): an external surface (MIDI Program Change) lands the
+      // preset NOW. Shares recallSlot's semantics exactly — bank preserved, sequence cursor
+      // advanced, Special Mode off — and an armed slot never blocks it (decision of record);
+      // an empty/invalid slot is the same-reference no-op recallSlot already provides.
+      return recallSlot(state, command.slot);
+
     case 'CLEAR_ALL_SLOTS':
       return { ...state, memory: { ...EMPTY_MEMORY, slots: [null, null, null, null, null, null, null, null] } };
 

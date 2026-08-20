@@ -106,6 +106,7 @@ export type Command =
   // --- Event Memory (reference §13) ---
   | { type: 'PRESS_MEMORY' } // latch store-mode: the next EVENT NO. stores the current snapshot
   | { type: 'PRESS_EVENT_NO'; button: number; shift: boolean } // button 1..4; shift → slots 5..8 (store or arm-recall)
+  | { type: 'RECALL_EVENT'; slot: number } // immediate recall (ADR-0018): lands the slot NOW, armed state never blocks it
   | { type: 'CLEAR_ALL_SLOTS' } // mass-clear (MEMORY+SHIFT held through a power cycle)
   // --- Special Mode (reference §14) ---
   | { type: 'PRESS_MEMORY_SHIFT' } // the MEMORY+SHIFT chord: toggle Special Mode

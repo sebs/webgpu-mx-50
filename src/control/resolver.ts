@@ -89,6 +89,22 @@ export function resolveSignal(signal: ControlSignal, state: PanelState, tick: nu
       return faderCommand(mode, v, state.audio.faders.micAux2, 'micAux2');
     case 'audio.master':
       return faderCommand(mode, v, state.audio.faders.master, 'master');
+    // --- Event Memory verbs (ADR-0018) ---
+    case 'memory.storeArm':
+      return mode === 'trigger' ? { type: 'PRESS_MEMORY' } : null;
+    case 'memory.slot': {
+      // The hardware ritual: store when MEMORY is latched, else arm (AUTO TAKE runs it).
+      if (mode !== 'set') return null;
+      const slot = Math.round(v);
+      if (slot < 1 || slot > 8) return null;
+      return { type: 'PRESS_EVENT_NO', button: ((slot - 1) % 4) + 1, shift: slot > 4 };
+    }
+    case 'memory.recall': {
+      // Immediate recall (DAW Program Change): lands NOW; armed state never blocks it.
+      if (mode !== 'set') return null;
+      const slot = Math.round(v);
+      return slot >= 1 && slot <= 8 ? { type: 'RECALL_EVENT', slot } : null;
+    }
     default: {
       const _never: never = control;
       return _never;
