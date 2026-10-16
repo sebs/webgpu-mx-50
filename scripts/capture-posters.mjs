@@ -193,6 +193,13 @@ async function main() {
     await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 1000, deviceScaleFactor: 1, mobile: false });
 
+    // Prove there is a real adapter BEFORE touching anything committed: a run on a Chrome
+    // without WebGPU must fail with the old captures intact, not after deleting them.
+    await send('Page.navigate', { url: base + '/' });
+    await sleep(800);
+    const adapter = await evaluate('(async () => !!(navigator.gpu && await navigator.gpu.requestAdapter()))()');
+    if (!adapter) throw new Error('this Chrome has no WebGPU adapter — captures must come from the real renderer; nothing was changed');
+
     rmSync(POSTERS, { recursive: true, force: true });
     mkdirSync(POSTERS, { recursive: true });
     mkdirSync(ASSETS, { recursive: true });
@@ -202,9 +209,6 @@ async function main() {
     for (const target of TARGETS) {
       await send('Page.navigate', { url: base + target.page });
       await sleep(1500);
-      const adapter = await evaluate('(async () => !!(navigator.gpu && await navigator.gpu.requestAdapter()))()');
-      if (!adapter) throw new Error('this Chrome has no WebGPU adapter — captures must come from the real renderer');
-
       const ids = await evaluate(`[...document.querySelectorAll(${JSON.stringify(target.selector)})].map((e) => e.id)`);
       for (const id of ids) {
         const sel = `#${id}`;
