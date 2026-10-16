@@ -13,9 +13,8 @@
 
 import { defineMixer } from '../../src/ui/mixer.js';
 import { defineBlocks } from '../../src/ui/blocks/index.js';
-import { FACTORY_PRESET } from '../../src/state/state.js';
 import type { MxMixer } from '../../src/ui/mixer.js';
-import type { PanelState } from '../../src/state/state.js';
+import { factoryState } from '../factory.js';
 import { siteRoot, el, esc } from '../shell.js';
 import { lookUrl, lookFor } from '../look-link.js';
 import { POSTERS } from '../posters.js';
@@ -37,10 +36,8 @@ export function moduleUrl(path: string): string {
   return new URL(path, siteRoot()).href;
 }
 
-/** A fresh factory panel for LOAD_STATE (the reducer adopts the object it is given). */
-export function factoryState(): PanelState {
-  return JSON.parse(JSON.stringify(FACTORY_PRESET)) as PanelState;
-}
+// Re-exported for the pages that already import it from here (recipes, learn, attract).
+export { factoryState };
 
 /** The import lines every embed snippet needs. */
 export function importSnippet(): string {

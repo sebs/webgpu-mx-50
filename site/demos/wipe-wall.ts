@@ -24,10 +24,10 @@ import { MatteSource } from '../../src/sources/matte-source.js';
 import { SourceRegistry } from '../../src/sources/registry.js';
 import { Renderer } from '../../src/engine/renderer.js';
 import { PanelStore } from '../../src/state/store.js';
-import { FACTORY_PRESET } from '../../src/state/state.js';
+import { factoryState } from '../factory.js';
 import { numberToPattern, squareShapeName, WIPE_FAMILIES, VARIANT_COUNT } from '../../src/core/wipe.js';
 import { SOURCE_SLOTS } from '../../src/core/types.js';
-import type { WipeEdge, PanelState } from '../../src/state/state.js';
+import type { WipeEdge } from '../../src/state/state.js';
 import { WALL_PATTERNS, DEFAULT_WALL_OPTIONS, wallCommands, wallLabel, leverAt } from '../wall.js';
 import type { WallOptions } from '../wall.js';
 import { POSTERS } from '../posters.js';
@@ -48,11 +48,17 @@ interface Cell {
   visible: boolean;
 }
 
-function freshState(n: number, opts: WallOptions): PanelState {
-  const store = new PanelStore(JSON.parse(JSON.stringify(FACTORY_PRESET)) as PanelState);
+/** Put `store` on pattern `n` with `opts`: a fresh factory panel, then the wall's commands. */
+function applyPattern(store: PanelStore, n: number, opts: WallOptions): void {
+  store.dispatch({ type: 'LOAD_STATE', state: factoryState() });
   const commands = wallCommands(n, opts);
   for (let i = 0; i < commands.length; i++) store.dispatch(commands[i]!);
-  return store.getSnapshot();
+}
+
+function patternStore(n: number, opts: WallOptions): PanelStore {
+  const store = new PanelStore(factoryState());
+  applyPattern(store, n, opts);
+  return store;
 }
 
 function describe(n: number): string {
@@ -160,7 +166,7 @@ class WipeWall extends DemoElement {
         const tag = el('span', { class: 'mx-wall-tag', text: wallLabel(n, false) });
         button.append(canvas, tag);
         grid.appendChild(button);
-        const cell: Cell = { n, store: new PanelStore(freshState(n, opts)), button, canvas, renderer: null, visible: false };
+        const cell: Cell = { n, store: patternStore(n, opts), button, canvas, renderer: null, visible: false };
         button.addEventListener('click', () => select(n));
         cells.push(cell);
       }
@@ -168,7 +174,7 @@ class WipeWall extends DemoElement {
     root.appendChild(grid);
     this.appendChild(root);
 
-    const focusStore = new PanelStore(freshState(selected, opts));
+    const focusStore = patternStore(selected, opts);
 
     // Poster capture (scripts/capture-posters.mjs): hold the lever mid-throw, where every
     // pattern is visibly half open, instead of wherever the sweep happens to be.
@@ -189,12 +195,12 @@ class WipeWall extends DemoElement {
     };
     const select = (n: number): void => {
       selected = n;
-      focusStore.dispatch({ type: 'LOAD_STATE', state: freshState(n, opts) });
+      applyPattern(focusStore, n, opts);
       relabel();
     };
     const rebuild = (): void => {
-      for (const c of cells) c.store.dispatch({ type: 'LOAD_STATE', state: freshState(c.n, opts) });
-      focusStore.dispatch({ type: 'LOAD_STATE', state: freshState(selected, opts) });
+      for (const c of cells) applyPattern(c.store, c.n, opts);
+      applyPattern(focusStore, selected, opts);
       relabel();
     };
     edgeSel.addEventListener('change', () => {
