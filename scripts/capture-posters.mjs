@@ -48,6 +48,8 @@ const TARGETS = [
 ];
 
 const LOOP_BITS = { 4000: 450_000, 8000: 900_000 };
+/** A loop smaller than this recorded (next to) nothing; real 4 s loops are over 100 KB. */
+const MIN_LOOP_BYTES = 20_000;
 
 const SOCIAL_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
   html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: #0b0c14; }
@@ -128,10 +130,11 @@ const rectOf = (selector) =>
   `(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
      return { x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height, scale: 1 }; })()`;
 
-/** Record `ms` of a canvas in the page and return the WebM as a data URL. */
+/** Record `ms` of a canvas in the page: { type, chunks, bytes, data } with data as a data URL. */
 const recordLoop = (selector, ms, bits) => `(async () => {
   const canvas = document.querySelector(${JSON.stringify(selector)});
   const type = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find((t) => MediaRecorder.isTypeSupported(t));
+  if (!type) return { type: null, chunks: 0, bytes: 0, data: '' };
   const rec = new MediaRecorder(canvas.captureStream(30), { mimeType: type, videoBitsPerSecond: ${bits} });
   const chunks = [];
   rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
@@ -141,7 +144,8 @@ const recordLoop = (selector, ms, bits) => `(async () => {
   rec.stop();
   await done;
   const blob = new Blob(chunks, { type: 'video/webm' });
-  return await new Promise((r) => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(blob); });
+  const data = await new Promise((r) => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(blob); });
+  return { type, chunks: chunks.length, bytes: blob.size, data };
 })()`;
 
 async function main() {
@@ -229,8 +233,15 @@ async function main() {
         await sleep(1400); // let the feeds and any freeze effect settle into a representative frame
 
         if (target.loop) {
-          const data = await evaluate(recordLoop(`${sel} canvas[data-loop]`, target.loop, LOOP_BITS[target.loop]));
-          writeFileSync(join(STAGED_POSTERS, `${id}.webm`), Buffer.from(data.slice(data.indexOf(',') + 1), 'base64'));
+          const rec = await evaluate(recordLoop(`${sel} canvas[data-loop]`, target.loop, LOOP_BITS[target.loop]));
+          // An empty or near-empty recording (no WebM support, or a canvas that stopped
+          // producing frames) must not be committed as a loop that never plays. Fail the run;
+          // the staged swap means nothing committed changes.
+          if (!rec.type) throw new Error(`${id}: this Chrome's MediaRecorder supports no WebM type`);
+          if (rec.chunks === 0 || rec.bytes < MIN_LOOP_BYTES) {
+            throw new Error(`${id}: the loop recorded ${rec.bytes} bytes in ${rec.chunks} chunks — the canvas produced (almost) no frames`);
+          }
+          writeFileSync(join(STAGED_POSTERS, `${id}.webm`), Buffer.from(rec.data.slice(rec.data.indexOf(',') + 1), 'base64'));
           loops.push(id);
         }
         if (target.still) {
