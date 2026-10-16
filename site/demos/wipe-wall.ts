@@ -9,8 +9,9 @@
 // by real commands (site/wall.ts) and the only thing the wall does per frame is
 // SET_LEVER — the pixels are the shipping WGSL, nothing is drawn by the page.
 //
-// Budget rule (§5): only cells on screen render, nothing renders while the tab is hidden,
-// and the GPU is not touched until the wall first scrolls into view. The root carries the
+// Budget rule (§5): only cells on screen render, no frames are even requested while the
+// wall is off screen or the tab is hidden (runWhileVisible), and the GPU is not touched
+// until the wall first scrolls into view. The root carries the
 // bench contract (.mx-live → .ready / .unavailable) so the smoke test and the poster
 // capture treat it like any other bench.
 
@@ -30,7 +31,7 @@ import type { WipeEdge, PanelState } from '../../src/state/state.js';
 import { WALL_PATTERNS, DEFAULT_WALL_OPTIONS, wallCommands, wallLabel, leverAt } from '../wall.js';
 import type { WallOptions } from '../wall.js';
 import { POSTERS } from '../posters.js';
-import { DemoElement, defineDemo, reducedMotion, field, range } from './base.js';
+import { DemoElement, defineDemo, reducedMotion, field, range, runWhileVisible } from './base.js';
 import { el, esc } from '../shell.js';
 import { capturedMedia } from './live.js';
 
@@ -294,15 +295,15 @@ class WipeWall extends DemoElement {
       });
       focusIo.observe(focusCanvas);
 
+      // runWhileVisible requests frames only while the wall is on screen and the tab is
+      // visible — no idle wakeups once it is scrolled away. The lever keeps its own clock so
+      // the sweep continues where it was rather than restarting each time it comes back.
       const t0 = performance.now();
       let frame = 0;
-      let raf = 0;
-      const tick = (now: number): void => {
-        raf = requestAnimationFrame(tick);
-        if (document.hidden) return;
+      const stop = runWhileVisible(root, () => {
         const anyVisible = focusVisible || cells.some((c) => c.visible);
         if (!anyVisible) return;
-        const seconds = (now - t0) / 1000;
+        const seconds = (performance.now() - t0) / 1000;
         frame++;
         for (const feed of feeds) feed.draw(seconds, frame);
         const position = auto ? leverAt(seconds) : manualLever;
@@ -316,10 +317,9 @@ class WipeWall extends DemoElement {
           c.store.dispatch({ type: 'SET_LEVER', position });
           c.renderer.render(c.store.getSnapshot(), frame);
         }
-      };
-      raf = requestAnimationFrame(tick);
+      });
       releases.push(() => {
-        cancelAnimationFrame(raf);
+        stop();
         io.disconnect();
         focusIo.disconnect();
       });
