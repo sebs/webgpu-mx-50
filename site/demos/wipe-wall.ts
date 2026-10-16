@@ -62,6 +62,20 @@ function describe(n: number): string {
 
 class WipeWall extends DemoElement {
   protected render(): void {
+    // A reconnect re-runs render(): start from an empty element so it builds one fresh wall.
+    this.textContent = '';
+
+    // Teardown is registered NOW, not after the async boot: a disconnect mid-boot must still
+    // stop everything. Each resource registers its release as it is created; boot checks
+    // `disposed` after every await and stops building once the element is gone.
+    let disposed = false;
+    const releases: Array<() => void> = [];
+    this.onDispose(() => {
+      disposed = true;
+      for (let i = releases.length - 1; i >= 0; i--) releases[i]!();
+      releases.length = 0;
+    });
+
     let opts: WallOptions = DEFAULT_WALL_OPTIONS;
     let auto = !reducedMotion();
     let manualLever = 0.5;
@@ -226,17 +240,44 @@ class WipeWall extends DemoElement {
         return;
       }
       const device = await sharedGpuDevice();
+      if (disposed) return;
       const feeds: PatternFeed[] = [createPatternFeed(2), createPatternFeed(3)]; // rings on A, checker on B
+      for (const feed of feeds) {
+        releases.push(() => {
+          const stream = feed.video.srcObject as MediaStream | null;
+          if (stream) stream.getTracks().forEach((track) => track.stop());
+          feed.video.pause();
+          feed.video.srcObject = null;
+        });
+      }
       const registry = new SourceRegistry();
       const matte = new MatteSource(device, FOCUS);
+      const videoA = new VideoSource(device, feeds[0]!.video);
+      const videoB = new VideoSource(device, feeds[1]!.video);
+      releases.push(() => {
+        videoA.release(); // cancels its frame callback, destroys its texture
+        videoB.release();
+        matte.release();
+      });
       for (const slot of SOURCE_SLOTS) registry.set(slot, matte);
       registry.set('matte', matte);
-      registry.set(1, new VideoSource(device, feeds[0]!.video));
-      registry.set(2, new VideoSource(device, feeds[1]!.video));
+      registry.set(1, videoA);
+      registry.set(2, videoB);
       await registry.acquireAll();
+      if (disposed) return; // the releases above already ran
 
-      const makeRenderer = (canvas: HTMLCanvasElement, size: { width: number; height: number }): Renderer =>
-        new Renderer({ gpu: configureCanvas(canvas, device), registry, generated: [], matte, size });
+      // The Renderer has no destroy(); unconfiguring each canvas drops its swapchain, and the
+      // passes' textures go with the last reference.
+      const contexts: GPUCanvasContext[] = [];
+      releases.push(() => {
+        for (const c of cells) c.renderer = null;
+        for (const context of contexts) context.unconfigure();
+      });
+      const makeRenderer = (canvas: HTMLCanvasElement, size: { width: number; height: number }): Renderer => {
+        const gpu = configureCanvas(canvas, device);
+        contexts.push(gpu.context);
+        return new Renderer({ gpu, registry, generated: [], matte, size });
+      };
       const focusRenderer = makeRenderer(focusCanvas, FOCUS);
       for (const c of cells) c.renderer = makeRenderer(c.canvas, CELL);
 
@@ -277,7 +318,7 @@ class WipeWall extends DemoElement {
         }
       };
       raf = requestAnimationFrame(tick);
-      this.onDispose(() => {
+      releases.push(() => {
         cancelAnimationFrame(raf);
         io.disconnect();
         focusIo.disconnect();
@@ -298,7 +339,7 @@ class WipeWall extends DemoElement {
       boot().catch((error: unknown) => unavailable(String(error).replace(/^Error:\s*/, '').replace(/\.$/, '')));
     });
     first.observe(root);
-    this.onDispose(() => first.disconnect());
+    releases.push(() => first.disconnect());
   }
 }
 
