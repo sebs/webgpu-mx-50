@@ -381,7 +381,9 @@ ol.mx-steps li.extra { font-style: italic; }
 .mx-example-stage mx-mixer:not(:has(> canvas)):not(:has(.mx-mixer-unavailable)) { aspect-ratio: 16 / 9; background: #000; }
 .mx-hero-monitor .mx-chip-row { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 8px; }
 .mx-hero-monitor[hidden] { display: none; }
-.mx-hero-monitor video { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--mx-line); background: #000; }
+/* No-WebGPU hero: the recording sits in .mx-bench-screen, which already draws the frame —
+   only match the live hero's corner radius (the video itself gets no border of its own). */
+.mx-hero-monitor .mx-bench-screen.poster { border-radius: 8px; }
 
 /* ---------- footer ---------- */
 
