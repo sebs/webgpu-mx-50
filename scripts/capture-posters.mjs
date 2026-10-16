@@ -18,7 +18,7 @@
 // Run: npm run site:build && npm run site:posters
 
 import { createServer } from 'node:http';
-import { readFileSync, existsSync, statSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, writeFileSync, mkdirSync, rmSync, renameSync, copyFileSync } from 'node:fs';
 import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, execFileSync } from 'node:child_process';
@@ -27,6 +27,11 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, '_site');
 const POSTERS = join(ROOT, 'site', 'posters');
 const ASSETS = join(ROOT, 'site', 'assets');
+// Everything is captured here first and swapped into site/ only once the whole run has
+// succeeded, so a run that fails part-way leaves the committed set — files AND the
+// site/posters.ts id list — exactly as it was.
+const STAGING = join(ROOT, 'node_modules', '.cache', 'capture-staging');
+const STAGED_POSTERS = join(STAGING, 'posters');
 const MIME = {
   '.html': 'text/html',
   '.js': 'text/javascript',
@@ -200,9 +205,8 @@ async function main() {
     const adapter = await evaluate('(async () => !!(navigator.gpu && await navigator.gpu.requestAdapter()))()');
     if (!adapter) throw new Error('this Chrome has no WebGPU adapter — captures must come from the real renderer; nothing was changed');
 
-    rmSync(POSTERS, { recursive: true, force: true });
-    mkdirSync(POSTERS, { recursive: true });
-    mkdirSync(ASSETS, { recursive: true });
+    rmSync(STAGING, { recursive: true, force: true });
+    mkdirSync(STAGED_POSTERS, { recursive: true });
     const stills = [];
     const loops = [];
 
@@ -226,7 +230,7 @@ async function main() {
 
         if (target.loop) {
           const data = await evaluate(recordLoop(`${sel} canvas[data-loop]`, target.loop, LOOP_BITS[target.loop]));
-          writeFileSync(join(POSTERS, `${id}.webm`), Buffer.from(data.slice(data.indexOf(',') + 1), 'base64'));
+          writeFileSync(join(STAGED_POSTERS, `${id}.webm`), Buffer.from(data.slice(data.indexOf(',') + 1), 'base64'));
           loops.push(id);
         }
         if (target.still) {
@@ -246,13 +250,13 @@ async function main() {
           }
           const shot = await send('Page.captureScreenshot', { format: 'jpeg', quality: 82, clip });
           if (tall) await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 1000, deviceScaleFactor: 1, mobile: false });
-          writeFileSync(join(POSTERS, `${id}.jpg`), Buffer.from(shot.data, 'base64'));
+          writeFileSync(join(STAGED_POSTERS, `${id}.jpg`), Buffer.from(shot.data, 'base64'));
           stills.push(id);
         } else if (target.loop) {
           // A loop's <video> needs a poster frame too: the still of the same canvas.
           const clip = await evaluate(rectOf(`${sel} canvas[data-loop]`));
           const shot = await send('Page.captureScreenshot', { format: 'jpeg', quality: 82, clip });
-          writeFileSync(join(POSTERS, `${id}.jpg`), Buffer.from(shot.data, 'base64'));
+          writeFileSync(join(STAGED_POSTERS, `${id}.jpg`), Buffer.from(shot.data, 'base64'));
         }
         console.log(`  ✓ ${id}${target.still ? ' still' : ''}${target.loop ? ' + loop' : ''}`);
       }
@@ -269,10 +273,16 @@ async function main() {
     if (!socialReady) throw new Error('the social-card mixer never went live');
     await sleep(1500);
     const card = await send('Page.captureScreenshot', { format: 'jpeg', quality: 86, clip: { x: 0, y: 0, width: 1200, height: 630, scale: 1 } });
-    writeFileSync(join(ASSETS, 'social-card.jpg'), Buffer.from(card.data, 'base64'));
+    writeFileSync(join(STAGING, 'social-card.jpg'), Buffer.from(card.data, 'base64'));
     console.log('  ✓ social card');
     ws.close();
 
+    // The whole run succeeded: swap the staged captures in, then the id list that names them.
+    rmSync(POSTERS, { recursive: true, force: true });
+    renameSync(STAGED_POSTERS, POSTERS);
+    mkdirSync(ASSETS, { recursive: true });
+    copyFileSync(join(STAGING, 'social-card.jpg'), join(ASSETS, 'social-card.jpg'));
+    rmSync(STAGING, { recursive: true, force: true });
     const list = (ids) => JSON.stringify(ids, null, 2).replace(/"/g, "'");
     writeFileSync(
       join(ROOT, 'site', 'posters.ts'),
