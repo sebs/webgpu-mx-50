@@ -146,7 +146,8 @@ export function liveBench(spec: LiveBenchSpec): LiveBench {
       // Captured from the real renderer (scripts/capture-posters.mjs) and labelled as such:
       // a recorded loop where there is one (never autoplayed under reduced motion), else the still.
       screen.classList.add('poster');
-      screen.innerHTML = capturedMedia(spec.id, 'this bench');
+      screen.textContent = '';
+      screen.appendChild(capturedMedia(spec.id, 'this bench'));
       const note = el('div', { html: why, attrs: { style: 'margin-top:10px' } });
       root.insertBefore(note, bar);
     } else {

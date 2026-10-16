@@ -117,7 +117,8 @@ export function attractMonitor(): HTMLElement {
     }
     // No WebGPU: the committed recording of this very loop, labelled as a recording.
     mixer.remove();
-    const media = el('div', { class: 'mx-bench-screen poster', html: capturedMedia('hero-monitor', 'the attract loop') });
+    const media = el('div', { class: 'mx-bench-screen poster' });
+    media.appendChild(capturedMedia('hero-monitor', 'the attract loop'));
     wrap.insertBefore(media, chips);
     chips.remove();
   });

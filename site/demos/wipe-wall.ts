@@ -228,7 +228,8 @@ class WipeWall extends DemoElement {
       focus.hidden = true;
       if (POSTERS.indexOf(WALL_ID) !== -1) {
         grid.hidden = true;
-        const still = el('div', { class: 'mx-bench-screen poster', html: capturedMedia(WALL_ID, 'the wipe wall') });
+        const still = el('div', { class: 'mx-bench-screen poster' });
+        still.appendChild(capturedMedia(WALL_ID, 'the wipe wall'));
         root.insertBefore(still, grid);
       }
       const note = el('p', {
