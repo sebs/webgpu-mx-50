@@ -14,6 +14,7 @@ import { listVideoInputs, onDeviceChange } from './sources/device-list.js';
 import { createDemoFeeds } from './ui/demo-feeds.js';
 import { createExtCameraMonitor } from './ui/ext-camera-monitor.js';
 import { createMidiPanel } from './ui/midi-panel.js';
+import { createExplainToggle } from './ui/explain.js';
 import { ensureTheme } from './ui/theme.js';
 import { AudioEngine } from './audio/engine.js';
 import { AvSynchroTap } from './audio/av-synchro-tap.js';
@@ -163,6 +164,10 @@ function wireDemo(mixer: MxMixer): void {
   // The console connected itself via `for="mixer"` (ADR-0017); the demo only needs the
   // element reference for the transient display datasets below.
   const controls = document.querySelector('mx-console') as HTMLElement | null;
+
+  // Explain mode: header toggle that names each block's manual section and spec on hover.
+  const headStat = document.querySelector('.mx-head .stat');
+  if (controls && headStat) headStat.appendChild(createExplainToggle(controls));
 
   // Monitor-bridge chrome: program chip, transition caption, and the source tallies
   // reflect every store change; the timecode advances with the logical clock below.

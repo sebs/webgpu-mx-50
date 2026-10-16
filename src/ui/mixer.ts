@@ -14,12 +14,19 @@
 // ever presented (the registry is the swap point — ADR-0008). 'mx-unavailable' fires
 // when WebGPU is missing; it is cancelable, and preventDefault() suppresses the host's
 // inline fallback message for pages that render their own.
+//
+// Docs-page embedding (ADR-0017 amendment): `feeds` binds the procedural pattern feeds
+// with no monitor wall, `run="visible"` defers boot until the host is first on screen
+// and pauses the loop whenever it is off screen or the tab is hidden, and
+// `shared-device` lets every opted-in host on the page share one GPUDevice.
 
 import { detectWebGPU, WEBGPU_REQUIREMENT_MESSAGE } from '../gpu/capabilities.js';
-import { initGpu } from '../gpu/device.js';
+import { initGpu, sharedGpuDevice } from '../gpu/device.js';
 import { createEngine } from '../app.js';
 import { MatteSource } from '../sources/matte-source.js';
 import { VideoSource } from '../sources/video-source.js';
+import { createPatternFeed } from './pattern-feeds.js';
+import type { PatternFeed } from './pattern-feeds.js';
 import { SourceRegistry } from '../sources/registry.js';
 import { Renderer } from '../engine/renderer.js';
 import { RenderLoop } from '../engine/loop.js';
@@ -41,6 +48,9 @@ import type { PanelStore } from '../state/store.js';
 import type { AvSynchroEffect, PanelState } from '../state/state.js';
 import type { Command } from '../state/commands.js';
 import type { Size } from '../core/types.js';
+
+export { MIXER_ATTRIBUTES, MIXER_EVENTS, MIXER_MEMBERS, MIXER_CONTEXT_MEMBERS } from './mixer-api.js';
+export type { MixerAttributeDoc, MixerEventDoc, MixerMemberDoc } from './mixer-api.js';
 
 const STYLE = `
 mx-mixer { display: block; position: relative; background: #000; }
@@ -67,6 +77,13 @@ export class MxMixer extends HTMLElement {
   private loop: RenderLoop | null = null;
   private ctx: MixerContext | null = null;
   private booted = false;
+  private patternFeeds: PatternFeed[] = [];
+
+  // run="visible": boot waits for the first intersection; the loop runs only while the
+  // host is on screen AND the document is visible.
+  private observer: IntersectionObserver | null = null;
+  private onScreen = false;
+  private readonly onVisibilityChange = (): void => this.syncLoop();
 
   private readonly pendingRequests: Array<(context: MixerContext) => void> = [];
   private readonly readyResolvers: Array<(context: MixerContext) => void> = [];
@@ -136,6 +153,35 @@ export class MxMixer extends HTMLElement {
     };
   }
 
+  /**
+   * Make a preset live: the JSON of an ADR-0015 preset file, through the same sanitising
+   * import path as a file import and the `preset` attribute. Returns false (and
+   * dispatches 'mx-preset-error') when the payload is rejected or the host is not running.
+   */
+  loadPreset(json: string): boolean {
+    const store = this.engineRef?.store;
+    if (!store) {
+      this.dispatchEvent(new CustomEvent<string>('mx-preset-error', { detail: 'the mixer is not running' }));
+      return false;
+    }
+    try {
+      this.applyPresetJson(json, store);
+      return true;
+    } catch (error) {
+      this.dispatchEvent(new CustomEvent<string>('mx-preset-error', { detail: String(error) }));
+      return false;
+    }
+  }
+
+  /** The current panel as a field-preset file (the JSON loadPreset() accepts), or null before boot. */
+  exportPreset(): string | null {
+    const store = this.engineRef?.store;
+    if (!store) return null;
+    const staging = createPersistence(new MemoryStorageBackend());
+    staging.captureFieldPreset(store.getSnapshot());
+    return staging.exportPreset({ kind: 'fieldPreset' });
+  }
+
   /** Resolves once the host is running (after 'mx-ready'). */
   whenReady(): Promise<MixerContext> {
     if (this.ctx) return Promise.resolve(this.ctx);
@@ -145,18 +191,56 @@ export class MxMixer extends HTMLElement {
   // --- lifecycle --------------------------------------------------------------------
 
   connectedCallback(): void {
+    if (this.getAttribute('run') === 'visible') {
+      this.watchVisibility();
+      if (this.booted) this.syncLoop();
+      return; // boot waits for the first intersection (see watchVisibility)
+    }
     if (this.booted) {
       this.loop?.start();
       return;
     }
+    this.startBoot();
+  }
+
+  disconnectedCallback(): void {
+    this.loop?.stop();
+    this.observer?.disconnect();
+    this.observer = null;
+    this.onScreen = false;
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+  }
+
+  private startBoot(): void {
     this.booted = true;
     // Defer one microtask so listeners attached in the same task as the upgrade
     // (define → connectedCallback) can catch a synchronous 'mx-unavailable'.
     void Promise.resolve().then(() => this.boot());
   }
 
-  disconnectedCallback(): void {
-    this.loop?.stop();
+  private watchVisibility(): void {
+    if (this.observer) return;
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+    this.observer = new IntersectionObserver((entries) => {
+      this.onScreen = entries[entries.length - 1]!.isIntersecting;
+      if (this.onScreen && !this.booted) this.startBoot();
+      this.syncLoop();
+    });
+    this.observer.observe(this);
+  }
+
+  /** run="visible": the loop runs only while the host is on screen and the tab is visible. */
+  private syncLoop(): void {
+    if (!this.loop) return;
+    if (this.onScreen && !document.hidden) this.loop.start();
+    else this.loop.stop();
+  }
+
+  /** run="visible" hosts start their loop through syncLoop (so a host detached mid-boot
+   *  stays stopped); others start unconditionally. */
+  private startLoop(): void {
+    if (this.getAttribute('run') === 'visible') this.syncLoop();
+    else this.loop?.start();
   }
 
   private async boot(): Promise<void> {
@@ -182,7 +266,7 @@ export class MxMixer extends HTMLElement {
 
     let gpu: GpuContext;
     try {
-      gpu = await initGpu(canvas);
+      gpu = await initGpu(canvas, this.hasAttribute('shared-device') ? await sharedGpuDevice() : undefined);
     } catch (error) {
       canvas.remove();
       this.fail(`${WEBGPU_REQUIREMENT_MESSAGE} (${String(error)})`);
@@ -203,6 +287,15 @@ export class MxMixer extends HTMLElement {
     // registry is re-read every frame, so later set() calls are race-free (ADR-0008).
     for (const slot of SOURCE_SLOTS) registry.set(slot, matte);
     registry.set('matte', matte);
+
+    // `feeds="pattern"` — the procedural pattern feeds as Sources 1–4, no monitor wall.
+    if (this.getAttribute('feeds') === 'pattern') {
+      this.patternFeeds = SOURCE_SLOTS.map((_slot, i) => createPatternFeed(i));
+      SOURCE_SLOTS.forEach((slot, i) => {
+        registry.set(slot, new VideoSource(gpu.device, this.patternFeeds[i]!.video));
+        engine.bindings.bind(slot, 'generated', `pattern:${slot}`);
+      });
+    }
 
     // `src` — the single-tag playback case: the clip becomes Source 1 on bus A.
     const src = this.getAttribute('src');
@@ -256,6 +349,7 @@ export class MxMixer extends HTMLElement {
     // One logical frame (ADR-0012): pump inputs, advance the timeline runners, render
     // the snapshot, then let display hooks reflect what was presented.
     this.loop = new RenderLoop(engine.clock, (_alpha, tick) => {
+      for (const feed of this.patternFeeds) feed.draw(tick / 60, tick);
       for (const fn of this.preFramers) fn(tick);
       engine.store.dispatch({ type: 'ADVANCE_TIMELINE', tick });
       const snapshot = engine.store.getSnapshot();
@@ -270,7 +364,7 @@ export class MxMixer extends HTMLElement {
 
     // Synchronous window: listeners may swap registry slots before the first frame.
     this.dispatchEvent(new CustomEvent<MixerContext>('mx-ready', { detail: context }));
-    this.loop.start();
+    this.startLoop();
     for (const resolve of this.readyResolvers.splice(0)) resolve(context);
   }
 
@@ -283,22 +377,26 @@ export class MxMixer extends HTMLElement {
     try {
       const response = await fetch(url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const json = await response.text();
-      const staging = createPersistence(new MemoryStorageBackend());
-      const result = staging.importPreset(json);
-      if (result.ok === false) {
-        throw new Error(`preset rejected (${result.reason})`);
-      }
-      if (result.target === 'bank') {
-        store.dispatch({ type: 'LOAD_BANK', slots: staging.loadBank() });
-      } else if (result.target === 'fieldPreset') {
-        staging.saveSettings({ reset: 'off' });
-        store.dispatch({ type: 'LOAD_STATE', state: staging.restoreOnBoot() });
-      }
-      // target 'settings' carries no live panel state — nothing to make live here.
+      this.applyPresetJson(await response.text(), store);
     } catch (error) {
       this.dispatchEvent(new CustomEvent<string>('mx-preset-error', { detail: String(error) }));
     }
+  }
+
+  /** importPreset over an ephemeral in-memory persistence, then the one LOAD path. Throws on rejection. */
+  private applyPresetJson(json: string, store: PanelStore): void {
+    const staging = createPersistence(new MemoryStorageBackend());
+    const result = staging.importPreset(json);
+    if (result.ok === false) {
+      throw new Error(`preset rejected (${result.reason})`);
+    }
+    if (result.target === 'bank') {
+      store.dispatch({ type: 'LOAD_BANK', slots: staging.loadBank() });
+    } else if (result.target === 'fieldPreset') {
+      staging.saveSettings({ reset: 'off' });
+      store.dispatch({ type: 'LOAD_STATE', state: staging.restoreOnBoot() });
+    }
+    // target 'settings' carries no live panel state — nothing to make live here.
   }
 
   private fail(message: string): void {

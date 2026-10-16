@@ -9,6 +9,8 @@ export const SITE_STYLE_ID = 'mx-site';
 export const SITE_CSS = `
 :root { color-scheme: dark; }
 
+[hidden] { display: none !important; }
+
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
@@ -122,22 +124,26 @@ code { color: var(--mx-amber); }
 .mx-grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
 @media (max-width: 900px) { .mx-grid.cols-2, .mx-grid.cols-3 { grid-template-columns: 1fr; } }
 
-/* The block card — the repeating content unit (docs/WEBSITE.md §2). */
-.mx-block { margin: 0 0 26px; overflow: hidden; }
-.mx-block-head {
+/* The block card — the repeating content unit (docs/WEBSITE.md §2). Named mx-bcard, not
+   mx-block: .mx-block is the console theme's own block chrome, and the live benches put
+   real connected blocks on these pages. */
+.mx-bcard { margin: 0 0 26px; overflow: hidden; }
+.mx-bcard-head {
   display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
   padding: 14px 22px; border-bottom: 1px solid var(--mx-line);
   background: color-mix(in srgb, var(--mx-well) 55%, transparent);
 }
-.mx-block-head h3 { margin: 0; }
-.mx-block-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); }
-@media (max-width: 980px) { .mx-block-body { grid-template-columns: 1fr; } }
+.mx-bcard-head h3 { margin: 0; }
+.mx-bcard-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); }
+@media (max-width: 980px) { .mx-bcard-body { grid-template-columns: 1fr; } }
 .mx-pane { padding: 18px 22px; min-width: 0; }
 .mx-pane + .mx-pane { border-left: 1px solid var(--mx-line); }
 @media (max-width: 980px) { .mx-pane + .mx-pane { border-left: 0; border-top: 1px solid var(--mx-line); } }
 .mx-pane > .mx-label { display: block; margin-bottom: 10px; }
 .mx-pane p:last-child { margin-bottom: 0; }
 .mx-pane-demo { background: color-mix(in srgb, var(--mx-well) 40%, transparent); }
+.mx-bcard-live { grid-column: 1 / -1; padding: 18px 22px; border-top: 1px solid var(--mx-line); }
+.mx-bcard-live > .mx-label { display: block; margin-bottom: 12px; }
 
 /* ---------- chips ---------- */
 
@@ -230,6 +236,128 @@ canvas.mx-canvas {
   background: var(--mx-well); border: 1px solid var(--mx-line);
 }
 
+/* ---------- connected blocks on site pages ----------
+   A real block ([role=group] is set by its chrome) keeps the console theme: undo the
+   site's prose-scale .mx-grid / .mx-row / .mx-note for anything inside one. */
+
+.mx-block[role="group"] .mx-grid { gap: 6px; }
+.mx-block[role="group"] .mx-grid.tight { gap: 5px; }
+.mx-block[role="group"] .mx-row { flex-wrap: nowrap; gap: 8px; }
+.mx-block[role="group"] .mx-note {
+  border-left: 0; padding: 0; margin: 0;
+  font: 500 8px/1.4 var(--mx-font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--mx-label-dim);
+}
+
+/* ---------- live benches (site/demos/live.ts) ---------- */
+
+.mx-live { margin: 0; }
+mx-mixer.mx-bench {
+  display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(250px, 1fr); gap: 14px;
+  align-items: start; background: transparent;
+}
+mx-mixer.mx-bench.stacked { grid-template-columns: minmax(0, 1fr); }
+/* Mix/Wipe is the console's widest block (lever + family grid): give it a real column. */
+mx-mixer.mx-bench.wide { grid-template-columns: minmax(0, 1fr) minmax(560px, 1fr); }
+@media (max-width: 1100px) { mx-mixer.mx-bench.wide { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) { mx-mixer.mx-bench { grid-template-columns: minmax(0, 1fr); } }
+mx-mixer.mx-bench > canvas, .mx-bench-screen {
+  width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--mx-line); background: #000;
+}
+mx-mixer.mx-bench > canvas + .mx-bench-screen { display: none; }
+.mx-bench-screen { display: flex; align-items: center; justify-content: center; padding: 18px; box-sizing: border-box; }
+.mx-bench-screen.poster { position: relative; padding: 0; overflow: hidden; }
+.mx-bench-screen.poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.mx-bench-screen.poster .mx-chip { position: absolute; left: 10px; bottom: 10px; }
+.mx-bench-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.mx-bench-side[hidden] { display: none; }
+.mx-bench-side .mx-block { margin: 0; }
+mx-mixer.mx-bench.stacked .mx-bench-side { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+mx-mixer.mx-bench.stacked .mx-bench-side > * { flex: 1 1 280px; }
+mx-mixer.mx-bench.stacked .mx-bench-side > mx-mixwipe-block { flex: 2 1 560px; }
+.mx-bench-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.mx-bench-bar .mx-chip { margin-right: auto; }
+.mx-live.unavailable mx-mixer.mx-bench { grid-template-columns: minmax(0, 1fr); }
+.mx-live.unavailable .needs-gpu { display: none; }
+.mx-live .mx-code { margin-top: 10px; }
+
+/* ---------- code blocks ---------- */
+
+.mx-code { border: 1px solid var(--mx-line); border-radius: 8px; background: var(--mx-well); overflow: hidden; }
+.mx-code[hidden] { display: none; }
+.mx-code-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--mx-line);
+}
+.mx-code pre { margin: 0; padding: 12px 14px; overflow-x: auto; font-size: 13px; line-height: 1.55; }
+.mx-code code { color: var(--mx-text); font-size: 13px; }
+
+/* ---------- examples (embed page) ---------- */
+
+.mx-example { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.mx-example-stage { min-width: 0; }
+.mx-example-stage > mx-mixer, .mx-example-stage mx-mixer > canvas { border-radius: 6px; }
+.mx-example-stage > p > button {
+  border: 1px solid var(--mx-line); border-radius: 6px; background: linear-gradient(180deg, #232739, #171a28);
+  color: var(--mx-text); padding: 7px 11px; cursor: pointer; margin: 0 4px 6px 0;
+  font-size: 9px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em;
+}
+.mx-example-stage > p > button:focus-visible { outline: 2px solid var(--mx-accent); outline-offset: 2px; }
+.mx-example-stage output { display: block; font-family: var(--mx-mono, ui-monospace, monospace); font-size: 13px; color: var(--mx-amber); }
+.mx-example-stage pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(--mx-label); margin: 8px 0 0; }
+.mx-log {
+  font-family: var(--mx-mono, ui-monospace, monospace); font-size: 12px; color: var(--mx-label);
+  background: var(--mx-well); border: 1px solid var(--mx-line); border-radius: 6px;
+  padding: 8px 10px; height: 7.5em; overflow-y: auto; white-space: pre-wrap;
+}
+.mx-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; }
+.mx-gallery .mx-card { display: flex; flex-direction: column; gap: 12px; }
+.mx-gallery .stage { display: flex; justify-content: center; align-items: center; min-height: 140px; }
+.mx-playground textarea {
+  width: 100%; min-height: 15em; box-sizing: border-box; resize: vertical;
+  background: var(--mx-well); color: var(--mx-text); border: 1px solid var(--mx-line); border-radius: 8px;
+  padding: 12px 14px; font: 13px/1.55 var(--mx-mono, ui-monospace, monospace);
+}
+.mx-playground textarea:focus-visible { outline: 2px solid var(--mx-accent); outline-offset: 1px; }
+.mx-playground iframe {
+  width: 100%; height: 560px; border: 1px solid var(--mx-line); border-radius: 8px; background: var(--mx-bg-deep);
+}
+
+/* ---------- recipes & tour ---------- */
+
+ol.mx-steps { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+ol.mx-steps li {
+  display: grid; grid-template-columns: 4.2em minmax(0, 1fr) 1.4em; gap: 8px; align-items: baseline;
+  padding: 5px 8px; border-radius: 5px;
+}
+ol.mx-steps li .kw { color: var(--mx-label-dim); font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; }
+ol.mx-steps li .res { text-align: center; }
+ol.mx-steps li.now { background: color-mix(in srgb, var(--mx-amber) 14%, transparent); }
+ol.mx-steps li.done { color: var(--mx-label); }
+ol.mx-steps li.pass .res { color: var(--mx-green); }
+ol.mx-steps li.fail .res { color: var(--mx-red); }
+ol.mx-steps li.extra { font-style: italic; }
+
+.mx-tour-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.mx-tour-nav .mx-btn[aria-current="step"] { border-color: color-mix(in srgb, var(--mx-amber) 60%, var(--mx-line)); }
+.mx-tour-nav .mx-btn[aria-current="step"] .led {
+  background: var(--mx-amber); box-shadow: 0 0 8px color-mix(in srgb, var(--mx-amber) 75%, transparent);
+}
+.mx-tour { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 2fr); gap: 22px; align-items: start; }
+.mx-tour > .mx-card { position: sticky; top: 72px; }
+@media (max-width: 980px) { .mx-tour { grid-template-columns: minmax(0, 1fr); } .mx-tour > .mx-card { position: static; } }
+
+/* ---------- hero monitor (overview attract mode) ---------- */
+
+.mx-hero-monitor { position: relative; margin-top: 30px; }
+.mx-hero-monitor mx-mixer { display: block; background: #000; border-radius: 8px; overflow: hidden; border: 1px solid var(--mx-line); }
+.mx-hero-monitor mx-mixer > canvas { width: 100%; height: auto; display: block; }
+/* Before boot a host has no canvas and so no height: give it its picture's box, so a
+   run="visible" host has something to intersect and the page does not jump. */
+.mx-hero-monitor mx-mixer:not(:has(> canvas)),
+.mx-example-stage mx-mixer:not(:has(> canvas)):not(:has(.mx-mixer-unavailable)) { aspect-ratio: 16 / 9; background: #000; }
+.mx-hero-monitor .mx-chip-row { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 8px; }
+.mx-hero-monitor[hidden] { display: none; }
+
 /* ---------- footer ---------- */
 
 .mx-footer { border-top: 1px solid var(--mx-line); padding: 34px 0 60px; margin-top: 40px; color: var(--mx-label); font-size: 14px; }
@@ -242,6 +370,8 @@ canvas.mx-canvas {
   border-left: 2px solid var(--mx-amber); padding: 2px 0 2px 14px;
   color: var(--mx-label); margin: 0 0 1em;
 }
+/* Long-form callout (the theme's .mx-note is panel-label sized, too small for a sentence). */
+.mx-callout { border-left: 2px solid var(--mx-amber); padding: 2px 0 2px 14px; color: var(--mx-label); margin: 0 0 1em; }
 .mx-skip {
   position: absolute; left: -9999px; top: 0; background: var(--mx-panel-hi);
   padding: 10px 16px; border-radius: 6px; z-index: 100;

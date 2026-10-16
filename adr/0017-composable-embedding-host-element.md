@@ -210,6 +210,34 @@ ADR-0013's two layers become four, changing nothing below:
   interop compliance; if interop with other context consumers ever matters, the event
   can be renamed and widened without touching component code.
 
+## Amendment — docs-page embedding (2026-10-16)
+
+The project's own website became the "real use case" the Consequences above wait for: a
+single docs page now carries up to eight small mixers, each with one block connected. Three
+host attributes and two members were added for it. All are opt-in, so existing embeds behave
+exactly as before.
+
+- `feeds="pattern"` binds the four procedural pattern feeds (`src/ui/pattern-feeds.ts`,
+  extracted from the monitor wall) to Sources 1–4. The host draws them on its logical clock,
+  so they pause whenever the loop pauses.
+- `run="visible"` defers boot until the host first intersects the viewport, then runs the
+  loop only while it is on screen and the tab is visible. A host hidden with `display: none`
+  never intersects, so it never boots.
+- `shared-device` takes the GPUDevice from a page-wide shared acquisition
+  (`sharedGpuDevice()` in `src/gpu/device.ts`) instead of acquiring one per host.
+  `initGpu()` is now split into device acquisition and canvas configuration. A lost shared
+  device is forgotten, and the next host acquires a fresh one. One device loss now takes
+  every sharing host down together. That is acceptable for a docs page, and it is why
+  sharing remains opt-in.
+- `loadPreset(json)` and `exportPreset()` expose the preset path that the `preset`
+  attribute already used, for share links and scripting. `loadPreset` goes through the
+  same sanitising import and reports rejection with `mx-preset-error`.
+
+The embedding surface is now documented as data next to the code
+(`src/ui/mixer-api.ts`; block provenance in `src/ui/blocks/reference.ts`). A unit test
+fails if the host reads an attribute, dispatches an event, or loses a member that the
+tables don't match. The context itself is unchanged.
+
 ## More Information
 
 - ADR-0003 (Vanilla TypeScript with banira and no UI framework) — why the mechanism

@@ -17,7 +17,8 @@
     "test:features": "tsx node_modules/@cucumber/cucumber/bin/cucumber.js --config test/cucumber.mjs",
     "test:golden": "node --import tsx --test test/golden/*.test.ts",
     "site:check": "tsx scripts/check-site.ts",
-    "site:smoke": "node scripts/smoke-site.mjs"
+    "site:smoke": "node scripts/smoke-site.mjs",
+    "site:posters": "node scripts/capture-posters.mjs"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",

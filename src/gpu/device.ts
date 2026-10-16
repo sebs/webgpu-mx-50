@@ -16,13 +16,43 @@ export interface GpuContext {
   canvas: HTMLCanvasElement;
 }
 
-export async function initGpu(canvas: HTMLCanvasElement): Promise<GpuContext> {
+/** Acquire a fresh adapter + device (ADR-0002). */
+export async function requestGpuDevice(): Promise<GPUDevice> {
   if (!navigator.gpu) throw new Error('WebGPU is unavailable (navigator.gpu missing).');
 
   const adapter = await navigator.gpu.requestAdapter();
   if (!adapter) throw new Error('No suitable WebGPU adapter was found.');
 
-  const device = await adapter.requestDevice();
+  return adapter.requestDevice();
+}
+
+let shared: Promise<GPUDevice> | null = null;
+
+/**
+ * One device per page for every caller that opts in (the docs-site budget rule: several
+ * small mixers, one device). A lost device is forgotten, so the next caller gets a fresh
+ * one; a failed acquisition is not cached either.
+ */
+export function sharedGpuDevice(): Promise<GPUDevice> {
+  if (!shared) {
+    const pending = requestGpuDevice();
+    shared = pending;
+    pending.then(
+      (device) => {
+        void device.lost.then(() => {
+          if (shared === pending) shared = null;
+        });
+      },
+      () => {
+        if (shared === pending) shared = null;
+      },
+    );
+  }
+  return shared;
+}
+
+/** Configure `canvas` for presentation from `device` (the ADR-0005 sRGB-view contract). */
+export function configureCanvas(canvas: HTMLCanvasElement, device: GPUDevice): GpuContext {
   const context = canvas.getContext('webgpu');
   if (!context) throw new Error('Could not create a WebGPU canvas context.');
 
@@ -36,4 +66,9 @@ export async function initGpu(canvas: HTMLCanvasElement): Promise<GpuContext> {
   });
 
   return { device, context, format, srgbView, canvas };
+}
+
+/** Acquire a device (or reuse `device`) and configure `canvas` for it. */
+export async function initGpu(canvas: HTMLCanvasElement, device?: GPUDevice): Promise<GpuContext> {
+  return configureCanvas(canvas, device ?? (await requestGpuDevice()));
 }

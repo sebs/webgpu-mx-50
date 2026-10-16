@@ -11,6 +11,7 @@ import '../demos/effects.js';
 import '../demos/positioner.js';
 import '../demos/wipe.js';
 import '../demos/transition.js';
+import { liveBench } from '../demos/live.js';
 
 const main = mountShell({ route: 'machine/' });
 
@@ -24,12 +25,14 @@ introWrap.innerHTML = `
     Follow the signal: a source lands on a bus, gets corrected and effected per bus, meets the other
     bus at the Mix/Wipe stage, picks up a title, then fades. Each block below states what the hardware
     does, what this recreation models, and the scenario that pins it — with a live demo wherever the
-    behaviour can be shown without a GPU.
+    behaviour can be shown without a GPU — and a live bench wherever it can't: the real WebGPU renderer
+    with just that block's controls connected.
   </p>
   <p class="mx-prose mx-dim" style="max-width:62ch">
     The audio mixer, Event Memory, Special Modes and the input layer sit off this path and live on
     <a href="${href('machine/audio-memory-control/')}">Audio, Memory &amp; Control</a>.
-    Wipes get <a href="${href('machine/wipes/')}">a page of their own</a>.
+    Wipes get <a href="${href('machine/wipes/')}">a page of their own</a>, and the manual's
+    <a href="${href('machine/recipes/')}">combination recipes</a> play their scenarios step by step.
   </p>`;
 intro.appendChild(introWrap);
 main.appendChild(intro);
@@ -94,6 +97,7 @@ body(cc).appendChild(
       to check.</p>`,
     sources: ['src/core/colour-correct.ts', 'src/gpu/shaders/bus-effect.wgsl.ts'],
     spec: { feature: 'color-correction.feature', scenario: 'From black-and-white the joystick casts a single mono tint' },
+    live: liveBench({ id: 'bench-cc', look: 'cc-tint', blocks: ['mx-colour-correction-block'] }).root,
   }),
 );
 main.appendChild(cc);
@@ -116,6 +120,7 @@ body(de).appendChild(
     demo: 'mx-demo-effect-numbers',
     sources: ['src/core/digital-effect.ts', 'src/gpu/bus-processor.ts'],
     spec: { feature: 'digital-effects-filters.feature', scenario: 'An effect applies to only one bus at a time' },
+    live: liveBench({ id: 'bench-effect', look: 'effect-mosaic', blocks: ['mx-digital-effect-block'] }).root,
   }),
 );
 body(de).appendChild(
@@ -134,6 +139,7 @@ body(de).appendChild(
     demo: 'mx-demo-trail',
     sources: ['src/core/digital-effect.ts', 'src/gpu/trail.ts'],
     spec: { feature: 'digital-effect-trail.feature', scenario: 'The trail is capped at 16 copies' },
+    live: liveBench({ id: 'bench-freeze', look: 'freeze-trail', blocks: ['mx-freeze-block'] }).root,
   }),
 );
 main.appendChild(de);
@@ -157,6 +163,7 @@ body(pos).appendChild(
     demo: 'mx-demo-positioner',
     sources: ['src/core/positioner.ts', 'src/gpu/wipe.ts'],
     spec: { feature: 'position-and-scene-grabber.feature', scenario: 'Pressing SCENE GRABBER freezes the image inside the inset' },
+    live: liveBench({ id: 'bench-positioner', look: 'positioner-pip', blocks: ['mx-position-block'] }).root,
   }),
 );
 main.appendChild(pos);
@@ -180,6 +187,7 @@ body(mw).appendChild(
     demo: 'mx-demo-transition',
     sources: ['src/core/transition.ts', 'src/core/key.ts'],
     spec: { feature: 'transition-mix-nam.feature', scenario: 'NAM at lever centre keeps the brighter of the two images per pixel' },
+    live: liveBench({ id: 'bench-mixwipe', look: 'mix-half', blocks: ['mx-mixwipe-block'], wide: true }).root,
   }),
 );
 body(mw).appendChild(
@@ -226,6 +234,7 @@ body(dsk).appendChild(
       before the transition.</p>`,
     sources: ['src/core/dsk.ts', 'src/gpu/shaders/dsk.wgsl.ts'],
     spec: { feature: 'downstream-key.feature', scenario: 'The EDGE button cycles through the five edge styles in order' },
+    live: liveBench({ id: 'bench-dsk', look: 'dsk-title', blocks: ['mx-dsk-block'] }).root,
   }),
 );
 main.appendChild(dsk);
@@ -237,7 +246,7 @@ body(fade).appendChild(
   blockCard({
     title: 'The final stage',
     block: 'F',
-    cite: 'reference §12',
+    cite: 'reference §11',
     hardware: `<p>Three independent enables — VIDEO, DSK and AUDIO — decide what participates, and a
       target decides what the picture fades <em>to</em>: Matte, White, Black, or one of the two buses.
       Fading to a bus reveals that clean bus and keeps its audio; fading to matte, white or black
@@ -249,6 +258,7 @@ body(fade).appendChild(
       rides the key mask at another.</p>`,
     sources: ['src/core/fade.ts', 'src/gpu/shaders/fade.wgsl.ts'],
     spec: { feature: 'fade-control.feature', scenario: 'Fading VIDEO only leaves the DSK title on screen' },
+    live: liveBench({ id: 'bench-fade', look: 'fade-video-only', blocks: ['mx-fade-block', 'mx-dsk-block'] }).root,
   }),
 );
 main.appendChild(fade);
@@ -270,6 +280,7 @@ body(po).appendChild(
       passes the full mix through the master fader.</p>`,
     sources: ['src/core/program.ts'],
     spec: { feature: 'program-output.feature', scenario: 'Preview lets me monitor the effect while sending a clean bus to program' },
+    live: liveBench({ id: 'bench-program', look: 'program-clean', blocks: ['mx-source-block'] }).root,
   }),
 );
 const consoleCta = el('div', { class: 'mx-panel mx-card' });

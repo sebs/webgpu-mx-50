@@ -5,13 +5,23 @@
 > [`.github/workflows/pages.yml`](../.github/workflows/pages.yml).
 >
 > **Scope decision (superseding §3, §4.5 and §4.6):** the three meta routes — `/specs/`,
-> `/decisions/` and `/status/` — were **removed by owner decision**. The site is now six routes
+> `/decisions/` and `/status/` — were **removed by owner decision**. The site was narrowed to six routes
 > focused on the machine itself, with two nav items. The material they carried has not been
 > deleted from the project: it lives in [`features/`](../features/), [`adr/`](../adr/) and
 > [`DEFERRED.md`](DEFERRED.md), and the site links out to each. The scenario counts on the
 > Overview are still generated and still show the authored-vs-executed split — that honesty was in
 > the numbers, not in the browser page. §4.5, §4.6 and the `/specs/` replay design (D13) are kept
 > below as a record of the design, not as a description of what ships.
+>
+> **Update 2026-10-16 — the live layer.** The Tier-1 benches shipped, built on the composable
+> `<mx-mixer>` host (ADR-0017 and its amendment) rather than a site-side GPU harness: a bench *is*
+> a small mixer with one block connected. Three routes joined — `/learn/` (a six-step tour on one
+> mixer), `/machine/recipes/` (the combination recipes played step by step from their scenarios)
+> and `/embed/` (developer docs with runnable examples, the generated element reference, the
+> control primitives on their own, and a playground) — plus attract mode on the Overview (D1),
+> share links for any bench look, an Explain mode in the console, and committed bench stills for
+> browsers without WebGPU. Nine routes, four nav items. §3, §5, §7.5 and §10 below are updated;
+> the rest of this document still describes the design as written.
 >
 > It inherits the repo's hard constraints (ADR-0003 no framework/no bundler, ADR-0013 web
 > components, [`STYLEGUIDE.md`](STYLEGUIDE.md)) and reuses `src/` directly — **the site never
@@ -117,17 +127,20 @@ description-only in which phase, rather than pretending the rule holds from day 
 
 ## 3. Information architecture
 
-**Two nav items** — The Machine · Architecture — plus a persistent **Launch console** button, top
-right, the one call to action. Overview hangs off the wordmark; the wipe deep-dive and the
-off-spine page nest under The Machine.
+**Four nav items** — Learn · The Machine · Architecture · Embed — plus a persistent **Launch
+console** button, top right, the one call to action. Overview hangs off the wordmark; the wipe
+deep-dive, the recipes and the off-spine page nest under The Machine.
 
 | Route | Nav | Page | Role |
 |---|---|---|---|
 | `/` | wordmark | **Overview** | Hero, the pitch, the generated signal spine, the numbers, three doors into the depth |
 | `/machine/` | ✅ | **The Machine** | Every signal stage, anchored, each a stack of block cards. The bulk of the descriptions and demos |
+| `/learn/` | ✅ | **Learn the panel** | One live mixer that gains a block per step — source, lever, wipe, effect, title, fade (`site/tour.ts`) |
+| `/machine/recipes/` | sub | **Combination recipes** | Reference §16's recipes: Gherkin text from `recipes.json`, a live mixer with the recipe's blocks, and a step player whose Then-steps check the panel (`site/recipes.ts`) |
 | `/machine/wipes/` | sub | **The wipe engine** | The showpiece deep-dive: 7 families, compositional variants, RS-422 numbering, borders/soft edges |
 | `/machine/audio-memory-control/` | sub | **Audio, Memory & Control** | The off-spine blocks (§4.8): the 7-input audio mixer, Event Memory, Special Modes, inputs & devices |
 | `/architecture/` | ✅ | **How it's built** | One store, one graph, one clock, headless-first testing — each claim with a demo that proves it |
+| `/embed/` | ✅ | **Embed it** | The four ways to use the elements, each example running the snippet shown; the attribute / event / member / block reference rendered from `src/ui/mixer-api.ts` and `src/ui/blocks/reference.ts`; the primitives gallery; a playground |
 | `/console/` | button | **The console** | The real app in its own document, behind a runtime capability check, with the control map and a "try this" strip |
 
 **On the removed meta routes.** `/specs/`, `/decisions/` and `/status/` were cut. The reasoning
@@ -140,7 +153,8 @@ mixer. What replaced them:
   and `adr/` on GitHub;
 - every block card names the scenario that pins it and links to its feature file;
 - the footer carries "here is what isn't built" straight to `DEFERRED.md`;
-- pages with no demo yet say so in the demo pane instead of deferring to a status page.
+- pages with no demo yet say so in the demo pane instead of deferring to a status page (since the
+  live layer, every Machine stage has either a GPU-free demo or a live bench, most both).
 
 ## 4. Page-by-page
 
@@ -348,6 +362,18 @@ without WebGPU.
 
 The real renderer, one block exposed.
 
+> **Built (2026-10-16), as live benches.** Each is `<mx-mixer feeds="pattern" run="visible"
+> shared-device preset="…">` with the block(s) as children ([`site/demos/live.ts`](../site/demos/live.ts)),
+> booting from a preset generated from [`site/looks.ts`](../site/looks.ts). Mapping: D6 → the
+> Digital Effect and Freeze benches, D7 → Colour Correction, D8 → DSK, D9 → Fade (with the DSK
+> connected, for the selective case); the Positioner, Mix/Wipe and Program Out cards got benches
+> too. **D4, the 28-pattern wipe wall, is not built.** D1 is the Overview hero's attract mode.
+> The budget rule below is met by the host itself: `run="visible"` renders only what is on screen
+> and stops on a hidden tab, `shared-device` gives the page one device, and the pattern feeds draw
+> on the host's clock, so they pause with it. The two `src/` refactors listed below happened:
+> `initGpu` is split (`requestGpuDevice` / `configureCanvas` / `sharedGpuDevice`), and the patterns
+> live in `src/ui/pattern-feeds.ts`.
+
 | # | Demo | Uses | Proves |
 |---|---|---|---|
 | D1 | **The console**, attract mode + free play | `src/main.ts` + the extended automation surface (§4.1) | The whole thing is real |
@@ -422,9 +448,9 @@ Decided at runtime by `navigator.gpu` + `requestAdapter()`, never by browser nam
 | Capability | Gets |
 |---|---|
 | WebGPU available | Everything |
-| No WebGPU | Tier 2 + Tier 3 in full, plus short **self-captured** loops in place of each Tier-1 bench, labelled *"recorded — WebGPU unavailable here"* with enable instructions |
+| No WebGPU | Tier 2 in full; the recipe player runs against the headless engine (checks real, no picture); each Machine bench shows a **committed still** from the real renderer, labelled *"still image · needs WebGPU to run"*, with the reason underneath (loops were the plan; stills shipped — see §7.5) |
 | No pointer + keyboard | Everything except the console page, which shows its capture loop and says plainly that a console wants a pointer and a keyboard |
-| `prefers-reduced-motion` | Attract mode does not autoplay; blinks pin solid (already the styleguide rule); demos start paused with a play control |
+| `prefers-reduced-motion` | No attract-mode hero at all (the pattern feeds move on their own); blinks pin solid (already the styleguide rule); demos start paused with a play control |
 
 Never a spinner where a capability is missing, and never a silently degraded demo — the label
 says which mode you're in.
@@ -514,12 +540,19 @@ privacy-preserving counter. Custom domain optional.
 
 ### 7.5 Captured assets
 
-The social card and the Tier-1 fallback loops are **maintainer-recorded, committed, versioned
-assets** in `site/assets/` — not build products. The build environment has no headless-WebGPU
-adapter (the same limit that parks the golden-image tests, per `DEFERRED.md`), so nothing in CI
-can render a frame. Record them from the real console via the scripted automation sequence with
-`MediaRecorder`, and re-record when renderer or WGSL output changes. If a headless-WebGPU runner
-is ever added to the Action, this section and the golden tests unlock together.
+The Tier-1 fallbacks are **maintainer-captured, committed assets** — not build products. The CI
+environment has no headless-WebGPU adapter (the same limit that parks the golden-image tests, per
+`DEFERRED.md`), so nothing in CI can render a frame.
+
+**What shipped: stills, not loops.** [`scripts/capture-posters.mjs`](../scripts/capture-posters.mjs)
+(`npm run site:posters`) loads `/machine/` in a local headless Chrome *with* WebGPU, waits for each
+bench to go live, and screenshots its Program Out canvas to `site/posters/<bench-id>.jpg`. It
+also writes [`site/posters.ts`](../site/posters.ts), the list of captured ids, which is what a
+bench consults, so it never requests a still that does not exist. `site:check` verifies every
+listed still is in `_site/`, and `site:smoke` scrolls every bench into view in a GPU-less Chrome,
+which exercises exactly that fallback. Re-capture when a look or the renderer changes. Recorded
+loops (`MediaRecorder`) and a social card remain unbuilt. If a headless-WebGPU runner is ever
+added to the Action, this step and the golden tests unlock together.
 
 ## 8. Asset & legal hygiene
 
@@ -568,12 +601,15 @@ Every catalogued demo appears exactly once below.
 | **W0** | Shell, theme reuse, routing, deploy pipeline, `stats.json`; Overview with spine (**D18**) + numbers + footer | ✅ **Built.** Six routes, each a real directory with its own ESM entry — deep links work on Pages with no 404 rewrite |
 | **W1** | The stage pages + `/machine/audio-memory-control/` with Tier-2 demos: **D2, D3, D5, D6b, D12, D14, D15, D16, D17, D19, D20, D21** | ✅ **Built** (plus **D10, D11** pulled forward onto `/architecture/`). CC / DSK / Fade / Program Out ship **description-only**, as planned |
 | **W2** | `/specs/` + `scenarios.json` + **D13** replay | ⛔ **Cut.** The page was built, then removed with `/decisions/` and `/status/` by owner decision (see the status note at the top). D13 was never built |
-| **W3** | Tier-1 benches **D4, D6, D7, D8, D9**, the device/feed/pause refactors (§5), capability fallbacks, committed captures (§7.5) | ⬜ **Outstanding.** The renderer already draws all of it; what is missing is the site-side harness |
-| **W4** | `/console/` + attract mode (**D1**) incl. the automation extension and ephemeral boot (§4.1); `/architecture/` demos **D10, D11** | 🟡 **Partly built.** `/console/` runs the real app in its own document behind a runtime capability check, and D10/D11 shipped in W1. **Attract mode is not built** — the three pieces it needs are listed in §4.1 |
+| **W3** | Tier-1 benches **D4, D6, D7, D8, D9**, the device/feed/pause refactors (§5), capability fallbacks, committed captures (§7.5) | 🟡 **Built except D4.** Benches are small `<mx-mixer>` hosts, not a site harness (§5 note); the refactors landed in `src/`; fallbacks are committed stills (§7.5). The 28-pattern wipe wall (D4) is still outstanding |
+| **W4** | `/console/` + attract mode (**D1**) incl. the automation extension and ephemeral boot (§4.1); `/architecture/` demos **D10, D11** | ✅ **Built.** Attract mode runs on the Overview hero (`site/demos/attract.ts`): the automation API gained `setColourCorrection` / `setDsk`, it is built over the hero host's own store and clock, and the hero is a mixer without `persist`, which is ephemeral by construction — no bridge into the console iframe was needed |
+| **W5** | The live layer: `/learn/`, `/machine/recipes/`, `/embed/`; share links; console Explain mode | ✅ **Built (2026-10-16).** Tour steps, recipe scripts, bench looks and the link codec are DOM-free modules checked by `test/unit/site-content.test.ts` against the real reducer; recipe scripts are also checked against the feature text by `site:data`; the embed reference tables are drift-guarded by `test/unit/mixer-api.test.ts` |
 
 Demo accounting after the cut: **D13 is the only catalogued demo with no home**, since it existed
-only to serve `/specs/`. D1, D4, D6, D7, D8 and D9 remain outstanding as W3/W4 work. Every other
-demo in §5 ships.
+only to serve `/specs/`. The recipe player is a narrow, honest cousin of it — it replays one
+feature file's playable scenarios with *authored* command scripts (not a recorded World journal)
+and re-checks only the Then-steps it has a domain check for. **D4 is the one Tier-1 demo still
+outstanding.** Every other demo in §5 ships.
 
 ### What was learned building it
 

@@ -32,6 +32,14 @@ export const ROUTES: readonly RouteDef[] = [
       'A WebGPU browser recreation of the Panasonic WJ-MX50 two-bus digital A/V mixer, in vanilla TypeScript with no framework and no bundler.',
   },
   {
+    path: 'learn/',
+    entry: 'pages/learn.js',
+    title: 'Learn the panel — web-mx-50',
+    nav: true,
+    navLabel: 'Learn',
+    description: 'One live mixer that gains a block per step: a source, two buses and a lever, a wipe, an effect, a title, a fade.',
+  },
+  {
     path: 'machine/',
     entry: 'pages/machine.js',
     title: 'The Machine — web-mx-50',
@@ -45,6 +53,13 @@ export const ROUTES: readonly RouteDef[] = [
     title: 'The wipe engine — web-mx-50',
     nav: false,
     description: 'Seven wipe families, four variants each, composed with modifiers — plus the RS-422 pattern numbering oracle.',
+  },
+  {
+    path: 'machine/recipes/',
+    entry: 'pages/recipes.js',
+    title: 'Combination recipes — web-mx-50',
+    nav: false,
+    description: 'The manual\'s signature looks, each played step by step from its Gherkin scenario on a live mixer.',
   },
   {
     path: 'machine/audio-memory-control/',
@@ -61,6 +76,15 @@ export const ROUTES: readonly RouteDef[] = [
     navLabel: 'Architecture',
     description:
       'State store, signal graph, fixed-timestep clock, WebGPU render path, headless test layer, and the no-bundler build.',
+  },
+  {
+    path: 'embed/',
+    entry: 'pages/embed.js',
+    title: 'Embed it — web-mx-50',
+    nav: true,
+    navLabel: 'Embed',
+    description:
+      'Use the mixer on your own page: one tag, blocks à la carte, controls anywhere, or script only — with live examples and the full element reference.',
   },
   {
     path: 'console/',
@@ -238,6 +262,8 @@ export interface BlockCardSpec {
   readonly spec?: { readonly feature: string; readonly scenario: string };
   /** Source files to link under "modelled". */
   readonly sources?: readonly string[];
+  /** A live bench (site/demos/live.ts), shown full-width under the four panes. */
+  readonly live?: HTMLElement;
 }
 
 /**
@@ -245,9 +271,9 @@ export interface BlockCardSpec {
  * live demo above, the modelled rules and the pinning scenario below.
  */
 export function blockCard(spec: BlockCardSpec): HTMLElement {
-  const card = el('article', { class: 'mx-panel mx-block' });
+  const card = el('article', { class: 'mx-panel mx-bcard' });
 
-  const head = el('div', { class: 'mx-block-head' });
+  const head = el('div', { class: 'mx-bcard-head' });
   head.appendChild(el('h3', { text: spec.title }));
   const chips = el('div', { class: 'mx-chips' });
   if (spec.block) chips.appendChild(el('span', { class: 'mx-chip', text: spec.block }));
@@ -255,7 +281,7 @@ export function blockCard(spec: BlockCardSpec): HTMLElement {
   head.appendChild(chips);
   card.appendChild(head);
 
-  const bodyEl = el('div', { class: 'mx-block-body' });
+  const bodyEl = el('div', { class: 'mx-bcard-body' });
 
   const p1 = el('div', { class: 'mx-pane' });
   p1.innerHTML = `<span class="mx-label">What the hardware does</span><div class="mx-prose">${spec.hardware}</div>`;
@@ -265,11 +291,15 @@ export function blockCard(spec: BlockCardSpec): HTMLElement {
   if (spec.demo) {
     p2.innerHTML = `<span class="mx-label">The demo — live, keyboard-operable</span>`;
     p2.appendChild(document.createElement(spec.demo));
+  } else if (spec.live) {
+    p2.innerHTML =
+      `<span class="mx-label">The demo</span>` +
+      `<p class="mx-dim" style="margin:0">This block is all pixels, so its demo is the live bench below: the real ` +
+      `WebGPU renderer, with just this block's controls connected. There is no GPU-free version of it.</p>`;
   } else {
     p2.innerHTML =
       `<span class="mx-label">The demo</span>` +
-      `<p class="mx-dim" style="margin:0">This block ships description-only for now; its bench needs WebGPU ` +
-      `and lands with the Tier-1 pass. The renderer already draws it — what's missing is the harness. ` +
+      `<p class="mx-dim" style="margin:0">This block ships description-only. ` +
       `<a href="${REPO}/blob/main/docs/WEBSITE.md">The plan is in the repo.</a></p>`;
   }
   bodyEl.appendChild(p2);
@@ -298,6 +328,13 @@ export function blockCard(spec: BlockCardSpec): HTMLElement {
       `<a href="${REPO}/tree/main/features">features/</a>.</p>`;
   }
   bodyEl.appendChild(p4);
+
+  if (spec.live) {
+    const live = el('div', { class: 'mx-bcard-live' });
+    live.appendChild(el('span', { class: 'mx-label', text: 'Live bench — the real renderer, this block exposed' }));
+    live.appendChild(spec.live);
+    bodyEl.appendChild(live);
+  }
 
   card.appendChild(bodyEl);
   return card;

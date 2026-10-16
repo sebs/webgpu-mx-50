@@ -17,22 +17,14 @@ import { ensureTheme } from './theme.js';
 import { CameraFeedController } from '../sources/camera.js';
 import { FeedShaderRunner, nextShader } from './feed-shaders.js';
 import type { FeedShaderName } from './feed-shaders.js';
-
-const FEED_W = 640;
-const FEED_H = 360;
+import { FEED_W, FEED_H, PATTERN_DRAWS } from './pattern-feeds.js';
+import type { CapturableCanvas, DrawFn } from './pattern-feeds.js';
 
 const STYLE = `
 mx-demo-feeds { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-content: start; }
 mx-demo-feeds .mon-caption { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
 mx-demo-feeds .mon-caption .mx-note { flex: 1; min-width: 0; letter-spacing: 0.14em; white-space: nowrap; }
 `;
-
-/** captureStream is universal in WebGPU-era browsers, but keep the lib floor honest. */
-type CapturableCanvas = HTMLCanvasElement & {
-  captureStream?(frameRate?: number): MediaStream;
-};
-
-type DrawFn = (ctx: CanvasRenderingContext2D, t: number, frame: number) => void;
 
 export type TallyState = 'off' | 'ready' | 'onair';
 
@@ -53,101 +45,6 @@ export interface FeedBoundDetail {
 export interface FeedUnavailableDetail {
   index: number;
   providerId: string;
-}
-
-function pad2(n: number): string {
-  return n < 10 ? `0${n}` : String(n);
-}
-
-/** Feed 1 — colour bars, a bouncing ball, and a running timecode. */
-function drawFeedOne(ctx: CanvasRenderingContext2D, t: number, frame: number): void {
-  const bars = ['#c0c0c0', '#c0c000', '#00c0c0', '#00c000', '#c000c0', '#c00000', '#0000c0'];
-  const w = FEED_W / bars.length;
-  for (let i = 0; i < bars.length; i++) {
-    ctx.fillStyle = bars[i]!;
-    ctx.fillRect(i * w, 0, w + 1, FEED_H);
-  }
-  const x = FEED_W * (0.5 + 0.42 * Math.sin(t * 0.9));
-  const y = FEED_H * (0.55 - 0.35 * Math.abs(Math.sin(t * 2.1)));
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.arc(x, y, 26, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.72)';
-  ctx.fillRect(FEED_W - 210, FEED_H - 64, 210, 64);
-  const totalSeconds = Math.floor(frame / 60);
-  const tc = `${pad2(Math.floor(totalSeconds / 60))}:${pad2(totalSeconds % 60)}:${pad2(frame % 60)}`;
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '32px ui-monospace, monospace';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(tc, FEED_W - 190, FEED_H - 32);
-}
-
-/** Feed 2 — a drifting starfield with an orbiting wireframe square. */
-function drawFeedTwo(ctx: CanvasRenderingContext2D, t: number, _frame: number): void {
-  const sky = ctx.createLinearGradient(0, 0, 0, FEED_H);
-  sky.addColorStop(0, '#0a1030');
-  sky.addColorStop(1, '#20104a');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, FEED_W, FEED_H);
-  let seed = 42;
-  ctx.fillStyle = '#ffffff';
-  for (let i = 0; i < 90; i++) {
-    seed = (seed * 48271) % 2147483647;
-    const sx = (seed % FEED_W) + ((t * (10 + (i % 5) * 14)) % FEED_W);
-    seed = (seed * 48271) % 2147483647;
-    const sy = seed % FEED_H;
-    const r = 1 + (i % 3);
-    ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(t * 1.5 + i));
-    ctx.fillRect((sx % FEED_W) - r / 2, sy - r / 2, r, r);
-  }
-  ctx.globalAlpha = 1;
-  ctx.save();
-  ctx.translate(FEED_W / 2 + 120 * Math.cos(t * 0.7), FEED_H / 2 + 70 * Math.sin(t * 0.7));
-  ctx.rotate(t * 1.3);
-  ctx.strokeStyle = '#7ee0ff';
-  ctx.lineWidth = 5;
-  ctx.strokeRect(-55, -55, 110, 110);
-  ctx.restore();
-}
-
-/** Feed 3 — teal ground with pulsing concentric rings. */
-function drawFeedThree(ctx: CanvasRenderingContext2D, t: number, _frame: number): void {
-  const sea = ctx.createLinearGradient(0, 0, FEED_W, FEED_H);
-  sea.addColorStop(0, '#062e2a');
-  sea.addColorStop(1, '#0a4d3c');
-  ctx.fillStyle = sea;
-  ctx.fillRect(0, 0, FEED_W, FEED_H);
-  const cx = FEED_W / 2 + 60 * Math.sin(t * 0.5);
-  const cy = FEED_H / 2 + 30 * Math.cos(t * 0.8);
-  for (let i = 0; i < 7; i++) {
-    const r = ((t * 60 + i * 46) % 320) + 6;
-    ctx.strokeStyle = '#3fe0b0';
-    ctx.globalAlpha = Math.max(0, 1 - r / 320) * 0.9;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-}
-
-/** Feed 4 — a warm scrolling checkerboard with a roaming diamond. */
-function drawFeedFour(ctx: CanvasRenderingContext2D, t: number, _frame: number): void {
-  const tile = 40;
-  const offset = (t * 60) % (tile * 2);
-  for (let y = -1; y < FEED_H / tile + 1; y++) {
-    for (let x = -2; x < FEED_W / tile + 2; x++) {
-      ctx.fillStyle = (x + y) % 2 === 0 ? '#7a3d0e' : '#b8641a';
-      ctx.fillRect(x * tile + offset - tile, y * tile, tile, tile);
-    }
-  }
-  ctx.save();
-  ctx.translate(FEED_W / 2 + 140 * Math.sin(t * 1.1), FEED_H / 2 + 80 * Math.cos(t * 0.6));
-  ctx.rotate(Math.PI / 4);
-  ctx.fillStyle = '#ffd98a';
-  ctx.fillRect(-45, -45, 90, 90);
-  ctx.restore();
 }
 
 interface Feed {
@@ -185,10 +82,7 @@ export class MxDemoFeeds extends HTMLElement {
   constructor() {
     super();
     this.feeds.push(
-      this.makeFeed(drawFeedOne),
-      this.makeFeed(drawFeedTwo),
-      this.makeFeed(drawFeedThree),
-      this.makeFeed(drawFeedFour),
+      ...PATTERN_DRAWS.map((draw) => this.makeFeed(draw)),
     );
   }
 

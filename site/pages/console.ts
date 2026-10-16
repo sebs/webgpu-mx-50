@@ -95,7 +95,7 @@ if (!nav.gpu) {
 
 // ---------------------------------------------------------------- try this
 
-const tryThis = section({ label: 'Try this', title: 'Five things worth a minute' });
+const tryThis = section({ label: 'Try this', title: 'Six things worth a minute' });
 const tryBody = body(tryThis);
 const recipes: Array<[string, string]> = [
   ['Blend two live feeds', 'Drag the Mix/Wipe lever with MIX selected. Then switch to NAM and drag it again — NAM keeps the brighter pixel of the two, so highlights punch through instead of averaging.'],
@@ -103,6 +103,7 @@ const recipes: Array<[string, string]> = [
   ['Freeze a picture-in-picture', 'Square wipe + Positioner, size the inset with the lever, then press SCENE GRABBER. The still holds while the joystick keeps moving it around the live background.'],
   ['Store and recall a look', 'Set up something you like, press MEMORY then EVENT 1. Change everything. Press EVENT 1, then AUTO TAKE — the whole panel comes back.'],
   ['Use your own footage', 'Each source monitor has a Load clip… button, plus camera and still-image options. The media stays in your browser as an object URL and is never uploaded anywhere.'],
+  ['Ask what a block is', 'Press EXPLAIN in the header, then hover or tab into any block. A caption names the block, the manual section it implements and the feature file that pins it, with a link to the spec.'],
 ];
 const grid = el('div', { class: 'mx-grid cols-2' });
 for (let i = 0; i < recipes.length; i++) {
@@ -152,23 +153,21 @@ tracePanel.appendChild(document.createElement('mx-demo-control-map'));
 mapBody.appendChild(tracePanel);
 main.appendChild(map);
 
-// ---------------------------------------------------------------- attract note
+// ---------------------------------------------------------------- attract mode
 
-const attract = section({ label: 'Still to come', title: 'Attract mode' });
+const attract = section({ label: 'Hands off', title: 'Attract mode' });
 body(attract).appendChild(
   el('div', {
     class: 'mx-prose',
     html:
-      `<p>The console runs here in free play. What it does not yet do is drive itself — a scripted
-       loop calling a wipe pattern, running an Auto Take, pushing a colour correction, keying a title
-       and fading out, so the front page can show the machine working with no interaction.</p>
-      <p>That needs three pieces: the automation surface extended with colour-correction and DSK
-      operations (today it exposes Auto Take, Auto Fade, transition time, wipe-pattern call and
-      Event-Memory stepping — and is constructed only in tests, never in the app); a bridge so the
-      hosting page can start it inside this frame; and an ephemeral boot mode that swaps in an
-      in-memory storage backend, so an attract loop can never read or overwrite the console state
-      <em>you</em> saved.</p>
-      <p class="mx-dim">Source: ${srcLink('src/control/automation.ts')} · ${srcLink('src/persistence/backend.ts')}</p>`,
+      `<p>The <a href="${href('')}">front page</a> runs the mixer on its own: a scripted loop that calls a wipe
+       pattern, runs an Auto Take, pushes a colour correction, keys a title and starts over. It drives the
+       automation API (the browser analogue of the desk's RS-422 port), extended with colour-correction and DSK
+       operations for exactly this.</p>
+      <p>It runs on its own ephemeral <code>&lt;mx-mixer&gt;</code>, not this console. A mixer without
+       <code>persist</code> never reads or writes storage, so the loop cannot touch the console state you saved
+       here.</p>
+      <p class="mx-dim">Source: ${srcLink('site/demos/attract.ts')} · ${srcLink('src/control/automation.ts')}</p>`,
   }),
 );
 main.appendChild(attract);

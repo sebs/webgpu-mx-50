@@ -1,9 +1,9 @@
-// Generates the four JSON artifacts the site reads (docs/WEBSITE.md §7.3).
+// Generates the JSON artifacts the site reads (docs/WEBSITE.md §7.3).
 //
 //   stats.json      counts — authored vs executed, feature files, ADRs
-//   scenarios.json  every scenario in features/, with tags and CI-inclusion
 //   spine.json      the pipeline stage order, straight from core/signal-graph.ts
-//   adr.json        the ADR index, parsed from each file's H1 + metadata bullets
+//   recipes.json    the combination recipes, grouped from features/combination-recipes.feature
+//   presets/*.json  one ADR-0015 field-preset file per bench look (site/looks.ts)
 //
 // Nothing here is hand-typed, which is the whole point: a count on the site cannot drift
 // from the repo. Deliberately absent: any unit-test count. It moves with every commit and
@@ -11,7 +11,7 @@
 //
 // Run: npm run site:data
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { AstBuilder, GherkinClassicTokenMatcher, Parser } from '@cucumber/gherkin';
@@ -22,6 +22,11 @@ import {
   DOWNSTREAM_STAGES,
   STAGE_ORDER,
 } from '../src/core/signal-graph.js';
+import { createEngine } from '../src/app.js';
+import { createPersistence } from '../src/persistence/persistence.js';
+import { MemoryStorageBackend } from '../src/persistence/backend.js';
+import { LOOKS } from '../site/looks.js';
+import { RECIPE_SCRIPTS, DEFERRED_RECIPES } from '../site/recipes.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -113,6 +118,98 @@ async function loadCucumberConfig(): Promise<{ paths: string[]; names: string[] 
     default: { paths?: string[]; name?: string[] };
   };
   return { paths: mod.default.paths ?? [], names: mod.default.name ?? [] };
+}
+
+// ---------------------------------------------------------------- recipes
+
+const RECIPE_FEATURE = 'combination-recipes.feature';
+
+export interface RecipeRecord {
+  readonly number: number;
+  readonly name: string;
+  /** The banner comment under the recipe heading. */
+  readonly blurb: string;
+  readonly scenarios: readonly ScenarioRecord[];
+  /** The scenario a site script plays, or null. */
+  readonly played: string | null;
+  /** Why the recipe is not executed, when it is deferred. */
+  readonly deferred: string | null;
+}
+
+/**
+ * Group the recipe scenarios under the "# Recipe N — Name" banners of the feature file,
+ * and check every playback script against them: a script that names a scenario or step
+ * the feature does not contain fails the build.
+ */
+function buildRecipes(records: readonly ScenarioRecord[]): RecipeRecord[] {
+  const lines = readFileSync(join(ROOT, 'features', RECIPE_FEATURE), 'utf8').split('\n');
+  const banners: { number: number; name: string; line: number; blurb: string }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^\s*#\s*Recipe (\d+)\s+—\s+(.+?)\s*$/.exec(lines[i]!);
+    if (!m) continue;
+    const blurb: string[] = [];
+    for (let j = i + 1; j < lines.length; j++) {
+      const c = /^\s*#\s?(.*)$/.exec(lines[j]!);
+      if (!c || /^=+$/.test(c[1]!.trim())) break;
+      blurb.push(c[1]!.trim());
+    }
+    banners.push({ number: Number(m[1]), name: m[2]!, line: i + 1, blurb: blurb.join(' ') });
+  }
+  if (banners.length === 0) throw new Error(`${RECIPE_FEATURE}: no "# Recipe N — Name" banners found`);
+
+  const own = records.filter((r) => r.feature === RECIPE_FEATURE);
+  const out: RecipeRecord[] = banners.map((b, i) => {
+    const next = banners[i + 1];
+    const scenarios = own.filter((r) => r.line > b.line && (!next || r.line < next.line));
+    const script = RECIPE_SCRIPTS.filter((r) => r.recipe === b.number)[0];
+    const deferred = DEFERRED_RECIPES.filter((r) => r.recipe === b.number)[0];
+    if (script) {
+      const target = scenarios.filter((s) => s.name === script.scenario)[0];
+      if (!target) throw new Error(`site/recipes.ts: recipe ${b.number} has no scenario "${script.scenario}"`);
+      const texts = target.steps.map((t) => t.replace(/^(Given|When|Then|And|But|\*)\s+/, ''));
+      for (const step of script.steps) {
+        if (texts.indexOf(step.step) === -1) {
+          throw new Error(`site/recipes.ts: "${script.scenario}" has no step "${step.step}"`);
+        }
+      }
+    }
+    return {
+      number: b.number,
+      name: b.name,
+      blurb: b.blurb,
+      scenarios,
+      played: script ? script.scenario : null,
+      deferred: deferred ? deferred.reason : null,
+    };
+  });
+  for (const script of RECIPE_SCRIPTS) {
+    if (!out.some((r) => r.number === script.recipe)) throw new Error(`site/recipes.ts: no recipe ${script.recipe} in the feature`);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- presets
+
+/**
+ * Run each look's commands through the headless engine and export the panel as a field
+ * preset — then import it back through the same sanitiser the mixer uses, so a preset
+ * that would be rejected at runtime fails here instead.
+ */
+function writePresets(): number {
+  const dir = join(OUT, 'presets');
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  for (const look of LOOKS) {
+    const engine = createEngine();
+    for (const command of look.commands) engine.store.dispatch(command);
+    const staging = createPersistence(new MemoryStorageBackend());
+    staging.captureFieldPreset(engine.store.getSnapshot());
+    const json = staging.exportPreset({ kind: 'fieldPreset' });
+    const check = createPersistence(new MemoryStorageBackend()).importPreset(json);
+    if (check.ok !== true) throw new Error(`look "${look.id}": preset rejected on re-import (${check.reason})`);
+    writeFileSync(join(dir, `${look.id}.json`), json);
+  }
+  return LOOKS.length;
 }
 
 // ---------------------------------------------------------------- ADRs
@@ -266,12 +363,16 @@ async function main(): Promise<void> {
   // runtime instead, which is strictly better — it cannot go stale between builds.
   writeFileSync(join(OUT, 'stats.json'), JSON.stringify(stats, null, 2));
   writeFileSync(join(OUT, 'spine.json'), JSON.stringify(spine, null, 2));
+  const recipes = buildRecipes(marked);
+  writeFileSync(join(OUT, 'recipes.json'), JSON.stringify(recipes, null, 2));
+  const presetCount = writePresets();
 
   process.stdout.write(
     `site data written to site/generated/\n` +
       `  scenarios: ${executedScenarios} executed / ${authoredScenarios} authored\n` +
       `  steps:     ${executedSteps} executed / ${authoredSteps} authored\n` +
-      `  features:  ${featureFiles.length}   ADRs: ${adrs.length}\n`,
+      `  features:  ${featureFiles.length}   ADRs: ${adrs.length}\n` +
+      `  recipes:   ${recipes.length}   presets: ${presetCount}\n`,
   );
 }
 

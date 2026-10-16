@@ -10,6 +10,7 @@
 
 import { ensureTheme } from '../theme.js';
 import { requestMixerContext } from '../context.js';
+import { BLOCK_REFERENCE, referenceLine } from './reference.js';
 import type { MxSlider } from '../primitives/slider.js';
 import type { PanelStore } from '../../state/store.js';
 import type { PanelState } from '../../state/state.js';
@@ -81,6 +82,9 @@ export abstract class MxBlock extends HTMLElement {
     chip.className = 'mx-block-id';
     chip.textContent = id;
     head.append(name, chip);
+    // Provenance on hover: which manual section and which feature file this block is.
+    const ref = BLOCK_REFERENCE[this.localName];
+    if (ref) head.title = referenceLine(ref);
     this.appendChild(head);
     return (child) => this.appendChild(child);
   }

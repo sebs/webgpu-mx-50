@@ -94,7 +94,7 @@ src/
     binding.ts          Source→provider binding registry (inputs-and-devices)
   gpu/
     capabilities.ts     WebGPU feature detection + graceful message (ADR-0002)
-    device.ts           Device + sRGB swapchain (ADR-0002, ADR-0005)
+    device.ts           Device acquisition (per host, or one shared per page) + sRGB swapchain (ADR-0002, ADR-0005)
     present.ts          Blit Program Out to the canvas' sRGB view
     combine.ts          Mix/NAM combine pass (reference §9.1-§9.3)
     wipe.ts             Compositional wipe pass (reference §9.4)
@@ -115,12 +115,23 @@ src/
     bindings.ts         BindingTable + default bindings (physical address → control)
     resolver.ts         The sole command emitter: resolveSignal + the per-tick SignalCoalescer
     keyboard.ts         Pure key-chord resolution + the browser KeyboardAdapter (focus-guarded)
-    automation.ts       Local automation API (RS422/RS232C intent): run transition / call pattern / step memory
+    automation.ts       Local automation API (RS422/RS232C intent): run transition / call pattern / step memory / CC / DSK
     gamepad.ts,midi.ts,serial.ts  Browser-only input adapters (capability-detected, excluded from CI)
   ui/
-    control-strip.ts    First Web Component control surface, store-bound (ADR-0013)
+    mixer.ts            <mx-mixer>: the host that owns engine, GPU and loop (ADR-0017)
+    mixer-api.ts        The documented embedding surface as data (attributes, events, members)
+    context.ts          The context-request protocol connected components resolve
+    console.ts          <mx-console>: every block on the plate layout
+    blocks/             One connected custom element per hardware block; reference.ts = provenance
+    primitives/         mx-slider / mx-fader / mx-tbar / mx-joystick — value in, event out
+    pattern-feeds.ts    The four procedural Source clips (used by the wall and by feeds="pattern")
+    demo-feeds.ts       The source monitor wall
+    explain.ts          The console's Explain mode
   app.ts                Headless engine assembly (store + clock + bindings)
   main.ts               Browser entry: capability guard → device → sources → renderer → loop
+site/                   The website (docs/WEBSITE.md): pages/, demos/, and DOM-free content
+                        (looks.ts, tour.ts, recipes.ts, look-link.ts) checked by the unit suite
+scripts/                site-data / build-site / check-site / smoke-site / capture-posters
 test/
   unit/                 node:test suites (pure, headless)
   features/             cucumber World + step definitions

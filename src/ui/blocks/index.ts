@@ -15,6 +15,8 @@ import { MxFadeBlock } from './fade.js';
 import { MxMemoryBlock } from './memory.js';
 
 export { MxBlock } from './base.js';
+export { BLOCK_REFERENCE, referenceLine } from './reference.js';
+export type { BlockReference } from './reference.js';
 export {
   MxSourceBlock, MxMatteBlock, MxColourCorrectionBlock, MxPositionBlock, MxMixWipeBlock,
   MxDigitalEffectBlock, MxFreezeBlock, MxAudioBlock, MxDskBlock, MxFadeBlock, MxMemoryBlock,
@@ -33,6 +35,9 @@ const REGISTRY: { tag: string; ctor: CustomElementConstructor }[] = [
   { tag: 'mx-fade-block', ctor: MxFadeBlock },
   { tag: 'mx-memory-block', ctor: MxMemoryBlock },
 ];
+
+/** Every block tag, in registry order — the complete à-la-carte vocabulary. */
+export const BLOCK_TAGS: readonly string[] = REGISTRY.map((entry) => entry.tag);
 
 /** Define every block element (idempotent); static markup upgrades at this call. */
 export function defineBlocks(): void {

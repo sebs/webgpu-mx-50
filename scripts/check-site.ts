@@ -10,6 +10,8 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LOOKS } from '../site/looks.js';
+import { POSTERS } from '../site/posters.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -54,7 +56,10 @@ function walkModule(file: string, from: string): void {
 
 /** Assets pages fetch at runtime rather than import. */
 function checkFetchedAssets(): void {
-  const required = ['site/generated/stats.json', 'app/index.html', '404.html', '.nojekyll'];
+  const required = ['site/generated/stats.json', 'site/generated/recipes.json', 'app/index.html', '404.html', '.nojekyll'];
+  // Every bench look boots from a generated preset file, and every listed poster is fetched.
+  for (const look of LOOKS) required.push(`site/generated/presets/${look.id}.json`);
+  for (const id of POSTERS) required.push(`site/posters/${id}.jpg`);
   for (const rel of required) {
     if (!existsSync(join(OUT, rel))) problems.push(`missing asset: ${rel}`);
   }

@@ -16,10 +16,13 @@ const OUT = join(ROOT, '_site');
 
 const ROUTES = [
   '/',
+  '/learn/',
   '/machine/',
   '/machine/wipes/',
+  '/machine/recipes/',
   '/machine/audio-memory-control/',
   '/architecture/',
+  '/embed/',
   '/console/',
 ];
 
@@ -30,6 +33,7 @@ const MIME = {
   '.md': 'text/markdown; charset=utf-8',
   '.map': 'application/json',
   '.svg': 'image/svg+xml',
+  '.jpg': 'image/jpeg',
 };
 
 function findChrome() {
@@ -171,12 +175,32 @@ async function main() {
         await send('Page.navigate', { url: base + route });
         await new Promise((r) => setTimeout(r, 1400));
 
+        // Scroll through the page so every run="visible" mixer boots. This Chrome has no GPU,
+        // so each one takes its no-WebGPU path — fallback copy, and the bench poster if it
+        // has one — and any missing poster or broken fallback surfaces as an error here.
+        await send('Runtime.evaluate', {
+          expression: `(async () => {
+            for (const mixer of document.querySelectorAll('mx-mixer')) {
+              mixer.scrollIntoView({ block: 'center' });
+              await new Promise((r) => setTimeout(r, 250));
+            }
+            // Wait (bounded) until every bench has settled: running, or on its fallback.
+            const settled = () => [...document.querySelectorAll('.mx-live')].every(
+              (b) => b.classList.contains('unavailable') || b.querySelector('mx-mixer > canvas'));
+            for (let i = 0; i < 50 && !settled(); i++) await new Promise((r) => setTimeout(r, 100));
+            scrollTo(0, 0);
+          })()`,
+          awaitPromise: true,
+        });
+
         // Assert the page actually rendered something meaningful.
         const res = await send('Runtime.evaluate', {
           expression: `(() => {
             const main = document.querySelector('main');
             const nav = document.querySelector('.mx-topbar nav');
-            const demos = document.querySelectorAll('[class*="mx-demo"], mx-demo-spine, mx-demo-wipe-dialer, mx-demo-wipe-scope, mx-demo-transition, mx-demo-matte, mx-demo-bus-board, mx-demo-trail, mx-demo-effect-numbers, mx-demo-positioner, mx-demo-audio, mx-demo-event-memory, mx-demo-special-modes, mx-demo-control-map, mx-demo-devices, mx-demo-store, mx-demo-determinism');
+            const demos = document.querySelectorAll('[class*="mx-demo"], mx-demo-spine, mx-demo-wipe-dialer, mx-demo-wipe-scope, mx-demo-transition, mx-demo-matte, mx-demo-bus-board, mx-demo-trail, mx-demo-effect-numbers, mx-demo-positioner, mx-demo-audio, mx-demo-event-memory, mx-demo-special-modes, mx-demo-control-map, mx-demo-devices, mx-demo-store, mx-demo-determinism, mx-demo-primitives');
+            const benches = document.querySelectorAll('.mx-live');
+            const fellBack = document.querySelectorAll('.mx-live.unavailable');
             let upgraded = 0;
             demos.forEach(d => { if (d.children.length > 0) upgraded++; });
             return JSON.stringify({
@@ -185,6 +209,8 @@ async function main() {
               hasNav: !!nav,
               demos: demos.length,
               upgraded,
+              benches: benches.length,
+              fellBack: fellBack.length,
             });
           })()`,
           returnByValue: true,
@@ -192,11 +218,15 @@ async function main() {
         const info = JSON.parse(res.result.value);
         if (!info.hasNav) failures.push(`${route} — no navigation rendered`);
         if (info.mainLen < 400) failures.push(`${route} — main content too short (${info.mainLen} chars)`);
+        // GPU-less browser: every bench must have reached its explicit fallback, none left waiting.
+        if (info.benches !== info.fellBack) {
+          failures.push(`${route} — ${info.benches - info.fellBack}/${info.benches} live benches never reached their no-WebGPU fallback`);
+        }
         if (info.demos > 0 && info.upgraded < info.demos) {
           failures.push(`${route} — ${info.demos - info.upgraded}/${info.demos} demo elements did not render`);
         }
         console.log(
-          `  ${failures.length ? ' ' : '✓'} ${route.padEnd(34)} ${info.mainLen} chars, ${info.upgraded}/${info.demos} demos`,
+          `  ${failures.length ? ' ' : '✓'} ${route.padEnd(34)} ${info.mainLen} chars, ${info.upgraded}/${info.demos} demos, ${info.fellBack}/${info.benches} benches fell back`,
         );
       }
     });

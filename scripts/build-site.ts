@@ -5,7 +5,7 @@
 //      trees with their specifiers intact.
 //   2. write a real index.html per route (deep links work on Pages with no 404 rewrite)
 //   3. write app/index.html — the console itself, in its own document
-//   4. copy the generated JSON the pages fetch at runtime
+//   4. copy the generated JSON the pages fetch at runtime, and the committed bench posters
 //
 // Run: npm run site:build   (site:data must have run first)
 
@@ -119,6 +119,10 @@ function main(): void {
   const genOut = join(OUT, 'site', 'generated');
   mkdirSync(genOut, { recursive: true });
   cpSync(gen, genOut, { recursive: true });
+
+  // Bench posters: committed stills (scripts/capture-posters.mjs), shown where WebGPU is missing.
+  const posters = join(ROOT, 'site', 'posters');
+  if (existsSync(posters)) cpSync(posters, join(OUT, 'site', 'posters'), { recursive: true });
 
   // Pages must not run the output through Jekyll — it would drop nothing here today, but
   // an underscore-prefixed path later would vanish silently.

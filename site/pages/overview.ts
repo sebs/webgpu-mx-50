@@ -1,10 +1,11 @@
 // Route: /
 //
 // The hero, the numbers (interpolated from stats.json — never hand-typed), the generated
-// signal spine, and three doors matching §1's three audiences exactly.
+// signal spine, and the doors — one per audience, plus the hands-on tour, recipes and embed docs.
 
 import { mountShell, section, body, el, href, loadGenerated, REPO } from '../shell.js';
 import '../demos/spine.js';
+import { attractMonitor } from '../demos/attract.js';
 
 interface Stats {
   scenarios: { authored: number; executed: number };
@@ -34,8 +35,10 @@ heroWrap.innerHTML = `
   </p>
   <div class="mx-row" style="margin-top:26px;gap:10px">
     <a class="mx-cta" href="${href('console/')}" style="padding:11px 18px"><span class="led"></span>Launch the console</a>
+    <a class="mx-btn" href="${href('learn/')}" style="padding:11px 16px;text-decoration:none">Learn the panel in six steps</a>
     <a class="mx-btn" href="${href('architecture/')}" style="padding:11px 16px;text-decoration:none">Read how it's built</a>
   </div>`;
+heroWrap.appendChild(attractMonitor());
 hero.appendChild(heroWrap);
 main.appendChild(hero);
 
@@ -118,7 +121,7 @@ main.appendChild(spine);
 
 // ---------------------------------------------------------------- doors
 
-const doors = section({ label: 'Three ways in', title: 'Pick the thing you came for' });
+const doors = section({ label: 'Ways in', title: 'Pick the thing you came for' });
 const doorsBody = body(doors);
 const doorGrid = el('div', { class: 'mx-grid cols-3' });
 
@@ -154,6 +157,33 @@ doorGrid.appendChild(
 );
 doorGrid.appendChild(
   door(
+    'New here',
+    'Learn the panel',
+    'One live mixer that gains a block per step — a source, the lever, a wipe, an effect, a title, a fade. The real renderer, nothing mocked.',
+    href('learn/'),
+    'Start the tour',
+  ),
+);
+doorGrid.appendChild(
+  door(
+    'For the manual readers',
+    'Combination recipes',
+    'The signature looks from the manual, each played step by step from its Gherkin scenario, with every assertion checked on the live panel.',
+    href('machine/recipes/'),
+    'Play the recipes',
+  ),
+);
+doorGrid.appendChild(
+  door(
+    'For people embedding it',
+    'Embed it',
+    'One tag, blocks à la carte, controls anywhere on the page, or script only — runnable examples, the full element reference, a playground.',
+    href('embed/'),
+    'Read the embed docs',
+  ),
+);
+doorGrid.appendChild(
+  door(
     'For web-platform people',
     'The build story',
     'Native ESM with zero bare imports and no import map, a WebGPU signal graph, and a fixed-timestep clock — no bundler anywhere.',
@@ -178,7 +208,8 @@ honestBody.appendChild(
       `from the manual.</p>` +
       `<p>The domain model is complete and verified headlessly. Some things are deliberately not built, and some ` +
       `cannot be verified in this environment at all — the golden-image tier skips here for want of a headless ` +
-      `WebGPU adapter, and a handful of blocks on this site ship description-only until their GPU benches land. ` +
+      `WebGPU adapter. The live benches on this site need a WebGPU browser; where there is none they say so ` +
+      `rather than show a picture they cannot render. ` +
       `All of it is inventoried with file and line pointers in ` +
       `<a href="${REPO}/blob/main/docs/DEFERRED.md">DEFERRED.md</a>.</p>` +
       `<p class="mx-dim">Source: <a href="${REPO}">github.com/sebs/webgpu-mx-50</a> · ` +

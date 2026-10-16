@@ -58,17 +58,39 @@ npm run build   # no-bundler ESM output to dist/
 Individual gates: `npm run typecheck` · `npm run test:unit` · `npm run test:features`.
 
 **The website** — descriptions and runnable demos for every block, built from this same tree
-(the demos import `src/` directly rather than copying it):
+(the demos import `src/` directly rather than copying it). Besides the GPU-free domain demos it has
+**live benches** (small `<mx-mixer>`s with one block connected), a six-step **Learn the panel**
+tour, the manual's **combination recipes** played step by step from their Gherkin scenarios, and
+**Embed** docs with runnable examples and a playground:
 
 ```bash
 npm run site:build    # static output to _site/ — no bundler, one ESM entry per route
 npm run site:serve    # build, then serve it locally
 npm run site:check    # resolve every module specifier + fetched asset
 npm run site:smoke    # load every route in headless Chrome, fail on any console error
+npm run site:posters  # maintainer step: re-capture the bench stills (needs a WebGPU Chrome)
 ```
 
 It deploys to GitHub Pages from `.github/workflows/pages.yml`, gated on `npm test` — see
 [docs/WEBSITE.md](docs/WEBSITE.md) for the concept and what is still outstanding.
+
+**Embed it:** the mixer is a set of custom elements (ADR-0017). One tag gives you a picture; put
+blocks inside it, or anywhere with `for="id"`, for controls:
+
+```html
+<mx-mixer feeds="pattern" preset="look.json">
+  <mx-dsk-block></mx-dsk-block>
+</mx-mixer>
+<script type="module">
+  import { defineMixer } from './src/ui/mixer.js';
+  import { defineBlocks } from './src/ui/blocks/index.js';
+  defineMixer();
+  defineBlocks();
+</script>
+```
+
+Every attribute, event and block is listed on the site's Embed page, rendered from
+[`src/ui/mixer-api.ts`](src/ui/mixer-api.ts) and [`src/ui/blocks/reference.ts`](src/ui/blocks/reference.ts).
 
 **Blend video feeds:** on load, all four Sources are live video feeds with their own monitors
 (self-contained procedural clips — swap any of them for your own files with the monitor's

@@ -7,6 +7,7 @@ import { resolveSignal, SignalCoalescer } from '../../src/control/resolver.js';
 import { BindingTable, DEFAULT_BINDINGS } from '../../src/control/bindings.js';
 import { keyChord, chordToSignal, isTyping } from '../../src/control/keyboard.js';
 import { createAutomation } from '../../src/control/automation.js';
+import { PanelStore } from '../../src/state/store.js';
 
 const fresh = (): PanelState => structuredClone(FACTORY_PRESET);
 
@@ -141,5 +142,32 @@ test('the automation API emits the same commands the resolver would', () => {
     { type: 'PRESS_WIPE_FAMILY', family: 'straight' },
     { type: 'SET_WIPE_VARIANT', variant: 0 },
     { type: 'SET_REVERSE', on: true },
+  ]);
+});
+
+test('automation setColourCorrection presses the cycle button only as often as needed', () => {
+  const state = fresh(); // factory: both buses off
+  const store = new PanelStore(state);
+  const auto = createAutomation(() => store.getSnapshot(), (c) => store.dispatch(c), () => 0);
+  auto.setColourCorrection('A', { mode: 'chroma-plus-joystick', chroma: 0.2, x: 1, y: -0.5 });
+  const cc = store.getSnapshot().busA.colourCorrect;
+  assert.equal(cc.mode, 'chroma-plus-joystick');
+  assert.equal(cc.chroma, 0.2);
+  assert.deepEqual([cc.joystickX, cc.joystickY], [1, -0.5]);
+  auto.setColourCorrection('A', { mode: 'off' }); // one press wraps joystick → off
+  assert.equal(store.getSnapshot().busA.colourCorrect.mode, 'off');
+  assert.equal(store.getSnapshot().busB.colourCorrect.mode, 'off');
+});
+
+test('automation setDsk sets the window and edge before switching the key on', () => {
+  const out: Command[] = [];
+  const auto = createAutomation(fresh, (c) => out.push(c), () => 0);
+  auto.setDsk({ on: true, keySource: 'A', low: 0.6, high: 1, edge: 'drop-shadow' });
+  assert.deepEqual(out, [
+    { type: 'SET_DSK_KEY_SOURCE', source: 'A' },
+    { type: 'SET_DSK_LOW', level: 0.6 },
+    { type: 'SET_DSK_HIGH', level: 1 },
+    { type: 'SET_DSK_EDGE', edge: 'drop-shadow' },
+    { type: 'SET_DSK_ON', on: true },
   ]);
 });
