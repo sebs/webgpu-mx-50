@@ -20,7 +20,10 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: that label moves to Ubuntu 26 from 2026-10-19, and the smoke
+    # test drives the image's preinstalled Chrome. Move to a new image deliberately, and watch
+    # the first run's "Smoke-test site" log for the Chrome version it reports.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -61,7 +64,7 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

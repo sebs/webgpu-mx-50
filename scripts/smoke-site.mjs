@@ -3,7 +3,9 @@
 // analysis cannot: a demo that throws while rendering, a custom element that never upgrades,
 // a fetch that 404s at runtime.
 //
-// Run: npm run site:smoke   (after site:build). Skips cleanly if no Chrome is present.
+// Run: npm run site:smoke   (after site:build). Locally it skips if no Chrome is present; in CI
+// (CI=true, which GitHub Actions sets) a missing Chrome FAILS — a skipped smoke test would let
+// the deploy gate pass while checking nothing, e.g. on a runner image that stopped shipping it.
 
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -106,8 +108,18 @@ async function cdp(port, sessionFn) {
 async function main() {
   const chrome = findChrome();
   if (!chrome) {
+    if (process.env.CI) {
+      console.error('no Chrome found in CI — the smoke test cannot run, so the gate must not pass (set CHROME_PATH or install Chrome)');
+      process.exit(1);
+    }
     console.log('no Chrome found — skipping browser smoke test');
     return;
+  }
+  // Name the browser in the log: a runner-image change shows up here before it shows up as a failure.
+  try {
+    console.log(`using ${execFileSync(chrome, ['--version'], { encoding: 'utf8' }).trim()} (${chrome})`);
+  } catch {
+    console.log(`using ${chrome}`);
   }
   if (!existsSync(OUT)) {
     console.error('_site missing — run `npm run site:build`');
