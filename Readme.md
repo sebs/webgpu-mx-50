@@ -59,7 +59,7 @@ Individual gates: `npm run typecheck` · `npm run test:unit` · `npm run test:fe
 
 **The website** — descriptions and runnable demos for every block, built from this same tree
 (the demos import `src/` directly rather than copying it). Besides the GPU-free domain demos it has
-**live benches** (small `<mx-mixer>`s with one block connected), a six-step **Learn the panel**
+**live benches** (small `<mx-mixer>`s with one block connected), the 28-pattern **wipe wall**, a six-step **Learn the panel**
 tour, the manual's **combination recipes** played step by step from their Gherkin scenarios, and
 **Embed** docs with runnable examples and a playground:
 
@@ -68,7 +68,7 @@ npm run site:build    # static output to _site/ — no bundler, one ESM entry pe
 npm run site:serve    # build, then serve it locally
 npm run site:check    # resolve every module specifier + fetched asset
 npm run site:smoke    # load every route in headless Chrome, fail on any console error
-npm run site:posters  # maintainer step: re-capture the bench stills (needs a WebGPU Chrome)
+npm run site:posters  # maintainer step: re-capture stills, loops and the social card (needs a WebGPU Chrome)
 ```
 
 It deploys to GitHub Pages from `.github/workflows/pages.yml`, gated on `npm test` — see
@@ -103,7 +103,8 @@ colour correction, and the digital effects on top.
 The interesting part of the experiment is the architecture, not the artwork:
 
 - **Vanilla TypeScript + WebGPU + [banira](https://github.com/sebs/banira)** — no UI framework and
-  no bundler (ADR-0003). Native Web Components for the UI; bare imports resolve via import maps.
+  no bundler (ADR-0003). Native Web Components for the UI; every import is a relative specifier, so
+  the browser loads the compiled modules as-is — no import map either.
 - **One pure state store** (ADR-0011) — the whole panel is a single JSON-serializable value; every
   change is a typed command through one pure reducer. That's what makes Event Memory, persistence,
   and the input-mapping layer thin.
@@ -114,7 +115,7 @@ The interesting part of the experiment is the architecture, not the artwork:
 - **Headless-first, spec-driven testing** (ADR-0016) — the real Gherkin `.feature` files (written
   from the WJ-MX50 manual) execute against the actual domain code with no GPU or DOM, alongside
   `node:test` units. Behaviour is verified against the manual, not against a screenshot.
-- **Decisions are recorded** — 16 [ADRs](adr/) capture the load-bearing choices (WebGPU,
+- **Decisions are recorded** — the [ADRs](adr/) capture the load-bearing choices (WebGPU,
   clean-modern colour, the two-bus model, the wipe engine, timing, persistence, control mapping, …).
 
 ## What's deferred

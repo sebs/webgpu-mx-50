@@ -1,5 +1,6 @@
 // The docs site's authored interactive content, run headlessly: the bench looks, the
-// "Learn the panel" tour, the recipe playback scripts, and the share-link codec. Each is a
+// "Learn the panel" tour, the recipe playback scripts, the wipe wall's cell states, and
+// the share-link codec. Each is a
 // list of real store commands, so each is checked against the real reducer here — a
 // recipe whose playback no longer reaches the state its scenario asserts fails the gate
 // before it can ship as a demo that silently shows the wrong thing.
@@ -14,6 +15,8 @@ import { LOOKS, look } from '../../site/looks.js';
 import { TOUR, blocksAt } from '../../site/tour.js';
 import { RECIPE_SCRIPTS, DEFERRED_RECIPES } from '../../site/recipes.js';
 import { encodeLook, decodeLook, lookUrl, lookFor } from '../../site/look-link.js';
+import { WALL_PATTERNS, wallCommands, wallLabel, leverAt } from '../../site/wall.js';
+import { numberToPattern } from '../../src/core/wipe.js';
 import type { Command } from '../../src/state/commands.js';
 
 function run(commands: readonly Command[]) {
@@ -88,4 +91,27 @@ test('malformed look links decode to null', () => {
   assert.equal(decodeLook('dsk.***'), null);
   assert.equal(decodeLook('dsk.' + btoa(String.fromCharCode(0xff, 0xfe))), null, 'invalid UTF-8');
   assert.equal(lookFor('https://example.org/', 'dsk'), null);
+});
+
+test('every wall cell reaches its pattern, edge, direction and compression through real commands', () => {
+  assert.equal(WALL_PATTERNS.length, 28);
+  const edges = ['hard', 'border-narrow', 'border-wide', 'soft-narrow', 'soft-wide'] as const;
+  for (const n of WALL_PATTERNS) {
+    for (const edge of edges) {
+      for (const reverse of [false, true]) {
+        for (const compression of [0, 1, 2] as const) {
+          const s = run(wallCommands(n, { edge, reverse, compression }));
+          const want = numberToPattern(n);
+          const w = s.transition.wipe;
+          assert.equal(s.transition.type, 'wipe');
+          assert.deepEqual([w.family, w.variant, w.reverse, w.edge, w.modifiers.compression], [want.family, want.variant, reverse, edge, compression], `pattern ${n}`);
+        }
+      }
+    }
+  }
+  assert.equal(wallLabel(9, false), '009');
+  assert.equal(wallLabel(28, true), '156');
+  assert.equal(leverAt(0), 0);
+  assert.equal(leverAt(2), 1); // half period: fully at B
+  assert.ok(leverAt(1) > 0 && leverAt(1) < 1);
 });

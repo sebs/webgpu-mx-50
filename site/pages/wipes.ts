@@ -1,10 +1,12 @@
 // Route: /machine/wipes/
 //
-// The showpiece deep-dive. Everything here runs without a GPU, which is the point: the
-// compositional claim is provable from the domain code alone.
+// The showpiece deep-dive. Everything but the wall runs without a GPU, which is the point:
+// the compositional claim is provable from the domain code alone — and the wall then shows
+// the real renderer drawing all 28 patterns.
 
-import { mountShell, section, body, el, href, srcLink, REPO } from '../shell.js';
+import { mountShell, section, body, el, srcLink } from '../shell.js';
 import '../demos/wipe.js';
+import '../demos/wipe-wall.js';
 
 const main = mountShell({ route: 'machine/wipes/' });
 
@@ -22,7 +24,8 @@ introWrap.innerHTML = `
     choices, not a lookup key.
   </p>
   <p class="mx-prose mx-dim" style="max-width:62ch">
-    Every demo on this page is pure domain code. No WebGPU is involved in any of it.
+    The scope and the dialer are pure domain code, with no WebGPU involved. The wall is the opposite: the
+    real renderer drawing every pattern, live.
   </p>`;
 intro.appendChild(introWrap);
 main.appendChild(intro);
@@ -55,9 +58,26 @@ body(claim).appendChild(
 );
 main.appendChild(claim);
 
+// ---------------------------------------------------------------- wall (D4)
+
+const wall = section({ label: '2 · All 28, live', title: 'The wipe wall', id: 'wall' });
+body(wall).appendChild(
+  el('p', {
+    class: 'mx-prose',
+    html:
+      `Every forward pattern, one row per family and one column per variant, on two live test feeds with the
+       lever sweeping A → B → A. Each cell is its own panel state set by the direct pattern select, rendered
+       by the shipping WGSL. Click a cell to see it large. Change the edge, Compression or Reverse and all 28
+       follow, because each panel receives the same button presses.`,
+    attrs: { style: 'margin-bottom:18px' },
+  }),
+);
+body(wall).appendChild(document.createElement('mx-demo-wipe-wall'));
+main.appendChild(wall);
+
 // ---------------------------------------------------------------- scope
 
-const scope = section({ label: '2 · What the shader is told', title: 'The geometry scope' });
+const scope = section({ label: '3 · What the shader is told', title: 'The geometry scope' });
 body(scope).appendChild(
   el('p', {
     class: 'mx-prose',
@@ -73,7 +93,7 @@ main.appendChild(scope);
 
 // ---------------------------------------------------------------- dialer
 
-const dialer = section({ label: '3 · The numbering oracle', title: 'The pattern dialer' });
+const dialer = section({ label: '4 · The numbering oracle', title: 'The pattern dialer' });
 body(dialer).appendChild(
   el('div', {
     class: 'mx-prose',
@@ -93,7 +113,7 @@ main.appendChild(dialer);
 
 // ---------------------------------------------------------------- edges
 
-const edges = section({ label: '4 · Dressing and direction', title: 'Edges, borders and travel' });
+const edges = section({ label: '5 · Dressing and direction', title: 'Edges, borders and travel' });
 body(edges).appendChild(
   el('div', {
     class: 'mx-prose',
@@ -116,21 +136,3 @@ src.innerHTML = `Source: ${srcLink('src/core/wipe.ts')} · ${srcLink('src/gpu/sh
   specs: ${srcLink('features/wipe-patterns.feature')}, ${srcLink('features/wipe-edge-and-direction.feature')}`;
 body(edges).appendChild(src);
 main.appendChild(edges);
-
-// ---------------------------------------------------------------- gpu note
-
-const gpu = section({ label: 'Still to come', title: 'The wipe wall' });
-body(gpu).appendChild(
-  el('div', {
-    class: 'mx-prose',
-    html:
-      `<p>The one demo this page is missing is the obvious one: all 28 forward patterns running live
-       on real video in a grid, click one to enlarge. That needs the WebGPU bench harness — a shared
-       device across several canvases and the procedural feed patterns extracted from the console's
-       monitor wall — which is scheduled work, not finished work.</p>
-       <p class="mx-dim">The renderer itself already draws every one of these patterns; what is
-       missing is the site-side harness — the full inventory of what is and is not built lives in
-       <a href="${REPO}/blob/main/docs/DEFERRED.md">DEFERRED.md</a>.</p>`,
-  }),
-);
-main.appendChild(gpu);

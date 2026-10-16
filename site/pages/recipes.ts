@@ -137,7 +137,7 @@ function recipeCard(recipe: RecipeJson): HTMLElement {
   if (recipe.deferred || !script || !target) {
     p2.innerHTML =
       `<span class="mx-label">Why it isn't played</span>` +
-      `<p class="mx-callout" style="margin:0 0 14px">${esc(recipe.deferred ?? 'No playback script.')}</p>` +
+      `<p class="mx-note" style="margin:0 0 14px">${esc(recipe.deferred ?? 'No playback script.')}</p>` +
       `<p class="mx-dim" style="margin:0;font-size:14px">The inventory of what is deferred, with file pointers, is in ` +
       `<a href="${REPO}/blob/main/docs/DEFERRED.md">DEFERRED.md</a>.</p>`;
     if (target) {

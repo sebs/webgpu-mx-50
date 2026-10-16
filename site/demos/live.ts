@@ -18,7 +18,8 @@ import type { MxMixer } from '../../src/ui/mixer.js';
 import type { PanelState } from '../../src/state/state.js';
 import { siteRoot, el, esc } from '../shell.js';
 import { lookUrl, lookFor } from '../look-link.js';
-import { POSTERS } from '../posters.js';
+import { POSTERS, LOOPS } from '../posters.js';
+import { reducedMotion } from './base.js';
 
 /** Define the host and every block element (idempotent). */
 export function defineLive(): void {
@@ -145,11 +146,10 @@ export function liveBench(spec: LiveBenchSpec): LiveBench {
       `cannot start it (${esc((e as CustomEvent<string>).detail.split('.')[0] ?? 'no WebGPU')}). The description ` +
       `and the no-GPU demos on this page still work.</p>`;
     if (POSTERS.indexOf(spec.id) !== -1) {
-      // A still captured from the real renderer (scripts/capture-posters.mjs), labelled as one.
+      // Captured from the real renderer (scripts/capture-posters.mjs) and labelled as such:
+      // a recorded loop where there is one (never autoplayed under reduced motion), else the still.
       screen.classList.add('poster');
-      screen.innerHTML =
-        `<img src="${new URL(`site/posters/${spec.id}.jpg`, siteRoot()).href}" alt="A still of this bench, captured from the real renderer">` +
-        `<span class="mx-chip">still image · needs WebGPU to run</span>`;
+      screen.innerHTML = capturedMedia(spec.id, 'this bench');
       const note = el('div', { html: why, attrs: { style: 'margin-top:10px' } });
       root.insertBefore(note, bar);
     } else {
@@ -165,6 +165,12 @@ export function liveBench(spec: LiveBenchSpec): LiveBench {
     () => {
       screen.remove();
       root.classList.add('ready'); // the explicit "running" mark (a canvas alone exists mid-boot)
+      // What scripts/capture-posters.mjs records: the Program Out canvas, as a still and a loop.
+      const canvas = mixer.querySelector(':scope > canvas');
+      if (canvas) {
+        canvas.setAttribute('data-poster', '');
+        canvas.setAttribute('data-loop', '');
+      }
       status.className = 'mx-chip live';
       status.innerHTML = `<span class="led"></span>live · pauses off screen`;
       const shared = lookFor(location.href, spec.id);
@@ -218,6 +224,25 @@ export function liveBench(spec: LiveBenchSpec): LiveBench {
   }
 
   return { root, mixer, side };
+}
+
+/**
+ * The fallback media for a captured id: a muted looping recording with the still as its
+ * poster (a browser that cannot play WebM shows the still), or the still alone.
+ */
+export function capturedMedia(id: string, what: string): string {
+  const still = new URL(`site/posters/${id}.jpg`, siteRoot()).href;
+  if (LOOPS.indexOf(id) !== -1 && !reducedMotion()) {
+    const loop = new URL(`site/posters/${id}.webm`, siteRoot()).href;
+    return (
+      `<video src="${loop}" poster="${still}" autoplay muted loop playsinline aria-label="A recording of ${what}, captured from the real renderer"></video>` +
+      `<span class="mx-chip">recorded · needs WebGPU to run live</span>`
+    );
+  }
+  return (
+    `<img src="${still}" alt="A still of ${what}, captured from the real renderer">` +
+    `<span class="mx-chip">still image · needs WebGPU to run</span>`
+  );
 }
 
 /** The copy-paste HTML that reproduces a bench on any page. */

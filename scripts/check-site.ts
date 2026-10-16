@@ -11,7 +11,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LOOKS } from '../site/looks.js';
-import { POSTERS } from '../site/posters.js';
+import { POSTERS, LOOPS } from '../site/posters.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -60,6 +60,9 @@ function checkFetchedAssets(): void {
   // Every bench look boots from a generated preset file, and every listed poster is fetched.
   for (const look of LOOKS) required.push(`site/generated/presets/${look.id}.json`);
   for (const id of POSTERS) required.push(`site/posters/${id}.jpg`);
+  // A loop's <video> uses the same id's still as its poster frame.
+  for (const id of LOOPS) required.push(`site/posters/${id}.webm`, `site/posters/${id}.jpg`);
+  required.push('site/assets/social-card.jpg');
   for (const rel of required) {
     if (!existsSync(join(OUT, rel))) problems.push(`missing asset: ${rel}`);
   }

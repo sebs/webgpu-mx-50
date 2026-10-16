@@ -1,6 +1,7 @@
 # Development
 
-How to run, test, and build web-mx-50. Phase 0 (skeleton) — see [ROADMAP.md](ROADMAP.md).
+How to run, test, and build web-mx-50 — the app and its website. Phase history is in
+[ROADMAP.md](ROADMAP.md); what is not built is in [DEFERRED.md](DEFERRED.md).
 
 ## Prerequisites
 
@@ -24,8 +25,9 @@ npm run dev
 Runs `banira dev` (ADR-0003): watches `src/`, serves the project root at
 <http://127.0.0.1:8080> with live reload, and transpiles TypeScript on the fly (`--ts`,
 so `./foo.js` imports resolve to `foo.ts` — no build step). Open the URL in a WebGPU
-browser: you should see SMPTE-style colour bars with a moving sweep line (proof the
-render loop and the source → signal-graph → present chain are live).
+browser: you get the full operator surface — four live procedural Source feeds on the
+monitor wall, the Program monitor, and the console (`index.html` composes
+`<mx-mixer persist>` + `<mx-console for="mixer">`; `src/main.ts` wires the rest).
 
 ## Test
 
@@ -39,9 +41,11 @@ npm run test:golden  # golden-image/SSIM scaffolding; SKIPS where no WebGPU adap
 ```
 
 The Gherkin layer (ADR-0016) executes the real `.feature` files in
-[`../features`](../features). Phase 0 scopes the cucumber run to the first Rule of
-`inputs-and-devices.feature` ("one input bound"); the remaining rules await later
-phases (see `test/cucumber.mjs`). Unit tests run TypeScript directly via `tsx`.
+[`../features`](../features) against the headless engine. `test/cucumber.mjs` holds the
+include-list: every scenario that executes in CI is named there, and the authored-but-deferred
+remainder is accounted for in [DEFERRED.md](DEFERRED.md). Unit tests run TypeScript directly via
+`tsx`; besides the domain they cover the site's authored content (bench looks, the tour, recipe
+playback, share links) and drift guards for the documented embedding API.
 
 ## Build (no-bundler production output)
 
@@ -50,72 +54,81 @@ npm run build      # banira compile src/main.ts --output dist
 ```
 
 Emits ES modules to `dist/` (banira follows the import graph from `main.ts`). There is
-no bundler by design (ADR-0003); bare imports resolve via import maps. A
-bundling/minification pass is a deferred, additive step.
+no bundler by design (ADR-0003), and no import map either: every specifier in `src/` is
+relative, so the output runs as-is. A bundling/minification pass is a deferred, additive step.
+
+**banira's compile lib floor is older than `tsc`'s.** `npm run typecheck` passes code that
+`banira compile` rejects — anything past ES2015-ish: `Array.prototype.includes`,
+`String.prototype.padStart`, `Promise.prototype.finally`, `**`. Use `indexOf`, manual padding,
+and `.then(f, f)`; `npm run build` / `npm run site:build` are what catch it.
+
+## The website
+
+```bash
+npm run site:build    # site:data (generated JSON + presets) then banira compile → _site/
+npm run site:serve    # build, then serve _site/
+npm run site:check    # every module specifier and fetched asset resolves
+npm run site:smoke    # every route in headless Chrome without a GPU: no errors, every bench falls back
+npm run site:posters  # maintainer step, needs a WebGPU Chrome: re-capture stills, loops, social card
+```
+
+Concept and status: [WEBSITE.md](WEBSITE.md). The site imports `src/` rather than copying it;
+its authored interactive content (`site/looks.ts`, `site/tour.ts`, `site/recipes.ts`) is plain
+data of store commands, checked against the reducer by the unit suite. Re-run `site:posters`
+when a look or the renderer changes and commit the result: CI cannot render a frame.
 
 ## Project layout
 
 ```
+index.html              The console page: <mx-mixer persist> + <mx-console for="mixer">
 src/
+  main.ts               Browser entry for the console: monitor wall, audio, input adapters, chrome
+  app.ts                Headless engine assembly (store + clock + bindings) — what tests build
   constants.ts          Canonical timing + colour constants (ADR-0005, ADR-0012)
-  core/
-    types.ts            Domain vocabulary (bus, source, size)
-    signal-graph.ts     Per-bus / combine / downstream stage chain (ADR-0004)
-    resolve.ts          Bus resolver + Matte substitution + audio-follows (ADR-0006)
-    transition.ts       Mix weights, composite rule, NAM bias (reference §9)
-    program.ts          Program Out video + audio routing (reference §2)
-    matte.ts            Matte palette, LEVEL/GRADATION semantics, GPU colour (reference §4)
-    wipe.ts             Wipe families/variants, numbering oracle, legality, edges, direction (reference §9.4/§9.7)
-    colour-correct.ts   Colour-correction tri-state, CHROMA/saturation, mono tint (reference §6)
-    digital-effect.ts   Filters + freeze family: selection, exclusions, TIME intervals (reference §8)
-    positioner.ts       Positioner availability + ASPECT-ON gating (reference §7)
-    key.ts              Shared luminance/chroma keying: masks, opacity, tolerance (reference §9.5/§9.6)
-    dsk.ts              Downstream Key: edge ring, window, fill/edge colour, key source (reference §10)
-    audio.ts            Audio mixer: fader law, follow crossfade, program-mix gains, LED map (reference §5, §12)
-    av-synchro.ts       A/V Synchro: LEVEL threshold, trigger/hold rules, pulse train (reference §8.9)
-    timeline.ts         Auto Take/Fade runner: TRANSITION quantise, progress/pause/resume (reference §11/§15, ADR-0012)
-    fade.ts             Fade stage: video target, IN/OUT LEDs, fade-aware program audio (reference §11)
-    event-memory.ts     Event Memory sequencing: occupied-slot set, next-armed cursor (reference §13)
-    special-mode.ts     Special Mode macro table, selection, lever-at-B preconditions (reference §14)
+  core/                 Pure domain logic, one module per hardware block (transition, wipe, dsk,
+                        fade, matte, positioner, digital-effect, audio, event-memory, special-mode,
+                        signal-graph, resolve, program, …) — DOM-free, GPU-free, spec-pinned
   state/
-    state.ts            PanelState + FACTORY_PRESET + fieldPreset (ADR-0011, ref §18)
-    commands.ts         Typed command union
-    reducer.ts          Pure reducer
-    store.ts            PanelStore: dispatch / getSnapshot / subscribe
+    state.ts            PanelState + FACTORY_PRESET + the field-preset sanitiser
+    commands.ts         The typed Command vocabulary — the one way anything changes
+    reducer.ts          The single pure reducer (ADR-0011)
+    store.ts            PanelStore: dispatch / subscribe / getSnapshot
   engine/
-    clock.ts            Fixed-timestep logical clock, injectable (ADR-0012)
-    loop.ts             rAF present loop + accumulator + clamp (ADR-0012)
-    renderer.ts         Two-bus renderer: resolve → per-bus → combine → program-out → present
-  sources/
-    source.ts           Uniform Source interface (ADR-0008)
-    generated-source.ts GPU test-pattern source, one per slot (distinct variant)
-    matte-source.ts     GPU Matte generator source (colour / level / gradation)
-    registry.ts         BusSource → Source map used by the renderer (ADR-0008)
-    binding.ts          Source→provider binding registry (inputs-and-devices)
+    clock.ts            Fixed-timestep logical clock (ADR-0012)
+    loop.ts             rAF present loop over the clock
+    renderer.ts         The GPU signal graph: per-bus → combine → DSK → fade → present
   gpu/
     capabilities.ts     WebGPU feature detection + graceful message (ADR-0002)
-    device.ts           Device acquisition (per host, or one shared per page) + sRGB swapchain (ADR-0002, ADR-0005)
+    device.ts           Device acquisition (per host, or one shared per page) + sRGB swapchain
+    bus-processor.ts    Per-bus colour correction + filters + freeze family (reference §6, §8)
+    trail.ts            Trail ping-pong accumulator (reference §8.8)
+    combine.ts          Mix/NAM/key combine pass (reference §9.1–§9.6)
+    wipe.ts             Compositional wipe pass, Positioner inset, Scene Grabber (reference §7, §9.4)
+    dsk.ts              Downstream Key pass, six edge styles (reference §10)
+    fade.ts             Fade pass, selective VIDEO/DSK (reference §11)
+    special-fx.ts       Special-Mode compressed-image macros (reference §14)
     present.ts          Blit Program Out to the canvas' sRGB view
-    combine.ts          Mix/NAM combine pass (reference §9.1-§9.3)
-    wipe.ts             Compositional wipe pass (reference §9.4)
-    bus-processor.ts    Per-bus colour correction + filter effects pass (reference §6, §8.1-§8.4)
-    dsk.ts              Downstream Key pass — keyed title over the composite (reference §10)
-    fade.ts             Fade pass — mixes the post-DSK composite toward the target (reference §11)
-    shaders/*.wgsl.ts   WGSL string modules (present/test-pattern/matte/combine/wipe/bus-effect/dsk/fade)
+    readback.ts         256-aligned texture readback (still capture)
+    shaders/*.wgsl.ts   WGSL string modules
+  sources/              The Source abstraction (ADR-0008): video / image / camera / matte /
+                        generated sources, the registry, bindings, device catalog
   audio/
     engine.ts           Browser Web Audio graph, gains driven by the store (ADR-0010)
     av-synchro-tap.ts   Runtime envelope tap → A/V-Synchro effect gate (browser-only)
   persistence/
-    backend.ts          StorageBackend interface + localStorage / in-memory implementations (ADR-0015)
-    schema.ts           schemaVersion envelope, migration, crash-proof reads (ADR-0015)
+    backend.ts          StorageBackend / BlobBackend: localStorage, IndexedDB, in-memory (ADR-0015)
+    schema.ts           schemaVersion envelope, migration, crash-proof reads
     persistence.ts      The single owner of storage: bank / field-preset / settings / bindings / import-export
     subscriber.ts       Passive store→storage mirror (debounced field-preset capture)
+    still-store.ts      Two-tier still commits (blob first), orphan sweep
+    preset-file.ts      Pure half of preset file import/export; file-io.ts is the DOM half
   control/
     logical-control.ts  Remappable logical-control ids + the ControlSignal shape (ADR-0014)
     bindings.ts         BindingTable + default bindings (physical address → control)
     resolver.ts         The sole command emitter: resolveSignal + the per-tick SignalCoalescer
     keyboard.ts         Pure key-chord resolution + the browser KeyboardAdapter (focus-guarded)
     automation.ts       Local automation API (RS422/RS232C intent): run transition / call pattern / step memory / CC / DSK
+    learnable.ts        MIDI learn (ADR-0018)
     gamepad.ts,midi.ts,serial.ts  Browser-only input adapters (capability-detected, excluded from CI)
   ui/
     mixer.ts            <mx-mixer>: the host that owns engine, GPU and loop (ADR-0017)
@@ -125,18 +138,20 @@ src/
     blocks/             One connected custom element per hardware block; reference.ts = provenance
     primitives/         mx-slider / mx-fader / mx-tbar / mx-joystick — value in, event out
     pattern-feeds.ts    The four procedural Source clips (used by the wall and by feeds="pattern")
-    demo-feeds.ts       The source monitor wall
+    demo-feeds.ts       The source monitor wall (+ feed-shaders.ts: the WGSL shader feeds)
+    ext-camera-monitor.ts  The EXT. CAMERA input card
+    midi-panel.ts       MIDI profile / MPE / learn panel
     explain.ts          The console's Explain mode
-  app.ts                Headless engine assembly (store + clock + bindings)
-  main.ts               Browser entry: capability guard → device → sources → renderer → loop
-site/                   The website (docs/WEBSITE.md): pages/, demos/, and DOM-free content
-                        (looks.ts, tour.ts, recipes.ts, look-link.ts) checked by the unit suite
+    theme.ts            The console theme tokens and styles (docs/STYLEGUIDE.md)
+site/                   The website (docs/WEBSITE.md): pages/ (one ESM entry per route), demos/,
+                        DOM-free content (looks.ts, tour.ts, recipes.ts, look-link.ts), and the
+                        committed captures (posters/ + posters.ts, assets/)
 scripts/                site-data / build-site / check-site / smoke-site / capture-posters
 test/
   unit/                 node:test suites (pure, headless)
   features/             cucumber World + step definitions
   golden/               golden-image/SSIM scaffolding (skips without a GPU)
-  cucumber.mjs          cucumber-js configuration
+  cucumber.mjs          cucumber-js configuration and the CI include-list
 ```
 
 ## Status (Phases 0–8 complete — project complete)
@@ -183,17 +198,14 @@ what remains deferred is pixel-rendering, browser-only surfaces, and faithfully 
 scenarios (see the [ROADMAP](ROADMAP.md) Phase 8 note).
 
 Deferred work is inventoried in **[DEFERRED.md](DEFERRED.md)** — the single consolidated list,
-with a **buildable-vs-out-of-scope split and a file/line pointer for each item**. In short: the
-domain model is complete; what remains is **buildable** GPU-pixel rendering (Trail ping-pong,
-Compression/Slide/Blinds wipe, the five non-Normal DSK edge styles, A/V-Synchro picture gating,
-Special-Mode macro looks, selective VIDEO/DSK fade) and **buildable** browser I/O (real
-audio-input capture, EXT.CAMERA binding, IndexedDB still tiers + file import/export, real device
-binding — the gamepad/MIDI/serial adapters are already written and served), all deferred only for
-CI/environment reasons; plus a small set genuinely **not** buildable without breaking fidelity
-(the model-constrained double-effect / Multi+Strobe scenarios) or **out of scope** (the `@deferred`
-frame-field interlace scenarios, `@wip` Pattern-Table parts, analog/genlock timing). **Golden-image
-pixel tests** are stubbed for the whole renderer because this environment has no headless-WebGPU
-adapter — an environment limit, not a code limit. Every deferral has a tested domain/config proxy.
+with a **buildable-vs-out-of-scope split and a file/line pointer for each item**. Since the
+Phase-9 GPU sweep and the Phase-10 browser-I/O sweep, every picture pass and every browser-I/O
+tier is written; what remains is a small set genuinely **not** buildable without breaking
+fidelity (the model-constrained double-effect / Multi+Strobe scenarios) or **out of scope** (the
+`@deferred` frame-field interlace scenarios, `@wip` Pattern-Table parts, analog/genlock timing).
+**Golden-image pixel tests** are stubbed for the whole renderer because CI has no headless-WebGPU
+adapter — an environment limit, not a code limit. (A local headless Chrome with
+`--enable-unsafe-webgpu` does render; that is how the site's stills are captured.)
 
 The domain is verified headlessly: the **`node:test` unit suite** and **563 Gherkin scenarios
 (4137 steps)** across source, program-out, mix/nam, matte, wipe, colour-correction, the five

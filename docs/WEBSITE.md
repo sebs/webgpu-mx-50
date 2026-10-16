@@ -19,9 +19,10 @@
 > mixer), `/machine/recipes/` (the combination recipes played step by step from their scenarios)
 > and `/embed/` (developer docs with runnable examples, the generated element reference, the
 > control primitives on their own, and a playground) — plus attract mode on the Overview (D1),
-> share links for any bench look, an Explain mode in the console, and committed bench stills for
-> browsers without WebGPU. Nine routes, four nav items. §3, §5, §7.5 and §10 below are updated;
-> the rest of this document still describes the design as written.
+> the 28-pattern wipe wall (D4), share links for any bench look, an Explain mode in the console,
+> committed stills and recorded loops for browsers without WebGPU, and a social card. Nine
+> routes, four nav items. §3, §5, §7.5 and §10 below are updated; the rest of this document still
+> describes the design as written.
 >
 > It inherits the repo's hard constraints (ADR-0003 no framework/no bundler, ADR-0013 web
 > components, [`STYLEGUIDE.md`](STYLEGUIDE.md)) and reuses `src/` directly — **the site never
@@ -367,7 +368,16 @@ The real renderer, one block exposed.
 > booting from a preset generated from [`site/looks.ts`](../site/looks.ts). Mapping: D6 → the
 > Digital Effect and Freeze benches, D7 → Colour Correction, D8 → DSK, D9 → Fade (with the DSK
 > connected, for the selective case); the Positioner, Mix/Wipe and Program Out cards got benches
-> too. **D4, the 28-pattern wipe wall, is not built.** D1 is the Overview hero's attract mode.
+> too. D1 is the Overview hero's attract mode.
+>
+> **D4, the wipe wall, is its own composition root** ([`site/demos/wipe-wall.ts`](../site/demos/wipe-wall.ts)),
+> not 28 hosts: 28 engines would mean 112 feed videos. It shares one device, one
+> `SourceRegistry` with two pattern feeds drawn once per frame, and gives each cell a small
+> `Renderer` over its own `PanelStore`. Cell states are real commands
+> ([`site/wall.ts`](../site/wall.ts): direct pattern select, edge presses, REVERSE,
+> COMPRESSION, checked for all 28 × 5 edges × 2 directions × 3 compressions by the unit suite);
+> per frame the wall only dispatches `SET_LEVER`. Only cells on screen render. Measured at 60 fps
+> with 29 renderers in headless Chrome on Apple silicon.
 > The budget rule below is met by the host itself: `run="visible"` renders only what is on screen
 > and stops on a hidden tab, `shared-device` gives the page one device, and the pattern feeds draw
 > on the host's clock, so they pause with it. The two `src/` refactors listed below happened:
@@ -448,7 +458,7 @@ Decided at runtime by `navigator.gpu` + `requestAdapter()`, never by browser nam
 | Capability | Gets |
 |---|---|
 | WebGPU available | Everything |
-| No WebGPU | Tier 2 in full; the recipe player runs against the headless engine (checks real, no picture); each Machine bench shows a **committed still** from the real renderer, labelled *"still image · needs WebGPU to run"*, with the reason underneath (loops were the plan; stills shipped — see §7.5) |
+| No WebGPU | Tier 2 in full; the recipe player runs against the headless engine (checks real, no picture); each Machine bench and the Overview hero play a **committed recording** from the real renderer, labelled *"recorded · needs WebGPU to run live"*, the wipe wall shows a committed still, and every one says why underneath (§7.5) |
 | No pointer + keyboard | Everything except the console page, which shows its capture loop and says plainly that a console wants a pointer and a keyboard |
 | `prefers-reduced-motion` | No attract-mode hero at all (the pattern feeds move on their own); blinks pin solid (already the styleguide rule); demos start paused with a play control |
 
@@ -544,14 +554,26 @@ The Tier-1 fallbacks are **maintainer-captured, committed assets** — not build
 environment has no headless-WebGPU adapter (the same limit that parks the golden-image tests, per
 `DEFERRED.md`), so nothing in CI can render a frame.
 
-**What shipped: stills, not loops.** [`scripts/capture-posters.mjs`](../scripts/capture-posters.mjs)
-(`npm run site:posters`) loads `/machine/` in a local headless Chrome *with* WebGPU, waits for each
-bench to go live, and screenshots its Program Out canvas to `site/posters/<bench-id>.jpg`. It
-also writes [`site/posters.ts`](../site/posters.ts), the list of captured ids, which is what a
-bench consults, so it never requests a still that does not exist. `site:check` verifies every
-listed still is in `_site/`, and `site:smoke` scrolls every bench into view in a GPU-less Chrome,
-which exercises exactly that fallback. Re-capture when a look or the renderer changes. Recorded
-loops (`MediaRecorder`) and a social card remain unbuilt. If a headless-WebGPU runner is ever
+**What shipped.** [`scripts/capture-posters.mjs`](../scripts/capture-posters.mjs)
+(`npm run site:posters`) drives a local headless Chrome *with* WebGPU over the built site and
+writes, from the real renderer:
+
+- `site/posters/<id>.jpg` — a still of every Machine bench and of the whole wipe wall (the
+  viewport is grown to fit the wall, since off-screen cells skip frames);
+- `site/posters/<id>.webm` — a loop of every Machine bench (4 s) and of the Overview hero's attract
+  mode (8 s), recorded *in the page* with `MediaRecorder` over the Program Out canvas's
+  `captureStream` (VP9; the still is the `<video>` poster, so a browser that cannot play WebM
+  shows that instead);
+- `site/assets/social-card.jpg` — the 1200×630 `og:image`: a real mixer frame mid-wipe with the
+  title over it;
+- [`site/posters.ts`](../site/posters.ts) — `POSTERS` and `LOOPS`, the ids captured, which is what
+  the pages consult, so nothing requests media that does not exist.
+
+`site:check` verifies every listed file and the card are in `_site/`; `site:smoke` scrolls every
+bench into view in a GPU-less Chrome, which exercises exactly these fallbacks. The build emits
+`og:image` / `twitter:card` only when `SITE_URL` is set (the Pages workflow passes
+`actions/configure-pages`'s `base_url`): a social card needs an absolute URL. Re-capture when a
+look or the renderer changes. The whole set is about 2 MB. If a headless-WebGPU runner is ever
 added to the Action, this step and the golden tests unlock together.
 
 ## 8. Asset & legal hygiene
@@ -601,15 +623,14 @@ Every catalogued demo appears exactly once below.
 | **W0** | Shell, theme reuse, routing, deploy pipeline, `stats.json`; Overview with spine (**D18**) + numbers + footer | ✅ **Built.** Six routes, each a real directory with its own ESM entry — deep links work on Pages with no 404 rewrite |
 | **W1** | The stage pages + `/machine/audio-memory-control/` with Tier-2 demos: **D2, D3, D5, D6b, D12, D14, D15, D16, D17, D19, D20, D21** | ✅ **Built** (plus **D10, D11** pulled forward onto `/architecture/`). CC / DSK / Fade / Program Out ship **description-only**, as planned |
 | **W2** | `/specs/` + `scenarios.json` + **D13** replay | ⛔ **Cut.** The page was built, then removed with `/decisions/` and `/status/` by owner decision (see the status note at the top). D13 was never built |
-| **W3** | Tier-1 benches **D4, D6, D7, D8, D9**, the device/feed/pause refactors (§5), capability fallbacks, committed captures (§7.5) | 🟡 **Built except D4.** Benches are small `<mx-mixer>` hosts, not a site harness (§5 note); the refactors landed in `src/`; fallbacks are committed stills (§7.5). The 28-pattern wipe wall (D4) is still outstanding |
+| **W3** | Tier-1 benches **D4, D6, D7, D8, D9**, the device/feed/pause refactors (§5), capability fallbacks, committed captures (§7.5) | ✅ **Built.** Benches are small `<mx-mixer>` hosts and the wipe wall is its own composition root (§5 note); the refactors landed in `src/`; fallbacks are committed recordings and stills, plus the social card (§7.5) |
 | **W4** | `/console/` + attract mode (**D1**) incl. the automation extension and ephemeral boot (§4.1); `/architecture/` demos **D10, D11** | ✅ **Built.** Attract mode runs on the Overview hero (`site/demos/attract.ts`): the automation API gained `setColourCorrection` / `setDsk`, it is built over the hero host's own store and clock, and the hero is a mixer without `persist`, which is ephemeral by construction — no bridge into the console iframe was needed |
 | **W5** | The live layer: `/learn/`, `/machine/recipes/`, `/embed/`; share links; console Explain mode | ✅ **Built (2026-10-16).** Tour steps, recipe scripts, bench looks and the link codec are DOM-free modules checked by `test/unit/site-content.test.ts` against the real reducer; recipe scripts are also checked against the feature text by `site:data`; the embed reference tables are drift-guarded by `test/unit/mixer-api.test.ts` |
 
 Demo accounting after the cut: **D13 is the only catalogued demo with no home**, since it existed
 only to serve `/specs/`. The recipe player is a narrow, honest cousin of it — it replays one
 feature file's playable scenarios with *authored* command scripts (not a recorded World journal)
-and re-checks only the Then-steps it has a domain check for. **D4 is the one Tier-1 demo still
-outstanding.** Every other demo in §5 ships.
+and re-checks only the Then-steps it has a domain check for. Every other demo in §5 ships.
 
 ### What was learned building it
 

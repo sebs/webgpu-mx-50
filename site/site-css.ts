@@ -266,7 +266,7 @@ mx-mixer.mx-bench > canvas, .mx-bench-screen {
 mx-mixer.mx-bench > canvas + .mx-bench-screen { display: none; }
 .mx-bench-screen { display: flex; align-items: center; justify-content: center; padding: 18px; box-sizing: border-box; }
 .mx-bench-screen.poster { position: relative; padding: 0; overflow: hidden; }
-.mx-bench-screen.poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.mx-bench-screen.poster img, .mx-bench-screen.poster video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .mx-bench-screen.poster .mx-chip { position: absolute; left: 10px; bottom: 10px; }
 .mx-bench-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .mx-bench-side[hidden] { display: none; }
@@ -279,6 +279,30 @@ mx-mixer.mx-bench.stacked .mx-bench-side > mx-mixwipe-block { flex: 2 1 560px; }
 .mx-live.unavailable mx-mixer.mx-bench { grid-template-columns: minmax(0, 1fr); }
 .mx-live.unavailable .needs-gpu { display: none; }
 .mx-live .mx-code { margin-top: 10px; }
+
+/* ---------- the wipe wall (site/demos/wipe-wall.ts) ---------- */
+
+.mx-wall-focus { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 18px; margin-bottom: 22px; }
+@media (max-width: 860px) { .mx-wall-focus { grid-template-columns: minmax(0, 1fr); } }
+.mx-wall-screen { display: block; width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--mx-line); background: #000; }
+.mx-wall-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mx-wall-side .mx-readout.big { align-self: flex-start; }
+.mx-wall-grid { display: grid; grid-template-columns: 6.5em repeat(4, minmax(0, 1fr)); gap: 8px; align-items: center; }
+@media (max-width: 700px) {
+  .mx-wall-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mx-wall-family { grid-column: 1 / -1; margin-top: 6px; }
+}
+.mx-wall-cell {
+  position: relative; display: block; padding: 0; margin: 0; cursor: pointer; overflow: hidden;
+  border: 1px solid var(--mx-line); border-radius: 5px; background: #000; aspect-ratio: 16 / 9;
+}
+.mx-wall-cell canvas { display: block; width: 100%; height: 100%; }
+.mx-wall-cell:focus-visible { outline: 2px solid var(--mx-accent); outline-offset: 2px; }
+.mx-wall-cell[aria-pressed="true"] { border-color: var(--mx-amber); box-shadow: 0 0 0 1px var(--mx-amber); }
+.mx-wall-tag {
+  position: absolute; left: 6px; bottom: 5px; padding: 1px 5px; border-radius: 3px;
+  background: rgba(0,0,0,0.62); color: #fff; font: 500 11px/1.4 var(--mx-mono, ui-monospace, monospace);
+}
 
 /* ---------- code blocks ---------- */
 
@@ -357,6 +381,7 @@ ol.mx-steps li.extra { font-style: italic; }
 .mx-example-stage mx-mixer:not(:has(> canvas)):not(:has(.mx-mixer-unavailable)) { aspect-ratio: 16 / 9; background: #000; }
 .mx-hero-monitor .mx-chip-row { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 8px; }
 .mx-hero-monitor[hidden] { display: none; }
+.mx-hero-monitor video { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--mx-line); background: #000; }
 
 /* ---------- footer ---------- */
 
@@ -366,12 +391,14 @@ ol.mx-steps li.extra { font-style: italic; }
 
 /* ---------- misc ---------- */
 
+/* A prose callout. The console theme also defines .mx-note — as an 8px uppercase panel
+   label — and loads first, so restore prose type here; real blocks get the theme's version
+   back through the .mx-block[role="group"] rule above. */
 .mx-note {
   border-left: 2px solid var(--mx-amber); padding: 2px 0 2px 14px;
   color: var(--mx-label); margin: 0 0 1em;
+  font: inherit; font-size: 15px; line-height: 1.6; letter-spacing: normal; text-transform: none;
 }
-/* Long-form callout (the theme's .mx-note is panel-label sized, too small for a sentence). */
-.mx-callout { border-left: 2px solid var(--mx-amber); padding: 2px 0 2px 14px; color: var(--mx-label); margin: 0 0 1em; }
 .mx-skip {
   position: absolute; left: -9999px; top: 0; background: var(--mx-panel-hi);
   padding: 10px 16px; border-radius: 6px; z-index: 100;

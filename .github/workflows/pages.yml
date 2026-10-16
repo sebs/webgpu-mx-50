@@ -37,8 +37,15 @@ jobs:
       - name: Test
         run: npm test
 
+      # Before the build: its base_url becomes SITE_URL, which the build needs for the absolute
+      # og:image URL social cards require.
+      - id: pages
+        uses: actions/configure-pages@v6
+
       - name: Build site
         run: npm run site:build
+        env:
+          SITE_URL: ${{ steps.pages.outputs.base_url }}
 
       # Resolves every module specifier and fetched asset in _site the way a browser would.
       - name: Check site
@@ -47,8 +54,6 @@ jobs:
       # Loads every route in headless Chrome and fails on any console error or dead request.
       - name: Smoke-test site
         run: npm run site:smoke
-
-      - uses: actions/configure-pages@v6
 
       - uses: actions/upload-pages-artifact@v5
         with:

@@ -44,7 +44,7 @@ const kicker = el('span', { class: 'mx-label' });
 const title = el('h2', { attrs: { style: 'margin:10px 0 12px' } });
 const prose = el('div', { class: 'mx-prose' });
 const tryLabel = el('span', { class: 'mx-label', text: 'Try this' });
-const tryIt = el('p', { class: 'mx-callout', attrs: { style: 'margin:8px 0 18px' } });
+const tryIt = el('p', { class: 'mx-note', attrs: { style: 'margin:8px 0 18px' } });
 const stepper = el('div', { class: 'mx-row' });
 const prev = el('button', { class: 'mx-btn', text: '← Back', attrs: { type: 'button' } });
 const next = el('button', { class: 'mx-btn on', html: `<span class="led"></span>Next step`, attrs: { type: 'button' } });

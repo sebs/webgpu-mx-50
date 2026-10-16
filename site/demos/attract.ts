@@ -16,7 +16,8 @@ import type { MxMixer } from '../../src/ui/mixer.js';
 import type { Command } from '../../src/state/commands.js';
 import type { PanelState } from '../../src/state/state.js';
 import { el } from '../shell.js';
-import { defineLive, factoryState } from './live.js';
+import { defineLive, factoryState, capturedMedia } from './live.js';
+import { LOOPS } from '../posters.js';
 import { reducedMotion } from './base.js';
 
 const ACT_MS = 4200;
@@ -83,7 +84,7 @@ function takeRunning(state: PanelState): boolean {
 
 /** The hero monitor; removes itself where WebGPU is unavailable. */
 export function attractMonitor(): HTMLElement {
-  const wrap = el('div', { class: 'mx-hero-monitor' });
+  const wrap = el('div', { class: 'mx-hero-monitor', attrs: { id: 'hero-monitor' } });
   if (reducedMotion()) {
     wrap.hidden = true;
     return wrap;
@@ -109,7 +110,15 @@ export function attractMonitor(): HTMLElement {
   chips.hidden = true;
   mixer.addEventListener('mx-unavailable', (e) => {
     e.preventDefault();
-    wrap.hidden = true;
+    if (LOOPS.indexOf('hero-monitor') === -1) {
+      wrap.hidden = true;
+      return;
+    }
+    // No WebGPU: the committed recording of this very loop, labelled as a recording.
+    mixer.remove();
+    const media = el('div', { class: 'mx-bench-screen poster', html: capturedMedia('hero-monitor', 'the attract loop') });
+    wrap.insertBefore(media, chips);
+    chips.remove();
   });
 
   let onScreen = false;
@@ -121,6 +130,8 @@ export function attractMonitor(): HTMLElement {
     'mx-ready',
     () => {
       chips.hidden = false;
+      wrap.classList.add('ready');
+      mixer.querySelector(':scope > canvas')?.setAttribute('data-loop', '');
       const ctx = mixer.context!;
       const dispatch = (c: Command): void => ctx.store.dispatch(c);
       const api = createAutomation(() => ctx.store.getSnapshot(), dispatch, ctx.tick);

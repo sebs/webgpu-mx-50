@@ -34,6 +34,7 @@ const MIME = {
   '.map': 'application/json',
   '.svg': 'image/svg+xml',
   '.jpg': 'image/jpeg',
+  '.webm': 'video/webm',
 };
 
 function findChrome() {
@@ -211,7 +212,7 @@ async function main() {
           expression: `(() => {
             const main = document.querySelector('main');
             const nav = document.querySelector('.mx-topbar nav');
-            const demos = document.querySelectorAll('[class*="mx-demo"], mx-demo-spine, mx-demo-wipe-dialer, mx-demo-wipe-scope, mx-demo-transition, mx-demo-matte, mx-demo-bus-board, mx-demo-trail, mx-demo-effect-numbers, mx-demo-positioner, mx-demo-audio, mx-demo-event-memory, mx-demo-special-modes, mx-demo-control-map, mx-demo-devices, mx-demo-store, mx-demo-determinism, mx-demo-primitives');
+            const demos = document.querySelectorAll('[class*="mx-demo"], mx-demo-spine, mx-demo-wipe-dialer, mx-demo-wipe-scope, mx-demo-transition, mx-demo-matte, mx-demo-bus-board, mx-demo-trail, mx-demo-effect-numbers, mx-demo-positioner, mx-demo-audio, mx-demo-event-memory, mx-demo-special-modes, mx-demo-control-map, mx-demo-devices, mx-demo-store, mx-demo-determinism, mx-demo-primitives, mx-demo-wipe-wall');
             const benches = document.querySelectorAll('.mx-live');
             const fellBack = document.querySelectorAll('.mx-live.unavailable');
             const stuck = [...benches].filter((b) => !b.classList.contains('unavailable')).map((b) => b.id);
