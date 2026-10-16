@@ -225,13 +225,7 @@ class WipeWall extends DemoElement {
         unavailable('no navigator.gpu');
         return;
       }
-      let device: GPUDevice;
-      try {
-        device = await sharedGpuDevice();
-      } catch (error) {
-        unavailable(String(error).replace(/^Error:\s*/, ''));
-        return;
-      }
+      const device = await sharedGpuDevice();
       const feeds: PatternFeed[] = [createPatternFeed(2), createPatternFeed(3)]; // rings on A, checker on B
       const registry = new SourceRegistry();
       const matte = new MatteSource(device, FOCUS);
@@ -298,7 +292,10 @@ class WipeWall extends DemoElement {
       if (started || !entries[entries.length - 1]!.isIntersecting) return;
       started = true;
       first.disconnect();
-      void boot();
+      // Anything that throws after the first await — no adapter, a canvas that will not take
+      // a WebGPU context, a pass constructor — lands here, so the wall always settles on
+      // .ready or .unavailable and says why.
+      boot().catch((error: unknown) => unavailable(String(error).replace(/^Error:\s*/, '').replace(/\.$/, '')));
     });
     first.observe(root);
     this.onDispose(() => first.disconnect());
