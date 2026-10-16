@@ -184,10 +184,12 @@ async function main() {
               mixer.scrollIntoView({ block: 'center' });
               await new Promise((r) => setTimeout(r, 250));
             }
-            // Wait (bounded) until every bench has settled: running, or on its fallback.
+            // Wait (bounded) until every bench has settled: running (.ready, set on mx-ready) or on
+            // its fallback (.unavailable). Not "has a canvas": the host inserts its canvas before
+            // awaiting the adapter, and on a slow runner that request can take seconds to fail.
             const settled = () => [...document.querySelectorAll('.mx-live')].every(
-              (b) => b.classList.contains('unavailable') || b.querySelector('mx-mixer > canvas'));
-            for (let i = 0; i < 50 && !settled(); i++) await new Promise((r) => setTimeout(r, 100));
+              (b) => b.classList.contains('unavailable') || b.classList.contains('ready'));
+            for (let i = 0; i < 150 && !settled(); i++) await new Promise((r) => setTimeout(r, 100));
             scrollTo(0, 0);
           })()`,
           awaitPromise: true,
@@ -201,6 +203,7 @@ async function main() {
             const demos = document.querySelectorAll('[class*="mx-demo"], mx-demo-spine, mx-demo-wipe-dialer, mx-demo-wipe-scope, mx-demo-transition, mx-demo-matte, mx-demo-bus-board, mx-demo-trail, mx-demo-effect-numbers, mx-demo-positioner, mx-demo-audio, mx-demo-event-memory, mx-demo-special-modes, mx-demo-control-map, mx-demo-devices, mx-demo-store, mx-demo-determinism, mx-demo-primitives');
             const benches = document.querySelectorAll('.mx-live');
             const fellBack = document.querySelectorAll('.mx-live.unavailable');
+            const stuck = [...benches].filter((b) => !b.classList.contains('unavailable')).map((b) => b.id);
             let upgraded = 0;
             demos.forEach(d => { if (d.children.length > 0) upgraded++; });
             return JSON.stringify({
@@ -211,6 +214,7 @@ async function main() {
               upgraded,
               benches: benches.length,
               fellBack: fellBack.length,
+              stuck,
             });
           })()`,
           returnByValue: true,
@@ -220,7 +224,9 @@ async function main() {
         if (info.mainLen < 400) failures.push(`${route} — main content too short (${info.mainLen} chars)`);
         // GPU-less browser: every bench must have reached its explicit fallback, none left waiting.
         if (info.benches !== info.fellBack) {
-          failures.push(`${route} — ${info.benches - info.fellBack}/${info.benches} live benches never reached their no-WebGPU fallback`);
+          failures.push(
+            `${route} — ${info.benches - info.fellBack}/${info.benches} live benches never reached their no-WebGPU fallback (${info.stuck.join(', ')})`,
+          );
         }
         if (info.demos > 0 && info.upgraded < info.demos) {
           failures.push(`${route} — ${info.demos - info.upgraded}/${info.demos} demo elements did not render`);

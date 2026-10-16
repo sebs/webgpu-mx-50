@@ -164,6 +164,7 @@ export function liveBench(spec: LiveBenchSpec): LiveBench {
     'mx-ready',
     () => {
       screen.remove();
+      root.classList.add('ready'); // the explicit "running" mark (a canvas alone exists mid-boot)
       status.className = 'mx-chip live';
       status.innerHTML = `<span class="led"></span>live · pauses off screen`;
       const shared = lookFor(location.href, spec.id);
