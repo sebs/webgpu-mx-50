@@ -16,7 +16,8 @@ import type { MxMixer } from '../../src/ui/mixer.js';
 import type { Command } from '../../src/state/commands.js';
 import type { PanelState } from '../../src/state/state.js';
 import { el } from '../shell.js';
-import { defineLive, factoryState, capturedMedia } from './live.js';
+import { defineLive, factoryState } from './live.js';
+import { capturedMedia } from './captured.js';
 import { LOOPS } from '../posters.js';
 import { reducedMotion } from './base.js';
 

@@ -18,8 +18,8 @@ import type { MxMixer } from '../../src/ui/mixer.js';
 import type { PanelState } from '../../src/state/state.js';
 import { siteRoot, el, esc } from '../shell.js';
 import { lookUrl, lookFor } from '../look-link.js';
-import { POSTERS, LOOPS } from '../posters.js';
-import { reducedMotion } from './base.js';
+import { POSTERS } from '../posters.js';
+import { capturedMedia } from './captured.js';
 
 /** Define the host and every block element (idempotent). */
 export function defineLive(): void {
@@ -224,25 +224,6 @@ export function liveBench(spec: LiveBenchSpec): LiveBench {
   }
 
   return { root, mixer, side };
-}
-
-/**
- * The fallback media for a captured id: a muted looping recording with the still as its
- * poster (a browser that cannot play WebM shows the still), or the still alone.
- */
-export function capturedMedia(id: string, what: string): string {
-  const still = new URL(`site/posters/${id}.jpg`, siteRoot()).href;
-  if (LOOPS.indexOf(id) !== -1 && !reducedMotion()) {
-    const loop = new URL(`site/posters/${id}.webm`, siteRoot()).href;
-    return (
-      `<video src="${loop}" poster="${still}" autoplay muted loop playsinline aria-label="A recording of ${what}, captured from the real renderer"></video>` +
-      `<span class="mx-chip">recorded · needs WebGPU to run live</span>`
-    );
-  }
-  return (
-    `<img src="${still}" alt="A still of ${what}, captured from the real renderer">` +
-    `<span class="mx-chip">still image · needs WebGPU to run</span>`
-  );
 }
 
 /** The copy-paste HTML that reproduces a bench on any page. */

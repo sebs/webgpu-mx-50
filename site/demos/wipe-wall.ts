@@ -33,7 +33,7 @@ import type { WallOptions } from '../wall.js';
 import { POSTERS } from '../posters.js';
 import { DemoElement, defineDemo, reducedMotion, field, range, runWhileVisible } from './base.js';
 import { el, esc } from '../shell.js';
-import { capturedMedia } from './live.js';
+import { capturedMedia } from './captured.js';
 
 const WALL_ID = 'bench-wipe-wall';
 const CELL = { width: 320, height: 180 };
