@@ -124,6 +124,7 @@ async function main() {
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-gpu',
+      '--window-size=1280,900',
       '--user-data-dir=' + join(ROOT, 'node_modules', '.cache', 'smoke-profile'),
       'about:blank',
     ],
@@ -180,16 +181,26 @@ async function main() {
         // has one — and any missing poster or broken fallback surfaces as an error here.
         await send('Runtime.evaluate', {
           expression: `(async () => {
+            // 'instant': the site sets scroll-behavior: smooth, and a smooth scroll that is
+            // still in flight when the next one starts — or when an earlier bench's fallback
+            // note shifts the layout — can leave a host that never intersects.
             for (const mixer of document.querySelectorAll('mx-mixer')) {
-              mixer.scrollIntoView({ block: 'center' });
+              mixer.scrollIntoView({ block: 'center', behavior: 'instant' });
               await new Promise((r) => setTimeout(r, 250));
             }
             // Wait (bounded) until every bench has settled: running (.ready, set on mx-ready) or on
             // its fallback (.unavailable). Not "has a canvas": the host inserts its canvas before
             // awaiting the adapter, and on a slow runner that request can take seconds to fail.
-            const settled = () => [...document.querySelectorAll('.mx-live')].every(
-              (b) => b.classList.contains('unavailable') || b.classList.contains('ready'));
-            for (let i = 0; i < 150 && !settled(); i++) await new Promise((r) => setTimeout(r, 100));
+            // Each round re-scrolls the first unsettled bench into view, so a layout shift can
+            // delay a bench but never strand it off screen.
+            const pending = () => [...document.querySelectorAll('.mx-live')].filter(
+              (b) => !b.classList.contains('unavailable') && !b.classList.contains('ready'));
+            for (let i = 0; i < 150; i++) {
+              const left = pending();
+              if (!left.length) break;
+              left[0].scrollIntoView({ block: 'center', behavior: 'instant' });
+              await new Promise((r) => setTimeout(r, 100));
+            }
             scrollTo(0, 0);
           })()`,
           awaitPromise: true,
