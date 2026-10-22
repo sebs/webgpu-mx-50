@@ -4,6 +4,7 @@
 //   spine.json      the pipeline stage order, straight from core/signal-graph.ts
 //   recipes.json    the combination recipes, grouped from features/combination-recipes.feature
 //   presets/*.json  one ADR-0015 field-preset file per bench look (site/looks.ts)
+//   timelines/*     each MIDI timeline (site/timelines.ts) as .json and as a .mid clip
 //
 // Nothing here is hand-typed, which is the whole point: a count on the site cannot drift
 // from the repo. Deliberately absent: any unit-test count. It moves with every commit and
@@ -27,6 +28,9 @@ import { createPersistence } from '../src/persistence/persistence.js';
 import { MemoryStorageBackend } from '../src/persistence/backend.js';
 import { LOOKS } from '../site/looks.js';
 import { RECIPE_SCRIPTS, DEFERRED_RECIPES } from '../site/recipes.js';
+import { TIMELINES } from '../site/timelines.js';
+import { validateTimeline } from '../src/control/midi-timeline.js';
+import { writeSmf } from '../src/control/smf.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -212,6 +216,22 @@ function writePresets(): number {
   return LOOKS.length;
 }
 
+// ---------------------------------------------------------------- timelines
+
+/** Each timeline as JSON (the import format) and as a Standard MIDI File; an invalid one fails the build. */
+function writeTimelines(): number {
+  const dir = join(OUT, 'timelines');
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  for (const { id, timeline } of TIMELINES) {
+    const problems = validateTimeline(timeline);
+    if (problems.length) throw new Error(`timeline "${id}": ${problems.join('; ')}`);
+    writeFileSync(join(dir, `${id}.json`), JSON.stringify(timeline, null, 2));
+    writeFileSync(join(dir, `${id}.mid`), writeSmf(timeline));
+  }
+  return TIMELINES.length;
+}
+
 // ---------------------------------------------------------------- ADRs
 
 export interface AdrRecord {
@@ -366,13 +386,14 @@ async function main(): Promise<void> {
   const recipes = buildRecipes(marked);
   writeFileSync(join(OUT, 'recipes.json'), JSON.stringify(recipes, null, 2));
   const presetCount = writePresets();
+  const timelineCount = writeTimelines();
 
   process.stdout.write(
     `site data written to site/generated/\n` +
       `  scenarios: ${executedScenarios} executed / ${authoredScenarios} authored\n` +
       `  steps:     ${executedSteps} executed / ${authoredSteps} authored\n` +
       `  features:  ${featureFiles.length}   ADRs: ${adrs.length}\n` +
-      `  recipes:   ${recipes.length}   presets: ${presetCount}\n`,
+      `  recipes:   ${recipes.length}   presets: ${presetCount}   timelines: ${timelineCount}\n`,
   );
 }
 

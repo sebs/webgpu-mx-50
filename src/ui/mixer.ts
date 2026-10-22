@@ -93,6 +93,10 @@ export class MxMixer extends HTMLElement {
   /** Seam for the page-owned A/V-Synchro envelope measurement (ADR-0010). */
   avPulse: ((state: PanelState) => readonly AvSynchroEffect[]) | null = null;
 
+  /** Clock of the `feeds="pattern"` pictures, from the logical tick; null = the tick itself.
+   *  A MIDI timeline (ADR-0020) maps it to its playhead, so scrubbing moves the picture too. */
+  feedTick: ((tick: number) => number) | null = null;
+
   constructor() {
     super();
     // Answer (or queue) context requests from descendants and `for=`-referenced
@@ -346,11 +350,13 @@ export class MxMixer extends HTMLElement {
     this.ctx = context;
     for (const provide of this.pendingRequests.splice(0)) provide(context);
 
-    // One logical frame (ADR-0012): pump inputs, advance the timeline runners, render
-    // the snapshot, then let display hooks reflect what was presented.
+    // One logical frame (ADR-0012): pump inputs, draw the pattern feeds, advance the
+    // timeline runners, render the snapshot, then let display hooks reflect what was
+    // presented. Inputs go first so a timeline seek moves the feeds in the same frame.
     this.loop = new RenderLoop(engine.clock, (_alpha, tick) => {
-      for (const feed of this.patternFeeds) feed.draw(tick / 60, tick);
       for (const fn of this.preFramers) fn(tick);
+      const feedTick = this.feedTick ? this.feedTick(tick) : tick;
+      for (const feed of this.patternFeeds) feed.draw(feedTick / 60, feedTick);
       engine.store.dispatch({ type: 'ADVANCE_TIMELINE', tick });
       const snapshot = engine.store.getSnapshot();
       renderer.render(snapshot, tick, this.avPulse ? this.avPulse(snapshot) : []);

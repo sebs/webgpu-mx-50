@@ -9,7 +9,7 @@ WebGPU.
 This document is a map of the system: the fidelity stance, the tech stack, the
 signal graph the renderer executes, and the module boundaries that separate the
 render loop from the UI, the audio engine, and persistence. It summarises the
-nineteen accepted ADRs in `adr/`; each claim below links to the ADR that owns it.
+twenty accepted ADRs in `adr/`; each claim below links to the ADR that owns it.
 For the ADRs themselves, start at `adr/0001-record-architecture-decisions.md`.
 
 ---
@@ -62,6 +62,7 @@ the input-mapping layer.
 | Timing | rAF present loop over a **fixed-timestep logical clock** (canonical 60 fps) | ADR-0012 |
 | UI | Native **Web Components**: control primitives composed into hardware-block elements | ADR-0013 |
 | Input | Central **input-mapping layer** (pointer / key / gamepad / MIDI / automation) → store commands | ADR-0014 |
+| Demo automation | **MIDI timeline** played on the MIDI control path; scrubbed by deterministic replay | ADR-0020 |
 | Persistence | **Tiered storage**: `localStorage` scalars, IndexedDB blobs, JSON preset files | ADR-0015 |
 | Testing | **Gherkin domain specs** (headless engine) + **golden-image** shader tests | ADR-0016 |
 
@@ -306,6 +307,15 @@ hardware editing interfaces of reference §17 survive in intent, not wiring: GPI
 becomes a mappable `autoTake.trigger` (optionally a real foot-switch via Web Serial);
 RS422/RS232C become the local automation/scripting API; the genlock timing outputs
 are moot under the clean-modern decision.
+
+**MIDI timeline (ADR-0020).** Demo automation is a timeline of MIDI messages in frames —
+Program Change recalls preset setups, notes fire discrete controls, CC lanes are envelopes —
+played by a composition-root `TimelinePlayer` into the same MIDI adapter, binding table and
+resolver a DAW reaches, so it adds no command path. Scrubbing is a replay: the reducer is pure
+and runners are absolute in ticks, so the panel at frame f is the messages up to f folded over
+the base panel (checkpointed), loaded shifted by the player's anchor. The host clock never
+jumps. Timelines export to and import from Standard MIDI Files, record punch-in takes, and can
+follow a DAW's MIDI transport.
 
 **Persistence (ADR-0015).** A single module owns all storage. Tiered by size:
 `localStorage` for small hot scalars (settings, the Reset policy flag, the field

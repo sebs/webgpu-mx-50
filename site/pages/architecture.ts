@@ -7,6 +7,7 @@ import { mountShell, section, body, el, srcLink, REPO, loadGenerated } from '../
 import '../demos/store.js';
 import '../demos/spine.js';
 import '../demos/timing.js';
+import '../demos/timeline.js';
 
 const main = mountShell({ route: 'architecture/' });
 
@@ -22,7 +23,7 @@ introWrap.innerHTML = `
   </p>
   <p class="mx-prose mx-dim" style="max-width:64ch">
     Long form: ${srcLink('docs/architecture.md', 'docs/architecture.md')}. Decision records:
-    <a href="${REPO}/tree/main/adr">adr/</a> (16 ADRs).
+    <a href="${REPO}/tree/main/adr">adr/</a>.
   </p>`;
 intro.appendChild(introWrap);
 main.appendChild(intro);
@@ -102,6 +103,32 @@ main.appendChild(
       <p>The demo runs two clocks fed identical elapsed time in 60 Hz and 144 Hz slices. Frame
        counters and lever positions stay equal; the drift readouts show the difference.</p>`,
     demo: 'mx-demo-determinism',
+  }),
+);
+
+main.appendChild(
+  layer({
+    adr: 'ADR-0020',
+    id: 'timeline',
+    title: 'MIDI timeline',
+    prose:
+      `<p>A demo's automation is a <code>MidiTimeline</code>: MIDI messages stamped in frames, in three
+       lane kinds. Program Change recalls one of the timeline's preset setups from Event Memory; Note
+       On fires discrete controls (wipe pattern notes, Auto Fade); CC lanes are breakpoint envelopes
+       sampled once per tick, 14-bit where the binding is <code>fine</code>. The player pushes the bytes
+       into the same <code>MidiAdapter</code>, binding table, coalescer and resolver a DAW reaches, so
+       the timeline has no command path of its own.</p>
+      <p>Scrubbing is a replay. The reducer is pure and the runners are absolute in ticks, so the panel
+       at frame f is the messages up to f folded over the base panel, with a checkpoint every 60 frames.
+       The host clock never jumps: the player keeps an anchor, <code>playhead = tick − anchor</code>, and
+       loads the replayed panel shifted by it. <code>shiftRunnerTicks</code> moves the three runners,
+       the only state that holds absolute ticks. The unit suite plays the timeline at uneven cadences
+       and checks every frame against the replay.</p>
+      <p>Not scrubbed: GPU frame memory (Still, Strobe, Multi, Trail history rebuilds after a seek), audio,
+       and live camera or video sources. The pattern feeds are drawn from the playhead.</p>
+      <p>Below, the Overview hero's script with its lanes open. <em>Export .mid</em> writes the clip for a
+       DAW (Ableton profile, channel 1); an imported clip plays against these setups.</p>`,
+    demo: 'mx-demo-timeline',
   }),
 );
 

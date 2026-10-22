@@ -74,7 +74,8 @@ npm run site:posters  # maintainer step, needs a WebGPU Chrome: re-capture still
 
 Concept and status: [WEBSITE.md](WEBSITE.md). The site imports `src/` rather than copying it;
 its authored interactive content (`site/looks.ts`, `site/tour.ts`, `site/recipes.ts`) is plain
-data of store commands, checked against the reducer by the unit suite. Re-run `site:posters`
+data of store commands, checked against the reducer by the unit suite; the MIDI timelines
+(`site/timelines.ts`, ADR-0020) are validated and played by it, and published as `.json` + `.mid`. Re-run `site:posters`
 when a look or the renderer changes and commit the result: CI cannot render a frame.
 
 ## Project layout
@@ -129,6 +130,11 @@ src/
     keyboard.ts         Pure key-chord resolution + the browser KeyboardAdapter (focus-guarded)
     automation.ts       Local automation API (RS422/RS232C intent): run transition / call pattern / step memory / CC / DSK
     learnable.ts        MIDI learn (ADR-0018)
+    midi-timeline.ts    MIDI timeline format, compile-to-bytes, validation, deterministic replay (ADR-0020)
+    timeline-player.ts  Plays a timeline on a host's beforeFrame hook: anchor, seek, loop, live thru, record, follow
+    timeline-record.ts  Recorded/imported messages → lanes; punch-in merge
+    midi-transport.ts   MIDI Start/Stop/Continue/Song Position/Clock → playhead frames
+    smf.ts              Standard MIDI File export/import for timelines
     gamepad.ts,midi.ts,serial.ts  Browser-only input adapters (capability-detected, excluded from CI)
   ui/
     mixer.ts            <mx-mixer>: the host that owns engine, GPU and loop (ADR-0017)
@@ -141,10 +147,12 @@ src/
     demo-feeds.ts       The source monitor wall (+ feed-shaders.ts: the WGSL shader feeds)
     ext-camera-monitor.ts  The EXT. CAMERA input card
     midi-panel.ts       MIDI profile / MPE / learn panel
+    timeline.ts         <mx-timeline>: transport, lanes, scrubber, .mid/.json import/export (ADR-0020)
+    play-timeline.ts    playOnMixer(): a timeline on a running <mx-mixer>, feeds on the playhead
     explain.ts          The console's Explain mode
     theme.ts            The console theme tokens and styles (docs/STYLEGUIDE.md)
 site/                   The website (docs/WEBSITE.md): pages/ (one ESM entry per route), demos/,
-                        DOM-free content (looks.ts, tour.ts, recipes.ts, look-link.ts), and the
+                        DOM-free content (looks.ts, tour.ts, recipes.ts, timelines.ts, look-link.ts), and the
                         committed captures (posters/ + posters.ts, assets/)
 scripts/                site-data / build-site / check-site / smoke-site / capture-posters
 test/

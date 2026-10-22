@@ -1,87 +1,23 @@
 // D1 — attract mode for the Overview hero (docs/WEBSITE.md §4.1). A wide <mx-mixer> on the
-// pattern feeds runs a scripted loop through the automation API (src/control/automation.ts,
-// the RS-422 analogue): each act sets something up, then fires an Auto Take, which glides
-// the lever to the other end over the transition time.
+// pattern feeds plays the attract MIDI timeline (site/timelines.ts, ADR-0020): five acts,
+// each a preset recalled by Program Change, the take on 14-bit lever automation, and an
+// Auto Fade to black to close the loop. The same timeline, with its transport and lanes
+// open, is the scripted-demo on /architecture/.
 //
-// The three pieces §4.1 listed are all in place: the automation surface has CC and DSK
-// ops; the API is built over the host's own store and clock; and the hero is ephemeral by
-// construction — a mixer without `persist` never reads or writes the visitor's saved
-// console state. A new act only fires when the previous take has finished, the tab is
-// visible, and the hero is on screen (its loop is paused otherwise, so the take would not
-// advance). With prefers-reduced-motion there is no hero at all: the feeds themselves move.
+// The hero is ephemeral by construction — a mixer without `persist` never reads or writes
+// the visitor's saved console state. Its loop runs only while it is on screen and the tab
+// is visible (run="visible"), and the timeline runs on that loop, so it pauses with it; the
+// pattern feeds follow the playhead, so a loop of the timeline is a loop of the picture.
+// With prefers-reduced-motion there is no hero at all: the feeds themselves move.
 
-import { createAutomation } from '../../src/control/automation.js';
-import type { AutomationApi } from '../../src/control/automation.js';
 import type { MxMixer } from '../../src/ui/mixer.js';
-import type { Command } from '../../src/state/commands.js';
-import type { PanelState } from '../../src/state/state.js';
+import { playOnMixer } from '../../src/ui/play-timeline.js';
 import { el } from '../shell.js';
-import { defineLive, factoryState } from './live.js';
+import { defineLive } from './live.js';
 import { capturedMedia } from './captured.js';
 import { LOOPS } from '../posters.js';
 import { reducedMotion } from './base.js';
-
-const ACT_MS = 4200;
-const TAKE_FRAMES = 70;
-
-interface Act {
-  readonly label: string;
-  readonly run: (api: AutomationApi, dispatch: (c: Command) => void) => void;
-}
-
-const ACTS: readonly Act[] = [
-  {
-    label: 'Mix · Auto Take',
-    run: (api, d) => {
-      d({ type: 'LOAD_STATE', state: factoryState() });
-      d({ type: 'ASSIGN_SOURCE', bus: 'A', source: 2 });
-      d({ type: 'ASSIGN_SOURCE', bus: 'B', source: 3 });
-      d({ type: 'SET_TRANSITION_TYPE', transition: 'mix' });
-      api.runTransition(TAKE_FRAMES);
-    },
-  },
-  {
-    label: 'Wipe 009 · border',
-    run: (api, d) => {
-      d({ type: 'SET_TRANSITION_TYPE', transition: 'wipe' });
-      api.selectWipePattern(9);
-      d({ type: 'PRESS_BORDER' });
-      api.runTransition(TAKE_FRAMES);
-    },
-  },
-  {
-    label: 'Mosaic on bus A · wipe 137',
-    run: (api, d) => {
-      d({ type: 'SELECT_EFFECT_BUS', bus: 'A' });
-      d({ type: 'CHOOSE_EFFECT', effect: 'mosaic' });
-      d({ type: 'PRESS_EFFECT_ON' });
-      api.selectWipePattern(137);
-      api.runTransition(TAKE_FRAMES);
-    },
-  },
-  {
-    label: 'Colour correction on B · NAM',
-    run: (api, d) => {
-      api.setColourCorrection('B', { mode: 'chroma-plus-joystick', chroma: 0.35, x: 0.6, y: -0.3 });
-      d({ type: 'SET_TRANSITION_TYPE', transition: 'nam' });
-      api.runTransition(TAKE_FRAMES);
-    },
-  },
-  {
-    label: 'Downstream key · drop shadow',
-    run: (api, d) => {
-      d({ type: 'ASSIGN_SOURCE', bus: 'B', source: 4 });
-      d({ type: 'SET_TRANSITION_TYPE', transition: 'wipe' });
-      api.selectWipePattern(17);
-      api.setDsk({ on: true, keySource: 'A', low: 0.8, high: 1, edge: 'drop-shadow' });
-      api.runTransition(TAKE_FRAMES);
-    },
-  },
-];
-
-function takeRunning(state: PanelState): boolean {
-  return state.transition.auto.phase === 'running' || state.transition.auto.phase === 'paused';
-}
+import { ATTRACT_TIMELINE } from '../timelines.js';
 
 /** The hero monitor; removes itself where WebGPU is unavailable. */
 export function attractMonitor(): HTMLElement {
@@ -123,33 +59,17 @@ export function attractMonitor(): HTMLElement {
     chips.remove();
   });
 
-  let onScreen = false;
-  new IntersectionObserver((entries) => {
-    onScreen = entries[entries.length - 1]!.isIntersecting;
-  }).observe(wrap);
-
   mixer.addEventListener(
     'mx-ready',
     () => {
       chips.hidden = false;
       wrap.classList.add('ready');
       mixer.querySelector(':scope > canvas')?.setAttribute('data-loop', '');
-      const ctx = mixer.context!;
-      const dispatch = (c: Command): void => ctx.store.dispatch(c);
-      const api = createAutomation(() => ctx.store.getSnapshot(), dispatch, ctx.tick);
-
-      let next = 0;
-      const step = (): void => {
-        const a = ACTS[next % ACTS.length]!;
-        a.run(api, dispatch);
-        act.textContent = a.label;
-        next++;
-      };
-      step();
-      window.setInterval(() => {
-        if (document.hidden || !onScreen || takeRunning(ctx.store.getSnapshot())) return;
-        step();
-      }, ACT_MS);
+      const player = playOnMixer(mixer, ATTRACT_TIMELINE);
+      player.onChange(() => {
+        const label = player.marker ? player.marker.label : '';
+        if (act.textContent !== label) act.textContent = label;
+      });
     },
     { once: true },
   );

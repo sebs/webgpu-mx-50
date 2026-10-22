@@ -29,6 +29,7 @@ choice is made.
 | [ADR-0017](0017-composable-embedding-host-element.md) | Composable embedding — mixer host element and context protocol | Accepted | Make `<mx-mixer>` the host that owns engine/GPU/loop and let components discover it via a context-request protocol, `for=`, or imperative binding. |
 | [ADR-0018](0018-midi-control-surface.md) | MIDI control surface — DAW profile, preset recall, MIDI learn, MPE outlook | Accepted | Extend the ADR-0014 vocabulary with memory verbs and Program Change addressing, ship a DAW profile as a binding bank, add MIDI learn, layer MPE gesture voices on top. |
 | [ADR-0019](0019-content-addressed-media-store.md) | Content-addressed media store for preset binary content | Accepted | Key media blobs by content hash; preset files reference by hash only (never embed), verified against local content on import. |
+| [ADR-0020](0020-midi-timeline.md) | MIDI timeline — scrubbable demo automation on the MIDI control path | Accepted | Demo automation as MIDI lanes played into the MidiAdapter; scrubbing by deterministic replay with an anchored playhead; SMF import/export, punch-in recording, DAW transport follow. |
 
 ## About the format
 

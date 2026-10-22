@@ -24,6 +24,13 @@
 > routes, four nav items. §3, §5, §7.5 and §10 below are updated; the rest of this document still
 > describes the design as written.
 >
+> **Update 2026-10-23 — the MIDI timeline.** Attract mode (D1) no longer runs acts on a timer: it
+> plays a MIDI timeline ([`site/timelines.ts`](../site/timelines.ts), ADR-0020) — Program Change
+> recalls each act's preset, the take is 14-bit lever automation, notes call wipe patterns and the
+> closing Auto Fade — with the pattern feeds on the playhead. The same timeline, with transport,
+> lanes, scrubber, `.mid`/`.json` import and export, punch-in recording and DAW transport follow,
+> is **D22** on `/architecture/`. `site:data` publishes every timeline as `.json` and `.mid`.
+>
 > It inherits the repo's hard constraints (ADR-0003 no framework/no bundler, ADR-0013 web
 > components, [`STYLEGUIDE.md`](STYLEGUIDE.md)) and reuses `src/` directly — **the site never
 > re-implements domain logic, it imports it.**
@@ -392,6 +399,7 @@ The real renderer, one block exposed.
 | D7 | **Colour correction bench** — joystick, chroma-only, B&W | `gpu/shaders/bus-effect.wgsl.ts`, `core/colour-correct.ts` | Per-bus CC |
 | D8 | **DSK bench** — level window, the six-state EDGE ring, reverse | `gpu/dsk.ts`, `core/dsk.ts` | Downstream keying |
 | D9 | **Fade bench** — selective Video/DSK/Audio to the five targets | `gpu/fade.ts`, `core/fade.ts` | The final stage |
+| D22 | **MIDI timeline** — the attract script with transport, lanes and scrubber; export/import `.mid`, record, follow a DAW (headless, without a picture, where WebGPU is missing) | `control/midi-timeline.ts`, `control/timeline-player.ts`, `ui/timeline.ts` | Scrubbing is a replay (ADR-0020) |
 
 **Budget rule — and the harness work it implies.** Target: one WebGPU device per page, shared;
 only the demo in the viewport renders (`IntersectionObserver`); DPR capped at 1.5; everything

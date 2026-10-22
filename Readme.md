@@ -36,6 +36,9 @@ one store:
   sequence), the 8-macro Special Mode bank, and tiered, schema-versioned browser storage.
 - **Control mapping** — a remappable layer that normalises keyboard / gamepad / MIDI / GPI and a
   local automation API onto one command vocabulary (the modern stand-in for the hardware GPI/serial).
+- **MIDI timeline** — scrubbable demo automation as MIDI lanes (Program Change setups, notes, 14-bit
+  CC envelopes) played on that same path; scrubbing is a deterministic replay, and timelines
+  export/import as Standard MIDI Files, record punch-in takes and follow a DAW's transport (ADR-0020).
 
 The fixed signal flow the whole thing mirrors (ADR-0004):
 

@@ -89,6 +89,7 @@ export const MIXER_MEMBERS: readonly MixerMemberDoc[] = [
   { name: 'registry', signature: 'registry: SourceRegistry | null', description: 'The Source slots; set() a slot to swap its picture, race-free, any time after mx-ready.' },
   { name: 'engine', signature: 'engine: Engine | null', description: 'The headless engine: store, logical clock, source bindings.' },
   { name: 'avPulse', signature: 'avPulse: ((state) => AvSynchroEffect[]) | null', description: 'Seam for a page-owned A/V Synchro measurement.' },
+  { name: 'feedTick', signature: 'feedTick: ((tick) => number) | null', description: 'Clock for the feeds="pattern" pictures; a MIDI timeline maps it to its playhead so scrubbing moves the picture.' },
 ];
 
 /** What every connected component receives — and all it receives (ADR-0017). */
