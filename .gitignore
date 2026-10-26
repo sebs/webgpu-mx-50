@@ -10,5 +10,6 @@ site/generated/
 # Local demo clips (hundreds of MB) — load them via the console, never commit them.
 videos/
 
-# Browser proxies of the music video footage (npm run video:media regenerates them).
+# Browser proxies of the music video footage (npm run video:media) and its recordings (npm run video:record).
 video/web/
+video/render/

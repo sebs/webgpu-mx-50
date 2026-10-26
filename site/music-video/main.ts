@@ -86,14 +86,15 @@ async function loadMedia(onProgress: (fraction: number) => void): Promise<{ vide
   return { videos, song };
 }
 
-// --- A/V Synchro listening to the song ---------------------------------------------------
+// --- the song through Web Audio: A/V Synchro's ear and the recorder's audio track ---------
 
-class KickEnvelope {
+class SongAudio {
   private analyser: AnalyserNode | null = null;
+  private tap: MediaStreamAudioDestinationNode | null = null;
   private buf = new Float32Array(1024);
   private peak = 0.02;
 
-  /** Needs a user gesture (the first Play). Safe to call more than once. */
+  /** Needs a user gesture (the first Play or Record). Safe to call more than once. */
   attach(song: HTMLAudioElement): void {
     if (this.analyser) return;
     try {
@@ -107,11 +108,19 @@ class KickEnvelope {
       analyser.fftSize = 1024;
       source.connect(lowpass);
       lowpass.connect(analyser);
+      const tap = ctx.createMediaStreamDestination();
+      source.connect(tap);
       this.analyser = analyser;
+      this.tap = tap;
       void ctx.resume();
     } catch {
-      this.analyser = null; // no Web Audio: A/V Synchro simply never fires
+      this.analyser = null; // no Web Audio: A/V Synchro never fires, recordings are silent
     }
+  }
+
+  /** The song as a live track, for recording; null without Web Audio. Never stop it. */
+  track(): MediaStreamTrack | null {
+    return this.tap ? (this.tap.stream.getAudioTracks()[0] ?? null) : null;
   }
 
   /** 0..1: the low end's RMS against its slowly-decaying recent peak. */
@@ -127,6 +136,25 @@ class KickEnvelope {
 }
 
 // --- the player -------------------------------------------------------------------------
+
+/** Best first: Chrome records H.264/AAC MP4 natively where it can, WebM everywhere else. */
+const RECORD_TYPES = [
+  'video/mp4;codecs=avc1.640028,mp4a.40.2',
+  'video/mp4',
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm',
+];
+
+function download(blob: Blob, name: string): void {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
 
 const CLIP_LABEL = new Map<ClipId, string>(CLIPS.map((c) => [c.id, c.label]));
 
@@ -195,8 +223,8 @@ function start(mixer: MxMixer, videos: Map<ClipId, HTMLVideoElement>, song: HTML
     sources.set(clip.id, source);
   }
 
-  const kick = new KickEnvelope();
-  mixer.avPulse = (snapshot) => avSynchroActiveEffects(snapshot.digitalEffect, kick.measure());
+  const audio = new SongAudio();
+  mixer.avPulse = (snapshot) => avSynchroActiveEffects(snapshot.digitalEffect, audio.measure());
 
   // --- per-frame: the score at the song's playhead ---
   let lastCue = -1;
@@ -267,20 +295,84 @@ function start(mixer: MxMixer, videos: Map<ClipId, HTMLVideoElement>, song: HTML
   }
 
   function seek(t: number): void {
+    if (recorder) return; // a recording runs straight through
     song.currentTime = Math.max(0, Math.min(score.length - 0.05, t));
     forceSync = true;
   }
 
   function play(): void {
-    kick.attach(song);
+    audio.attach(song);
     overlay.hidden = true;
     void song.play();
   }
 
   function toggle(): void {
-    if (song.paused) play();
+    if (recorder) stopRecording();
+    else if (song.paused) play();
     else song.pause();
   }
+
+  // --- recording: the Program Out canvas and the song, in real time, to a download ---
+  let recorder: MediaRecorder | null = null;
+  const recordButton = $<HTMLButtonElement>('record');
+  const recNote = $('rec-note');
+  const onAir = $('onair');
+
+  async function startRecording(): Promise<void> {
+    const canvas = mixer.querySelector(':scope > canvas') as HTMLCanvasElement | null;
+    if (!canvas || typeof MediaRecorder === 'undefined') {
+      recNote.hidden = false;
+      recNote.textContent = 'This browser cannot record the canvas (no MediaRecorder).';
+      return;
+    }
+    audio.attach(song);
+    song.pause();
+    const rewound = new Promise((resolve) => {
+      song.addEventListener('seeked', resolve, { once: true });
+      setTimeout(resolve, 1000);
+    });
+    song.currentTime = 0;
+    forceSync = true;
+    await rewound;
+
+    const stream = canvas.captureStream(60);
+    const track = audio.track();
+    if (track) stream.addTrack(track);
+    const mimeType = RECORD_TYPES.filter((t) => MediaRecorder.isTypeSupported(t))[0] ?? '';
+    const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 10000000, audioBitsPerSecond: 192000 });
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => {
+      if (e.data.size) chunks.push(e.data);
+    };
+    rec.onstop = () => {
+      for (const t of stream.getVideoTracks()) t.stop(); // the audio tap stays live for the next take
+      const type = rec.mimeType || mimeType || 'video/webm';
+      download(new Blob(chunks, { type }), `music-video.${type.indexOf('mp4') !== -1 ? 'mp4' : 'webm'}`);
+      recorder = null;
+      recordButton.textContent = 'Record';
+      scrubber.disabled = false;
+      onAir.classList.remove('rec');
+      recNote.textContent = 'Recording saved to your downloads.';
+    };
+    recorder = rec;
+    recordButton.textContent = 'Stop recording';
+    scrubber.disabled = true;
+    onAir.classList.add('rec');
+    recNote.hidden = false;
+    recNote.textContent = 'Recording in real time · keep this tab visible until the song ends — the file downloads then.';
+    rec.start(1000);
+    play();
+  }
+
+  function stopRecording(): void {
+    song.pause();
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+  }
+
+  recordButton.addEventListener('click', () => {
+    if (recorder) stopRecording();
+    else void startRecording();
+  });
 
   overlay.classList.add('ready');
   $('status').textContent = 'Ready · 5:09 · headphones recommended';
@@ -295,6 +387,7 @@ function start(mixer: MxMixer, videos: Map<ClipId, HTMLVideoElement>, song: HTML
     forceSync = true;
   });
   song.addEventListener('ended', () => {
+    if (recorder) stopRecording();
     overlay.hidden = false;
     $('play-big').textContent = 'Play again';
   });

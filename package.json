@@ -19,7 +19,8 @@
     "site:check": "tsx scripts/check-site.ts",
     "site:smoke": "node scripts/smoke-site.mjs",
     "site:posters": "node scripts/capture-posters.mjs",
-    "video:media": "node scripts/music-video-media.mjs"
+    "video:media": "node scripts/music-video-media.mjs",
+    "video:record": "node scripts/record-music-video.mjs"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",

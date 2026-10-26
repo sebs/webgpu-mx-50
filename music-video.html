@@ -49,13 +49,26 @@
       .onair { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; align-items: center; font: 600 11px/1 var(--mono);
         letter-spacing: 0.1em; color: #fff; background: rgb(0 0 0 / 0.45); padding: 6px 8px; border-radius: 4px; pointer-events: none; }
       .onair i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+      .onair .rec-label { display: none; }
+      .onair.rec { background: var(--accent); }
+      .onair.rec i { background: #fff; box-shadow: none; animation: blink 1s steps(2, start) infinite; }
+      .onair.rec .label { display: none; }
+      .onair.rec .rec-label { display: inline; }
+      @keyframes blink { to { visibility: hidden; } }
 
       .transport { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; margin-top: 14px; }
-      .transport button#play {
+      .buttons { display: flex; gap: 8px; }
+      .buttons button {
         font: 600 0.85rem/1 system-ui, sans-serif; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
-        border-radius: 6px; padding: 9px 14px; min-width: 72px; cursor: pointer;
+        border-radius: 6px; padding: 9px 14px; min-width: 72px; cursor: pointer; white-space: nowrap;
       }
-      .transport button#play:hover { border-color: var(--dim); }
+      .buttons button:hover { border-color: var(--dim); }
+      .buttons button#record::before { content: "●"; color: var(--accent); margin-right: 6px; }
+      #rec-note { margin: 4px 0 0; font-size: 0.85rem; color: var(--amber); }
+      @media (max-width: 560px) {
+        .transport { grid-template-columns: 1fr auto; }
+        .buttons { grid-column: 1 / -1; }
+      }
       .track { position: relative; height: 28px; }
       .track input { position: absolute; inset: 0; width: 100%; margin: 0; accent-color: var(--accent); background: transparent; }
       #ticks { position: absolute; left: 0; right: 0; top: 0; height: 6px; pointer-events: none; }
@@ -88,7 +101,7 @@
       </header>
 
       <div class="stage" id="stage">
-        <div class="onair" aria-hidden="true"><i></i>PROGRAM</div>
+        <div class="onair" id="onair" aria-hidden="true"><i></i><span class="label">PROGRAM</span><span class="rec-label">REC</span></div>
         <div class="overlay" id="overlay">
           <button id="play-big" type="button">Play</button>
           <div class="progress"><div id="progress-bar"></div></div>
@@ -97,7 +110,10 @@
       </div>
 
       <div class="transport">
-        <button id="play" type="button">Play</button>
+        <div class="buttons">
+          <button id="play" type="button">Play</button>
+          <button id="record" type="button" title="Play from the top and save the program output with the song">Record</button>
+        </div>
         <div class="track">
           <input id="scrubber" type="range" min="0" max="310" step="0.01" value="0" aria-label="Song position" />
           <div id="ticks"></div>
@@ -105,6 +121,7 @@
         <span id="time">0:00 / 5:09</span>
       </div>
       <p id="section" aria-live="polite"></p>
+      <p id="rec-note" role="status" hidden></p>
 
       <dl class="readout">
         <div><dt>Bus A</dt><dd id="ro-a">—</dd></div>
@@ -123,7 +140,8 @@
       <footer>
         Every switch, wipe, key and effect is a real panel command through the mixer's reducer, on the
         song's bar grid; between takes the footage is re-patched into the inputs like a vision engineer
-        would. A/V Synchro listens to the kick drum. <kbd>Space</kbd> play/pause ·
+        would. A/V Synchro listens to the kick drum. <strong>Record</strong> plays from the top in real
+        time and downloads the program output with the song when it ends. <kbd>Space</kbd> play/pause ·
         <kbd>←</kbd><kbd>→</kbd> previous/next section · <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> one bar.
       </footer>
     </main>
