@@ -1,11 +1,12 @@
 // Transcodes the music video's footage in video/ into the browser proxies music-video.html
 // loads from video/web/:
 //
-//   <clip>.mp4   1280×720 H.264, no audio, a keyframe every 6 frames — the page retriggers
+//   <clip>.mp4   1920×1080 H.264, no audio, a keyframe every 6 frames — the page retriggers
 //                clips on the beat, and a seek can only land quickly near a keyframe
 //   song.m4a     the soundtrack as AAC (the source WAV is ~60 MB)
 //
-// The originals are 4K/1080p and too heavy to decode six at once next to the renderer.
+// The originals are 4K (crowd, crew) and too heavy to decode six at once next to the
+// renderer; Full HD matches the Program Out canvas.
 // Needs ffmpeg on PATH. Re-run when the footage in video/ changes.
 //
 // Run: npm run video:media
@@ -32,7 +33,7 @@ for (const name of readdirSync(SRC).sort()) {
   ffmpeg([
     '-i', join(SRC, name),
     '-an',
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p',
+    '-vf', 'scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,format=yuv420p',
     '-c:v', 'libx264', '-preset', 'medium', '-crf', '22',
     '-g', '6', '-keyint_min', '6', '-sc_threshold', '0',
     '-movflags', '+faststart',

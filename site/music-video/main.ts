@@ -172,8 +172,8 @@ function boot(): void {
   defineMixer();
   const stage = $('stage');
   const mixer = document.createElement('mx-mixer') as MxMixer;
-  mixer.setAttribute('width', '1280');
-  mixer.setAttribute('height', '720');
+  mixer.setAttribute('width', '1920');
+  mixer.setAttribute('height', '1080');
   mixer.setAttribute('aria-label', 'Program output of the music video');
   stage.insertBefore(mixer, stage.firstChild);
 
@@ -339,7 +339,7 @@ function start(mixer: MxMixer, videos: Map<ClipId, HTMLVideoElement>, song: HTML
     const track = audio.track();
     if (track) stream.addTrack(track);
     const mimeType = RECORD_TYPES.filter((t) => MediaRecorder.isTypeSupported(t))[0] ?? '';
-    const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 10000000, audioBitsPerSecond: 192000 });
+    const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 16000000, audioBitsPerSecond: 192000 });
     const chunks: Blob[] = [];
     rec.ondataavailable = (e) => {
       if (e.data.size) chunks.push(e.data);
