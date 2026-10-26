@@ -18,7 +18,8 @@
     "test:golden": "node --import tsx --test test/golden/*.test.ts",
     "site:check": "tsx scripts/check-site.ts",
     "site:smoke": "node scripts/smoke-site.mjs",
-    "site:posters": "node scripts/capture-posters.mjs"
+    "site:posters": "node scripts/capture-posters.mjs",
+    "video:media": "node scripts/music-video-media.mjs"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",

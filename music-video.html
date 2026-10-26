@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Music video — web-mx-50</title>
+    <meta name="description" content="A music video cut live on the web-mx-50 mixer: six clips, one song, every switch a real panel command." />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0c14;
+        --panel: #12141f;
+        --line: #23263a;
+        --ink: #e9e9ed;
+        --dim: #6f7386;
+        --accent: #e2564d;
+        --amber: #f0b44c;
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+      main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+
+      header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; margin-bottom: 16px; }
+      header h1 { margin: 0; font-size: 1.15rem; letter-spacing: 0.01em; }
+      header h1 span { color: var(--dim); font-weight: 400; }
+      header a { color: var(--dim); font-size: 0.85rem; text-decoration: none; }
+      header a:hover { color: var(--ink); }
+
+      .stage { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+      .stage mx-mixer, .stage mx-mixer > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+      .overlay {
+        position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px;
+        background: radial-gradient(ellipse at center, rgb(11 12 20 / 0.55), rgb(11 12 20 / 0.92));
+        text-align: center; padding: 16px;
+      }
+      .overlay[hidden] { display: none; }
+      .overlay button {
+        font: 600 1rem/1 system-ui, sans-serif; color: #fff; background: var(--accent); border: 0; border-radius: 999px;
+        padding: 16px 30px; cursor: pointer; opacity: 0.35; pointer-events: none; transition: opacity 0.2s;
+      }
+      .overlay.ready button { opacity: 1; pointer-events: auto; }
+      .overlay button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+      .overlay.failed button { display: none; }
+      .progress { width: min(320px, 70vw); height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+      .overlay.ready .progress, .overlay.failed .progress { visibility: hidden; }
+      .progress > div { height: 100%; width: 0; background: var(--amber); transition: width 0.15s; }
+      #status { font-size: 0.85rem; color: var(--dim); max-width: 36rem; }
+      .onair { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; align-items: center; font: 600 11px/1 var(--mono);
+        letter-spacing: 0.1em; color: #fff; background: rgb(0 0 0 / 0.45); padding: 6px 8px; border-radius: 4px; pointer-events: none; }
+      .onair i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+      .transport { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; margin-top: 14px; }
+      .transport button#play {
+        font: 600 0.85rem/1 system-ui, sans-serif; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+        border-radius: 6px; padding: 9px 14px; min-width: 72px; cursor: pointer;
+      }
+      .transport button#play:hover { border-color: var(--dim); }
+      .track { position: relative; height: 28px; }
+      .track input { position: absolute; inset: 0; width: 100%; margin: 0; accent-color: var(--accent); background: transparent; }
+      #ticks { position: absolute; left: 0; right: 0; top: 0; height: 6px; pointer-events: none; }
+      .tick { position: absolute; top: 0; width: 9px; height: 9px; margin-left: -4px; padding: 0; border: 0; background: transparent; cursor: pointer; pointer-events: auto; }
+      .tick::after { content: ""; position: absolute; left: 4px; top: 0; width: 1px; height: 7px; background: var(--dim); }
+      .tick:hover::after { background: var(--ink); }
+      #time { font: 13px/1 var(--mono); color: var(--dim); white-space: nowrap; }
+      #section { margin: 10px 0 0; font-size: 1.05rem; min-height: 1.5em; }
+
+      .readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1px; margin-top: 16px;
+        background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+      .readout > div { background: var(--panel); padding: 10px 12px; min-width: 0; }
+      .readout dt { font: 600 10px/1 var(--mono); letter-spacing: 0.12em; color: var(--dim); text-transform: uppercase; margin-bottom: 6px; }
+      .readout dd { margin: 0; font: 13px/1.4 var(--mono); overflow-wrap: anywhere; }
+      .readout .wide { grid-column: 1 / -1; }
+      .lever { position: relative; height: 6px; margin-top: 4px; background: var(--line); border-radius: 3px; }
+      .lever::before { content: ""; position: absolute; top: -3px; width: 4px; height: 12px; border-radius: 2px; background: var(--amber);
+        left: calc(var(--lever, 0) * (100% - 4px)); }
+      .lever-ends { display: flex; justify-content: space-between; font: 10px/1 var(--mono); color: var(--dim); margin-top: 6px; }
+
+      footer { margin-top: 18px; color: var(--dim); font-size: 0.85rem; max-width: 52rem; }
+      footer kbd { font: 12px/1 var(--mono); border: 1px solid var(--line); border-radius: 3px; padding: 2px 5px; color: var(--ink); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Music video <span>· cut live on the web-mx-50</span></h1>
+        <a href="./index.html">Open the console →</a>
+      </header>
+
+      <div class="stage" id="stage">
+        <div class="onair" aria-hidden="true"><i></i>PROGRAM</div>
+        <div class="overlay" id="overlay">
+          <button id="play-big" type="button">Play</button>
+          <div class="progress"><div id="progress-bar"></div></div>
+          <div id="status" role="status">Loading footage…</div>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button id="play" type="button">Play</button>
+        <div class="track">
+          <input id="scrubber" type="range" min="0" max="310" step="0.01" value="0" aria-label="Song position" />
+          <div id="ticks"></div>
+        </div>
+        <span id="time">0:00 / 5:09</span>
+      </div>
+      <p id="section" aria-live="polite"></p>
+
+      <dl class="readout">
+        <div><dt>Bus A</dt><dd id="ro-a">—</dd></div>
+        <div><dt>Bus B</dt><dd id="ro-b">—</dd></div>
+        <div>
+          <dt>Mix / Wipe</dt><dd id="ro-transition">—</dd>
+          <div class="lever" id="ro-lever"></div>
+          <div class="lever-ends"><span>A</span><span>B</span></div>
+        </div>
+        <div><dt>Digital effect</dt><dd id="ro-effect">—</dd></div>
+        <div><dt>Downstream key</dt><dd id="ro-dsk">—</dd></div>
+        <div><dt>Fade</dt><dd id="ro-fade">—</dd></div>
+        <div class="wide"><dt>Patch bay</dt><dd id="ro-patch">—</dd></div>
+      </dl>
+
+      <footer>
+        Every switch, wipe, key and effect is a real panel command through the mixer's reducer, on the
+        song's bar grid; between takes the footage is re-patched into the inputs like a vision engineer
+        would. A/V Synchro listens to the kick drum. <kbd>Space</kbd> play/pause ·
+        <kbd>←</kbd><kbd>→</kbd> previous/next section · <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> one bar.
+      </footer>
+    </main>
+    <!-- banira `dev --ts` transpiles TypeScript on the fly and maps .js -> .ts. -->
+    <script type="module" src="./site/music-video/main.js"></script>
+  </body>
+</html>
