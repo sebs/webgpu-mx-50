@@ -149,6 +149,10 @@ function main(): void {
     .replace('href="./index.html"', 'href="../app/"');
   writeFileSync(join(videoDir, 'index.html'), videoPage);
   cpSync(proxies, join(videoDir, 'video', 'web'), { recursive: true });
+  // The music video files (video/*.json) the page loads by default or through ?video=.
+  for (const name of readdirSync(join(ROOT, 'video'))) {
+    if (name.endsWith('.json')) cpSync(join(ROOT, 'video', name), join(videoDir, 'video', name));
+  }
 
   // --- 4. generated data + doc sources the pages fetch
   const gen = join(ROOT, 'site', 'generated');

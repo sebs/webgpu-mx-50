@@ -1,0 +1,309 @@
+{
+  "format": "web-mx-50/music-video",
+  "version": 1,
+  "title": "First cut",
+  "description": "Six clips on one song: the spiral, three line-drawn dancers, a street crowd and a dance crew, cut live on the web-mx-50.",
+  "song": { "file": "song.m4a", "bpm": 130.97, "downbeat": 0.503, "length": 309.52 },
+  "clips": [
+    { "id": "spiral", "file": "135378-761676435.mp4", "label": "Spiral", "duration": 10 },
+    { "id": "line1", "file": "140629-775595871.mp4", "label": "Line dancer I", "duration": 5.666 },
+    { "id": "line2", "file": "140630-775595877.mp4", "label": "Line dancer II", "duration": 5.75 },
+    { "id": "line3", "file": "140631-775595881.mp4", "label": "Line dancer III", "duration": 5.75 },
+    { "id": "crowd", "file": "142030-779071797.mp4", "label": "Crowd", "duration": 14.931 },
+    { "id": "crew", "file": "142032-779071806.mp4", "label": "Crew", "duration": 22.564 }
+  ],
+  "patch": { "1": "crew", "2": "crowd", "3": "spiral", "4": "line1", "ext": "line1" },
+  "edit": [
+    { "section": "Intro · the spiral", "at": { "time": 0 } },
+    { "at": { "time": 0 }, "do": [
+      { "buses": [3, 2] }, { "transition": "mix" }, { "effect": { "bus": "A" } },
+      { "fade": { "target": "black", "video": true, "dsk": true } }, { "matte": "magenta" }, { "dsk": false }
+    ] },
+    { "move": "set", "lane": "lever", "at": { "time": 0 }, "value": 0 },
+    { "move": "set", "lane": "fade", "at": { "time": 0 }, "value": 1 },
+    { "move": "ramp", "lane": "fade", "from": 0, "to": 4, "values": [1, 0], "curve": "ease" },
+    { "at": 4, "do": [{ "dsk": { "fill": "matte", "edge": "drop-shadow" } }] },
+    { "move": "rotate", "input": "ext", "from": 4, "to": 16, "every": 2, "clips": ["line1", "line2", "line3"] },
+
+    { "section": "Intro · iris to the street", "at": 8 },
+    { "at": 8, "do": [
+      { "effect": { "bus": "B", "mono": true } }, { "wipe": { "pattern": 26, "edge": "soft-wide" } },
+      { "fade": { "target": "white", "video": true, "dsk": false } }
+    ], "play": { "crowd": { "from": 0 } } },
+    { "move": "ramp", "lane": "lever", "from": 8, "to": 12, "values": [0, 1], "curve": "ease" },
+    { "at": 12, "note": "The crew is patched into Source 1 while bus A is off air, then the cutting starts.", "do": [
+      { "transition": "mix" }, { "colourCorrect": { "bus": "A", "mode": "chroma-only" } }
+    ], "patch": { "1": "crew" }, "play": { "crew": { "from": 3 } } },
+    { "move": "set", "lane": "chromaA", "at": 12, "value": 0 },
+    { "move": "cuts", "from": 12.5, "to": 14, "every": 2, "start": 0 },
+    { "move": "cuts", "from": 14, "to": 15, "every": 1, "start": 1 },
+    { "move": "cuts", "from": 15, "to": 16, "every": 0.5, "start": 1 },
+    { "at": 14, "do": [{ "effect": { "bus": "B", "mono": true, "mosaic": true } }] },
+    { "move": "ramp", "lane": "mosaic", "from": 14, "to": 16, "values": [2, 28] },
+    { "move": "flash", "at": 16 },
+
+    { "section": "Drop I · cut on the beat", "at": 16 },
+    { "at": 16, "do": [
+      { "buses": [1, 2] }, { "transition": "mix" }, { "effect": { "bus": "A" } },
+      { "colourCorrect": { "bus": "A", "mode": "off" } },
+      { "dsk": { "fill": "white", "edge": "wide-border", "edgeColor": "magenta" } }
+    ] },
+    { "move": "set", "lane": "chromaA", "at": 16, "value": 0.5 },
+    { "move": "cuts", "from": 16, "to": 24, "every": 2, "start": 0 },
+    { "move": "rotate", "input": "ext", "from": 16, "to": 24, "every": 1, "clips": ["line1", "line2", "line3"] },
+    { "at": 20, "do": [{ "avSynchro": ["nega"] }], "play": { "crowd": { "from": 0 } } },
+    { "move": "set", "lane": "avLevel", "at": 20, "value": 0.55 },
+
+    { "section": "Drop I · wipes", "at": 24 },
+    { "at": 24, "do": [{ "dsk": false }, { "avSynchro": [] }, { "effect": { "bus": "A", "multi": 4 } }, { "border": "yellow" }] },
+    { "at": 24, "do": [{ "wipe": { "pattern": 1, "edge": "border-wide" } }] },
+    { "at": 25, "do": [{ "wipe": { "pattern": 5, "edge": "border-wide" } }] },
+    { "at": 26, "do": [{ "wipe": { "pattern": 9, "edge": "border-wide" } }] },
+    { "at": 27, "do": [{ "wipe": { "pattern": 13, "edge": "border-wide" } }] },
+    { "at": 28, "do": [{ "wipe": { "pattern": 17, "edge": "border-wide", "multi": 1 } }] },
+    { "at": 29, "do": [{ "wipe": { "pattern": 21, "edge": "border-wide", "multi": 2 } }] },
+    { "at": 30, "do": [{ "wipe": { "pattern": 26, "edge": "border-wide", "multi": 3 } }] },
+    { "at": 31, "do": [{ "wipe": { "pattern": 19, "reverse": true, "edge": "border-wide", "multi": 4 } }] },
+    { "at": 28, "do": [{ "effect": { "bus": "A", "multi": 9 } }], "patch": { "2": "spiral" } },
+    { "move": "takes", "from": 24, "to": 32, "every": 4, "length": 1, "start": 1 },
+
+    { "section": "Drop I · hypnosis key", "at": 32 },
+    { "at": 32, "do": [
+      { "transition": "lum-key" }, { "buses": [1, 3] }, { "effect": { "bus": "A" } },
+      { "colourCorrect": { "bus": "A", "mode": "chroma-plus-joystick" } },
+      { "colourCorrect": { "bus": "B", "mode": "chroma-plus-joystick" } }
+    ] },
+    { "move": "set", "lane": "lever", "at": 32, "value": 1 },
+    { "move": "set", "lane": "chromaA", "at": 32, "value": 0.8 },
+    { "move": "pump", "from": 32, "to": 40, "low": 0.18, "high": 0.72 },
+    { "move": "ramp", "lane": "hueA", "from": 32, "to": 40, "values": [0, 1] },
+    { "move": "ramp", "lane": "hueB", "from": 32, "to": 40, "values": [0.5, -0.5] },
+    { "at": 34, "patch": { "1": "crowd" } },
+    { "at": 36, "patch": { "1": "crew" } },
+    { "at": 38, "patch": { "1": "crowd" } },
+    { "at": 38, "do": [{ "effect": { "bus": "A", "trail": true } }] },
+
+    { "section": "Break · chalk duet", "at": 40 },
+    { "at": 40, "do": [
+      { "transition": "mix" }, { "buses": [4, 2] }, { "effect": { "bus": "A", "nega": true, "trail": true } },
+      { "colourCorrect": { "bus": "B", "mode": "off" } }, { "matte": "cyan" }, { "dsk": { "fill": "matte", "edge": "normal" } }
+    ] },
+    { "move": "set", "lane": "lever", "at": 40, "value": 0 },
+    { "move": "set", "lane": "chromaA", "at": 40, "value": 1 },
+    { "move": "ramp", "lane": "hueA", "from": 40, "to": 48, "values": [0, 1] },
+    { "move": "rotate", "input": 4, "from": 40, "to": 48, "every": 4, "rate": 0.75, "clips": ["line1", "line2", "line3"] },
+    { "move": "rotate", "input": "ext", "from": 40, "to": 48, "every": 4, "rate": 0.75, "clips": ["line2", "line3", "line1"] },
+    { "at": 44, "do": [{ "matte": "magenta" }] },
+    { "at": 46, "do": [{ "effect": { "bus": "A", "nega": true, "strobe": true } }] },
+    { "move": "ramp", "lane": "strobe", "from": 46, "to": 48, "values": [0.6, 0] },
+
+    { "section": "Drop II · rotoscope", "at": 48 },
+    { "at": 48, "do": [
+      { "buses": [1, 2] }, { "effect": { "bus": "A" } }, { "colourCorrect": { "bus": "A", "mode": "chroma-only" } },
+      { "avSynchro": ["mosaic"] }, { "dsk": { "fill": "white", "edge": "drop-shadow" } }
+    ] },
+    { "move": "set", "lane": "lever", "at": 48, "value": 0 },
+    { "move": "set", "lane": "mosaic", "at": 48, "value": 7 },
+    { "move": "ramp", "lane": "chromaA", "from": 48, "to": 56, "values": [0.5, 1] },
+    { "at": 48, "patch": { "1": "crew" } },
+    { "at": 50, "patch": { "1": "crowd" } },
+    { "at": 52, "patch": { "1": "crew" } },
+    { "at": 54, "patch": { "1": "crowd" } },
+    { "move": "rotate", "input": "ext", "from": 48, "to": 56, "every": 2, "clips": ["line1", "line2", "line3"] },
+
+    { "section": "Drop II · ping-pong wipes", "at": 56 },
+    { "at": 56, "do": [
+      { "dsk": false }, { "avSynchro": [] }, { "effect": { "bus": "B", "paint": true } },
+      { "colourCorrect": { "bus": "A", "mode": "off" } }
+    ], "patch": { "1": "crew", "2": "crowd" } },
+    { "at": 56, "do": [{ "wipe": { "pattern": 2, "edge": "soft-narrow" } }] },
+    { "at": 57, "do": [{ "wipe": { "pattern": 6, "edge": "soft-narrow" } }] },
+    { "at": 58, "do": [{ "wipe": { "pattern": 10, "reverse": true, "edge": "soft-narrow" } }] },
+    { "at": 59, "do": [{ "wipe": { "pattern": 14, "edge": "soft-narrow" } }] },
+    { "at": 60, "do": [{ "wipe": { "pattern": 3, "edge": "soft-narrow", "blinds": true } }] },
+    { "at": 61, "do": [{ "wipe": { "pattern": 7, "edge": "soft-narrow", "blinds": true } }] },
+    { "at": 62, "do": [{ "wipe": { "pattern": 11, "edge": "soft-narrow", "blinds": true, "pairing": true } }] },
+    { "at": 63, "do": [{ "wipe": { "pattern": 15, "reverse": true, "edge": "soft-narrow", "blinds": true, "pairing": true } }] },
+    { "move": "takes", "from": 56, "to": 64, "every": 1, "length": 0.5, "start": 0 },
+
+    { "section": "Break · slow trails", "at": 64 },
+    { "at": 64, "do": [
+      { "transition": "nam" }, { "buses": [3, 1] }, { "effect": { "bus": "B", "mono": true, "trail": true } }
+    ], "play": { "crew": { "from": 2, "rate": 0.5 }, "spiral": { "rate": 0.6 } } },
+    { "move": "ramp", "lane": "lever", "from": 64, "to": 66, "values": [0.35, 0.75], "curve": "ease" },
+    { "move": "ramp", "lane": "lever", "from": 66, "to": 68, "values": [0.75, 0.35], "curve": "ease" },
+    { "move": "ramp", "lane": "lever", "from": 68, "to": 70, "values": [0.35, 0.8], "curve": "ease" },
+    { "at": 70, "do": [{ "effect": { "bus": "B", "mono": true, "strobe": true } }] },
+    { "move": "ramp", "lane": "strobe", "from": 70, "to": 72, "values": [0.7, 0] },
+
+    { "section": "Drop III · four-source punch", "at": 72 },
+    { "at": 72, "do": [{ "transition": "mix" }, { "effect": { "bus": "A", "multi": 4 } }],
+      "patch": { "1": "crew", "2": "crowd", "3": "spiral", "4": "line2" },
+      "play": { "crew": { "from": 0, "rate": 1 }, "crowd": { "from": 0 }, "spiral": { "rate": 1.5 }, "line2": { "from": 0, "rate": 1 } } },
+    { "move": "set", "lane": "lever", "at": 72, "value": 0 },
+    { "move": "punch", "bus": "A", "from": 72, "to": 80, "every": 1, "sources": [1, 2, 1, 3, 1, 2, 4, 2, 2, 1, 3, 1, 4, 1, 2, 3] },
+    { "at": 76, "do": [{ "effect": { "bus": "A", "multi": 16 } }] },
+
+    { "section": "Breakdown · drawn over the crowd", "at": 80 },
+    { "at": 80, "note": "Nega turns a drawing into light lines on black; the luminance key keeps only the lines.", "do": [
+      { "effect": { "bus": "B", "nega": true } }, { "transition": "lum-key" }, { "buses": [2, 4] },
+      { "colourCorrect": { "bus": "A", "mode": "chroma-only" } },
+      { "colourCorrect": { "bus": "B", "mode": "chroma-plus-joystick" } }
+    ], "play": { "crowd": { "rate": 0.6 } } },
+    { "move": "set", "lane": "lever", "at": 80, "value": 1 },
+    { "move": "set", "lane": "slice", "at": 80, "value": 0.4 },
+    { "move": "set", "lane": "chromaA", "at": 80, "value": 0 },
+    { "move": "ramp", "lane": "chromaA", "from": 84, "to": 88, "values": [0, 1], "curve": "ease" },
+    { "move": "set", "lane": "chromaB", "at": 80, "value": 1 },
+    { "move": "ramp", "lane": "hueB", "from": 80, "to": 88, "values": [0, 1] },
+    { "move": "rotate", "input": 4, "from": 80, "to": 88, "every": 2, "clips": ["line1", "line2", "line3"] },
+    { "at": 84, "do": [{ "dsk": { "fill": "white", "edge": "narrow-shadow" } }] },
+    { "move": "rotate", "input": "ext", "from": 84, "to": 88, "every": 2, "clips": ["line3", "line1", "line2"] },
+
+    { "section": "Build", "at": 88 },
+    { "at": 88, "do": [
+      { "transition": "mix" }, { "effect": { "bus": "A" } },
+      { "colourCorrect": { "bus": "A", "mode": "off" } }, { "colourCorrect": { "bus": "B", "mode": "off" } },
+      { "dsk": false }, { "buses": [1, 2] }, { "fade": { "target": "white", "video": true, "dsk": false } }
+    ], "play": { "crowd": { "from": 0, "rate": 1 } } },
+    { "move": "cuts", "from": 88, "to": 90, "every": 4, "start": 1 },
+    { "move": "cuts", "from": 90, "to": 92, "every": 2, "start": 1 },
+    { "move": "cuts", "from": 92, "to": 94, "every": 1, "start": 1 },
+    { "move": "cuts", "from": 94, "to": 95, "every": 0.5, "start": 1 },
+    { "move": "cuts", "from": 95, "to": 96, "every": 0.25, "start": 1 },
+    { "at": 92, "do": [{ "effect": { "bus": "A", "mono": true, "mosaic": true } }] },
+    { "move": "ramp", "lane": "mosaic", "from": 92, "to": 96, "values": [2, 31] },
+    { "move": "flash", "at": 96 },
+
+    { "section": "Drop IV · the whole panel", "at": 96 },
+    { "at": 96, "do": [
+      { "effect": { "bus": "A" } }, { "buses": [1, 2] },
+      { "colourCorrect": { "bus": "A", "mode": "chroma-plus-joystick" } },
+      { "colourCorrect": { "bus": "B", "mode": "chroma-plus-joystick" } },
+      { "dsk": { "fill": "white", "edge": "wide-border", "edgeColor": "cyan" } }
+    ] },
+    { "move": "set", "lane": "chromaA", "at": 96, "value": 0.9 },
+    { "move": "set", "lane": "chromaB", "at": 96, "value": 0.9 },
+    { "move": "ramp", "lane": "hueA", "from": 96, "to": 104, "values": [0, 2] },
+    { "move": "ramp", "lane": "hueB", "from": 96, "to": 104, "values": [0.5, -1.5] },
+    { "at": 96, "do": [{ "wipe": { "pattern": 17, "edge": "border-wide", "multi": 1 } }, { "border": "yellow" }] },
+    { "at": 97, "do": [{ "wipe": { "pattern": 21, "edge": "border-wide", "multi": 2 } }, { "border": "cyan" }] },
+    { "at": 98, "do": [{ "wipe": { "pattern": 25, "edge": "border-wide", "multi": 3 } }, { "border": "magenta" }] },
+    { "at": 99, "do": [{ "wipe": { "pattern": 13, "reverse": true, "edge": "border-wide", "multi": 4 } }, { "border": "green" }] },
+    { "at": 100, "do": [{ "wipe": { "pattern": 27, "edge": "border-wide", "multi": 5 } }, { "border": "red" }] },
+    { "at": 101, "do": [{ "wipe": { "pattern": 22, "edge": "border-wide", "multi": 6 } }, { "border": "blue" }] },
+    { "at": 102, "do": [{ "wipe": { "pattern": 8, "edge": "border-wide", "multi": 1 } }, { "border": "white" }] },
+    { "at": 103, "do": [{ "wipe": { "pattern": 28, "edge": "border-wide", "multi": 2 } }, { "border": "yellow" }] },
+    { "move": "takes", "from": 96, "to": 104, "every": 2, "length": 1, "start": 0 },
+    { "move": "rotate", "input": "ext", "from": 96, "to": 104, "every": 1, "clips": ["line1", "line2", "line3"] },
+    { "at": 100, "patch": { "2": "spiral" } },
+    { "at": 104, "do": [
+      { "transition": "lum-key" }, { "buses": [1, 3] }, { "effect": { "bus": "A", "strobe": true } }, { "dsk": false }
+    ], "patch": { "1": "crowd", "3": "spiral" }, "play": { "spiral": { "rate": 1 } } },
+    { "move": "set", "lane": "lever", "at": 104, "value": 1 },
+    { "move": "set", "lane": "strobe", "at": 104, "value": 0.2 },
+    { "move": "pump", "from": 104, "to": 110, "low": 0.2, "high": 0.7 },
+    { "at": 108, "patch": { "1": "crew" } },
+
+    { "section": "Hold", "at": 110 },
+    { "at": 110, "do": [
+      { "transition": "mix" }, { "effect": { "bus": "A", "still": true } },
+      { "colourCorrect": { "bus": "A", "mode": "off" } }, { "colourCorrect": { "bus": "B", "mode": "off" } },
+      { "fade": { "target": "black", "video": true, "dsk": true } }
+    ] },
+    { "move": "set", "lane": "lever", "at": 110, "value": 0 },
+    { "move": "ramp", "lane": "fade", "from": 110, "to": 111.75, "values": [0, 0.65] },
+    { "move": "set", "lane": "fade", "at": 112, "value": 0 },
+
+    { "section": "Drop V · slow dissolves", "at": 112 },
+    { "at": 112, "do": [
+      { "effect": { "bus": "A", "trail": true } }, { "buses": [1, 2] },
+      { "colourCorrect": { "bus": "A", "mode": "chroma-plus-joystick" } }
+    ], "patch": { "1": "crew", "2": "crowd" }, "play": { "crew": { "from": 0, "rate": 1 }, "crowd": { "from": 5, "rate": 1 } } },
+    { "move": "set", "lane": "chromaA", "at": 112, "value": 0.85 },
+    { "move": "ramp", "lane": "hueA", "from": 112, "to": 118, "values": [0, 0.5] },
+    { "move": "takes", "from": 112, "to": 118, "every": 8, "length": 6, "start": 0, "curve": "ease" },
+    { "at": 114, "note": "Each source is swapped while its bus is off air, so the next dissolve reveals new footage.", "patch": { "1": "spiral" } },
+    { "at": 116, "patch": { "2": "crew" } },
+
+    { "section": "Drop V · orbiting inset", "at": 118 },
+    { "at": 118, "do": [
+      { "effect": { "bus": "A" } }, { "wipe": { "pattern": 25, "edge": "border-wide" } }, { "positioner": true }, { "border": "yellow" }
+    ], "patch": { "1": "crew", "2": "crowd" } },
+    { "move": "set", "lane": "lever", "at": 118, "value": 0.5 },
+    { "move": "ramp", "lane": "orbit", "from": 118, "to": 124, "values": [0, 3] },
+    { "move": "ramp", "lane": "hueA", "from": 118, "to": 124, "values": [0.5, 1.5] },
+
+    { "section": "Break · mosaic", "at": 124 },
+    { "at": 124, "do": [
+      { "positioner": false }, { "transition": "mix" }, { "buses": [3, 2] }, { "effect": { "bus": "A", "mosaic": true } },
+      { "colourCorrect": { "bus": "A", "mode": "off" } }
+    ], "play": { "spiral": { "rate": 0.5 } } },
+    { "move": "set", "lane": "lever", "at": 124, "value": 0 },
+    { "move": "steps", "lane": "mosaic", "from": 124, "every": 1, "values": [31, 29, 27, 25, 23, 21, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1] },
+
+    { "section": "Drop VI · six-clip montage", "at": 128 },
+    { "at": 128, "do": [{ "effect": { "bus": "A" } }, { "buses": [1, 2] }, { "avSynchro": ["nega"] }], "play": { "spiral": { "rate": 1 } } },
+    { "move": "set", "lane": "lever", "at": 128, "value": 0 },
+    { "move": "montage", "input": 1, "from": 128, "to": 136, "every": 1,
+      "clips": ["crew", "crowd", "spiral", "line1", "crowd", "crew", "line2", "spiral", "crew", "line3", "crowd", "spiral"] },
+    { "at": 132, "do": [{ "effect": { "bus": "A", "paint": true } }, { "avSynchro": ["nega"] }] },
+
+    { "section": "Break · drawings on black", "at": 136 },
+    { "at": 136, "do": [
+      { "avSynchro": [] }, { "effect": { "bus": "A" } }, { "fade": { "target": "black", "video": true, "dsk": false } },
+      { "dsk": { "fill": "white", "edge": "wide-border", "edgeColor": "cyan" } }
+    ], "patch": { "1": "crew" } },
+    { "move": "ramp", "lane": "fade", "from": 136, "to": 138, "values": [0, 1], "curve": "ease" },
+    { "move": "set", "lane": "fade", "at": 143, "value": 1, "curve": "ease" },
+    { "move": "set", "lane": "fade", "at": 144, "value": 0 },
+    { "move": "rotate", "input": "ext", "from": 136, "to": 140, "every": 2, "clips": ["line1", "line2", "line3"] },
+    { "move": "rotate", "input": "ext", "from": 140, "to": 144, "every": 2, "rate": 0.5, "clips": ["line2", "line3", "line1"] },
+    { "at": 143, "do": [{ "effect": { "bus": "A", "mosaic": true } }] },
+    { "move": "ramp", "lane": "mosaic", "from": 143, "to": 144, "values": [31, 1] },
+
+    { "section": "Drop VII · reprise", "at": 144 },
+    { "at": 144, "do": [
+      { "effect": { "bus": "A" } }, { "buses": [1, 2] }, { "transition": "mix" }, { "avSynchro": ["nega"] },
+      { "dsk": { "fill": "white", "edge": "drop-shadow" } }
+    ] },
+    { "move": "cuts", "from": 144, "to": 148, "every": 2, "start": 0 },
+    { "move": "rotate", "input": "ext", "from": 144, "to": 148, "every": 1, "clips": ["line1", "line2", "line3"] },
+    { "at": 148, "do": [{ "dsk": false }, { "avSynchro": [] }, { "border": "magenta" }] },
+    { "at": 148, "do": [{ "wipe": { "pattern": 1, "edge": "border-narrow", "blinds": true } }] },
+    { "at": 149, "do": [{ "wipe": { "pattern": 2, "reverse": true, "edge": "border-narrow", "blinds": true } }] },
+    { "at": 150, "do": [{ "wipe": { "pattern": 5, "edge": "border-narrow", "blinds": true } }] },
+    { "at": 151, "do": [{ "wipe": { "pattern": 6, "reverse": true, "edge": "border-narrow", "blinds": true } }] },
+    { "move": "takes", "from": 148, "to": 152, "every": 2, "length": 1, "start": 0 },
+    { "at": 152, "do": [
+      { "transition": "lum-key" }, { "buses": [2, 3] }, { "colourCorrect": { "bus": "B", "mode": "chroma-plus-joystick" } }
+    ], "patch": { "2": "crowd" } },
+    { "move": "set", "lane": "lever", "at": 152, "value": 1 },
+    { "move": "set", "lane": "chromaB", "at": 152, "value": 1 },
+    { "move": "ramp", "lane": "hueB", "from": 152, "to": 156, "values": [0, 1] },
+    { "move": "pump", "from": 152, "to": 156, "low": 0.2, "high": 0.75 },
+
+    { "section": "Wind down", "at": 156 },
+    { "at": 156, "do": [
+      { "transition": "mix" }, { "colourCorrect": { "bus": "B", "mode": "off" } }, { "effect": { "bus": "A", "trail": true } },
+      { "buses": [1, 2] }
+    ], "play": { "crew": { "rate": 0.7 }, "crowd": { "rate": 0.7 } } },
+    { "move": "ramp", "lane": "lever", "from": 156, "to": 158, "values": [0, 1], "curve": "ease" },
+    { "move": "ramp", "lane": "lever", "from": 158, "to": 160, "values": [1, 0], "curve": "ease" },
+    { "at": 159, "do": [{ "fade": { "target": "white", "video": true, "dsk": false } }] },
+    { "move": "flash", "at": 160 },
+
+    { "section": "Final burst", "at": 160 },
+    { "at": 160, "do": [{ "effect": { "bus": "A" } }, { "avSynchro": ["nega"] }], "play": { "crew": { "rate": 1 }, "crowd": { "rate": 1 } } },
+    { "move": "set", "lane": "lever", "at": 160, "value": 0 },
+    { "move": "montage", "input": 1, "from": 160, "to": 163, "every": 0.5,
+      "clips": ["crew", "crowd", "crew", "spiral", "crowd", "crew", "line1", "crowd"] },
+
+    { "section": "Out", "at": 163 },
+    { "at": 163, "do": [
+      { "avSynchro": [] }, { "fade": { "target": "black", "video": true, "dsk": false } }, { "dsk": { "fill": "white", "edge": "normal" } }
+    ], "patch": { "1": "crew", "ext": "line1" }, "play": { "line1": { "from": 0, "rate": 0.5 } } },
+    { "move": "ramp", "lane": "fade", "from": 163, "to": 164.5, "values": [0, 1], "curve": "ease" },
+    { "move": "ramp", "lane": "dskHigh", "from": 165, "to": 166.5, "values": [0.42, 0], "curve": "ease" }
+  ]
+}

@@ -1,8 +1,9 @@
-// The music video's edit: a cue sheet for one mixer, on the song's bar grid. Everything the
+// The music video engine: a cue sheet for one mixer, on a song's bar grid. Everything the
 // operator does is a real store command run through the real reducer — bus punches, the
 // lever, wipes, keys, the Downstream Key, effects, fades — plus the one thing a panel
 // cannot do: re-patching which clip feeds which input (the registry, ADR-0008), as a
-// vision engineer would between takes.
+// vision engineer would between takes. A music video FILE (document.ts) expands into the
+// cues and lanes this module compiles; nothing here knows any particular song or clip.
 //
 // The picture is a pure function of song time, so the page can seek anywhere:
 //   - CUES are discrete. compileScore() folds them through reduce() from the factory
@@ -11,10 +12,12 @@
 //     sampled per frame and dispatched on top of the checkpoint. A control that has a lane
 //     is owned by it from its first point on — cues leave it alone.
 //   - CLIP PLAYBACK (offset + rate) is part of each cue, so a clip's expected position at
-//     any time is computable and a seek can put every video where it should be.
+//     any time is computable and a seek can put every video where it should be. Offsets
+//     are kept unwrapped; clipTime() wraps them by the clip's duration at play time, so
+//     compiling needs no media.
 //
 // No Auto Take/Auto Fade runners: they run on host ticks, which a seek cannot replay.
-// DOM-free on purpose — the unit suite compiles and samples it.
+// DOM-free on purpose — the unit suite and the CLI checker compile and sample it.
 // banira lib floor: index/`in`/`===` only — no Array.includes, no `**`.
 
 import { reduce } from '../../src/state/reducer.js';
@@ -35,60 +38,42 @@ import type { BusId, BusSource } from '../../src/core/types.js';
 
 // --- the grid ---------------------------------------------------------------------------
 
-/** Measured from the track: the kick lands on this grid within a frame or two all the way through. */
-export const BPM = 130.97;
-export const BEAT = 60 / BPM;
-export const BAR = 4 * BEAT;
-/** The first downbeat (bar 0), seconds. */
-export const DOWNBEAT = 0.503;
-export const SONG_LENGTH = 309.52;
-
-/** Seconds at a bar (and beat within it); bars may be fractional. */
-export function at(bar: number, beat = 0): number {
-  return DOWNBEAT + bar * BAR + beat * BEAT;
+/** A song's tempo grid: beats per minute and the time (seconds) of the first downbeat. */
+export interface Grid {
+  readonly bpm: number;
+  readonly downbeat: number;
 }
 
-// --- the footage ------------------------------------------------------------------------
-
-export type ClipId = 'spiral' | 'line1' | 'line2' | 'line3' | 'crowd' | 'crew';
-
-export interface Clip {
-  readonly id: ClipId;
-  readonly file: string;
-  readonly label: string;
-  readonly duration: number;
+export function beatSeconds(grid: Grid): number {
+  return 60 / grid.bpm;
 }
 
-export const CLIPS: readonly Clip[] = [
-  { id: 'spiral', file: '135378-761676435.mp4', label: 'Spiral', duration: 10 },
-  { id: 'line1', file: '140629-775595871.mp4', label: 'Line dancer I', duration: 5.666 },
-  { id: 'line2', file: '140630-775595877.mp4', label: 'Line dancer II', duration: 5.75 },
-  { id: 'line3', file: '140631-775595881.mp4', label: 'Line dancer III', duration: 5.75 },
-  { id: 'crowd', file: '142030-779071797.mp4', label: 'Crowd', duration: 14.931 },
-  { id: 'crew', file: '142032-779071806.mp4', label: 'Crew', duration: 22.564 },
-];
+/** Seconds at a position in bars (fractional: 16.5 is bar 16, beat 3 of 4). */
+export function barTime(grid: Grid, bars: number): number {
+  return grid.downbeat + bars * 4 * beatSeconds(grid);
+}
 
-export const SONG_FILE = 'song.m4a';
+// --- clips ------------------------------------------------------------------------------
 
 /** The inputs a clip can be patched into: Sources 1–4 and the External Camera (DSK key). */
 export type Input = 1 | 2 | 3 | 4 | 'ext-camera';
 export const INPUTS: readonly Input[] = [1, 2, 3, 4, 'ext-camera'];
 
-export type Patch = { readonly [K in Input]: ClipId };
+/** Which clip (by id) feeds each input. */
+export type Patch = { readonly [K in Input]: string };
 
 export interface ClipPlay {
   /** Song time the clip was (re)started. */
   readonly at: number;
-  /** Clip time at that moment. */
+  /** Clip time at that moment, unwrapped (may exceed the clip's duration). */
   readonly from: number;
   readonly rate: number;
 }
 
 /** Where a clip's picture is at song time `t`, looped over its duration. */
-export function clipTime(clip: Clip, play: ClipPlay, t: number): number {
+export function clipTime(duration: number, play: ClipPlay, t: number): number {
   const raw = play.from + (t - play.at) * play.rate;
-  const d = clip.duration;
-  return ((raw % d) + d) % d;
+  return ((raw % duration) + duration) % duration;
 }
 
 // --- cues -------------------------------------------------------------------------------
@@ -100,14 +85,14 @@ export interface Cue {
   readonly at: number;
   readonly steps: readonly Step[];
   readonly patch?: Partial<Patch>;
-  readonly play?: { readonly [K in ClipId]?: { from?: number; rate?: number } };
+  readonly play?: { readonly [clip: string]: { from?: number; rate?: number } };
 }
 
 export interface CompiledCue {
   readonly at: number;
   readonly state: PanelState;
   readonly patch: Patch;
-  readonly clips: { readonly [K in ClipId]: ClipPlay };
+  readonly clips: { readonly [clip: string]: ClipPlay };
 }
 
 // --- lanes ------------------------------------------------------------------------------
@@ -149,6 +134,15 @@ export const LANE_NAMES: readonly LaneName[] = [
   'orbit',
   'avLevel',
 ];
+
+export type Lanes = { readonly [K in LaneName]: readonly LanePoint[] };
+
+/** An empty, writable set of lanes. */
+export function emptyLanes(): { [K in LaneName]: LanePoint[] } {
+  const lanes = {} as { [K in LaneName]: LanePoint[] };
+  for (const name of LANE_NAMES) lanes[name] = [];
+  return lanes;
+}
 
 /** What each lane drives. Hue and orbit are angles (turns) mapped onto a joystick circle. */
 export function laneCommands(lane: LaneName, v: number): Command[] {
@@ -207,9 +201,10 @@ export interface Marker {
 }
 
 export interface Score {
+  /** Seconds; the song's length. */
   readonly length: number;
   readonly cues: readonly CompiledCue[];
-  readonly lanes: { readonly [K in LaneName]: readonly LanePoint[] };
+  readonly lanes: Lanes;
   readonly markers: readonly Marker[];
 }
 
@@ -250,18 +245,27 @@ export function stateAt(score: Score, t: number): PanelState {
   return s;
 }
 
-function applySteps(state: PanelState, steps: readonly Step[]): PanelState {
+/** Apply steps to a panel; `after` sees each step's input and output (the checker's hook). */
+export function applySteps(
+  state: PanelState,
+  steps: readonly Step[],
+  after?: (index: number, before: PanelState, next: PanelState) => void,
+): PanelState {
   let s = state;
-  for (const step of steps) {
+  steps.forEach((step, i) => {
+    const before = s;
     const commands = typeof step === 'function' ? step(s) : [step];
     for (const c of commands) s = reduce(s, c);
-  }
+    if (after) after(i, before, s);
+  });
   return s;
 }
 
 export function compileScore(spec: {
+  readonly length: number;
+  readonly clips: readonly string[];
   readonly cues: readonly Cue[];
-  readonly lanes: { readonly [K in LaneName]: readonly LanePoint[] };
+  readonly lanes: Lanes;
   readonly markers: readonly Marker[];
   readonly patch: Patch;
 }): Score {
@@ -271,8 +275,8 @@ export function compileScore(spec: {
 
   let state = FACTORY_PRESET;
   let patch: Patch = spec.patch;
-  const clips = {} as { [K in ClipId]: ClipPlay };
-  for (const c of CLIPS) clips[c.id] = { at: 0, from: 0, rate: 1 };
+  const clips: { [clip: string]: ClipPlay } = {};
+  for (const id of spec.clips) clips[id] = { at: 0, from: 0, rate: 1 };
 
   const compiled: CompiledCue[] = [{ at: 0, state, patch, clips: { ...clips } }];
   for (const { cue } of order) {
@@ -280,12 +284,11 @@ export function compileScore(spec: {
     if (cue.patch) patch = { ...patch, ...cue.patch };
     if (cue.play) {
       for (const id in cue.play) {
-        const p = cue.play[id as ClipId]!;
-        const prev = clips[id as ClipId];
-        const clip = CLIPS.filter((c) => c.id === id)[0]!;
-        clips[id as ClipId] = {
+        const p = cue.play[id]!;
+        const prev = clips[id]!;
+        clips[id] = {
           at: cue.at,
-          from: p.from !== undefined ? p.from : clipTime(clip, prev, cue.at),
+          from: p.from !== undefined ? p.from : prev.from + (cue.at - prev.at) * prev.rate,
           rate: p.rate !== undefined ? p.rate : prev.rate,
         };
       }
@@ -296,7 +299,7 @@ export function compileScore(spec: {
     else compiled.push(entry);
   }
 
-  const lanes = {} as { [K in LaneName]: LanePoint[] };
+  const lanes = emptyLanes();
   for (const name of LANE_NAMES) {
     const pts = spec.lanes[name].slice();
     pts.sort((a, b) => a.at - b.at);
@@ -304,11 +307,11 @@ export function compileScore(spec: {
   }
   const markers = spec.markers.slice();
   markers.sort((a, b) => a.at - b.at);
-  return { length: SONG_LENGTH, cues: compiled, lanes, markers };
+  return { length: spec.length, cues: compiled, lanes, markers };
 }
 
 // --- set-to-value helpers ---------------------------------------------------------------
-// The panel has toggles and cycling buttons; the score wants "make it so". These press a
+// The panel has toggles and cycling buttons; a score wants "make it so". These press a
 // button only as many times as the reducer says it takes, so a cue reads as intent.
 
 function pressUntil(press: Command, done: (s: PanelState) => boolean, limit = 4): Step {
@@ -339,11 +342,15 @@ export function wipeEdge(edge: WipeEdge): Step {
   return pressUntil(press, (s) => s.transition.wipe.edge === edge);
 }
 
+export interface WipeSet {
+  edge?: WipeEdge;
+  multi?: number;
+  blinds?: boolean;
+  pairing?: boolean;
+}
+
 /** A wipe pattern by its §9.7 number (+128 reversed), with modifiers set (not toggled). */
-export function wipe(
-  number: number,
-  opts: { edge?: WipeEdge; multi?: number; blinds?: boolean; pairing?: boolean } = {},
-): Step[] {
+export function wipe(number: number, opts: WipeSet = {}): Step[] {
   return [
     transition('wipe'),
     { type: 'SET_WIPE_PATTERN', number },
@@ -393,10 +400,13 @@ export function effect(bus: BusId, want: EffectSet = {}): Step {
   };
 }
 
+export const AV_SYNCHRO_EFFECTS: readonly AvSynchroEffect[] = ['nega', 'mosaic', 'mono', 'paint', 'still', 'strobe'];
+
 /** A/V Synchro: the song's kick pulses these effects on the effect bus. */
 export function avSynchro(effects: readonly AvSynchroEffect[]): Step[] {
-  const all: AvSynchroEffect[] = ['nega', 'mosaic', 'mono', 'paint', 'still', 'strobe'];
-  const steps: Step[] = all.map((e) => ({ type: 'SET_AV_SYNCHRO_EFFECT', effect: e, on: effects.indexOf(e) !== -1 }) as Command);
+  const steps: Step[] = AV_SYNCHRO_EFFECTS.map(
+    (e) => ({ type: 'SET_AV_SYNCHRO_EFFECT', effect: e, on: effects.indexOf(e) !== -1 }) as Command,
+  );
   steps.push({ type: 'ATTEMPT_AV_SYNCHRO', on: effects.length > 0 });
   return steps;
 }
@@ -442,8 +452,19 @@ export function positioner(on: boolean): Step {
   return pressUntil({ type: 'PRESS_POSITIONER' }, (s) => s.positioner.on === on, 1);
 }
 
-/** Matte colours (reference §4): the wipe border and the DSK's matte fill. */
-export const MATTE = { white: 1, yellow: 2, cyan: 3, green: 4, magenta: 5, red: 6, blue: 7, black: 8 } as const;
+/** Matte colours by name (reference §4): the DSK's matte fill, the DSK edge, and — through
+ *  its complement — the wipe border. */
+export const MATTE: { readonly [name: string]: number } = {
+  bars: 0,
+  white: 1,
+  yellow: 2,
+  cyan: 3,
+  green: 4,
+  magenta: 5,
+  red: 6,
+  blue: 7,
+  black: 8,
+};
 
 export function matte(colorIndex: number): Step {
   return { type: 'SET_MATTE_COLOR', colorIndex };

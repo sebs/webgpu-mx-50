@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { LOOKS } from '../site/looks.js';
 import { TIMELINES } from '../site/timelines.js';
 import { POSTERS, LOOPS } from '../site/posters.js';
-import { CLIPS, SONG_FILE } from '../site/music-video/score.js';
+import { errorsOf, formatProblem, loadMusicVideoText } from '../site/music-video/document.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -67,8 +67,16 @@ function checkFetchedAssets(): void {
   // A loop's <video> uses the same id's still as its poster frame.
   for (const id of LOOPS) required.push(`site/posters/${id}.webm`, `site/posters/${id}.jpg`);
   required.push('site/assets/social-card.jpg');
-  // The music video fetches its footage and song beside its own document.
-  for (const file of CLIPS.map((c) => c.file).concat([SONG_FILE])) required.push(`music-video/video/web/${file}`);
+  // Every music video file the page can open must load cleanly, and its footage and song
+  // must sit beside the page (it fetches video/web/ relative to itself).
+  const videos = join(OUT, 'music-video', 'video');
+  const docs = existsSync(videos) ? readdirSync(videos).filter((n) => n.endsWith('.json')) : [];
+  if (docs.indexOf('first-cut.json') === -1) problems.push('missing asset: music-video/video/first-cut.json (the default music video)');
+  for (const name of docs) {
+    const loaded = loadMusicVideoText(readFileSync(join(videos, name), 'utf8'));
+    for (const p of errorsOf(loaded.problems)) problems.push(`music-video/video/${name}: ${formatProblem(p)}`);
+    for (const file of loaded.clips.map((c) => c.file).concat([loaded.doc.song.file])) required.push(`music-video/video/web/${file}`);
+  }
   for (const rel of required) {
     if (!existsSync(join(OUT, rel))) problems.push(`missing asset: ${rel}`);
   }

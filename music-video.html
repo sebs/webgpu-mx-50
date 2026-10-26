@@ -23,9 +23,22 @@
 
       header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; margin-bottom: 16px; }
       header h1 { margin: 0; font-size: 1.15rem; letter-spacing: 0.01em; }
-      header h1 span { color: var(--dim); font-weight: 400; }
+      header h1 .sub { color: var(--dim); font-weight: 400; }
       header a { color: var(--dim); font-size: 0.85rem; text-decoration: none; }
       header a:hover { color: var(--ink); }
+      .file-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .file-actions button {
+        font: 600 0.8rem/1 system-ui, sans-serif; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+        border-radius: 6px; padding: 7px 12px; cursor: pointer;
+      }
+      .file-actions button:hover { border-color: var(--dim); }
+      .file-actions a { margin-left: 8px; }
+
+      .problems { margin-top: 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); padding: 8px 12px; }
+      .problems summary { cursor: pointer; font-size: 0.85rem; color: var(--amber); }
+      .problems ul { margin: 8px 0 2px; padding-left: 18px; font: 12px/1.5 var(--mono); }
+      .problems li.error { color: #f2a19b; }
+      .problems li.warning { color: var(--amber); }
 
       .stage { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
       .stage mx-mixer, .stage mx-mixer > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -96,8 +109,13 @@
   <body>
     <main>
       <header>
-        <h1>Music video <span>· cut live on the web-mx-50</span></h1>
-        <a href="./index.html">Open the console →</a>
+        <h1><span id="title">Music video</span> <span class="sub">· cut live on the web-mx-50</span></h1>
+        <div class="file-actions">
+          <button id="load" type="button" title="Open a music video .json, together with any of its song and clips">Load…</button>
+          <button id="save" type="button" title="Download this music video as a .json file">Save</button>
+          <input id="file-picker" type="file" multiple accept=".json,application/json,audio/*,video/*" hidden />
+          <a href="./index.html">Open the console →</a>
+        </div>
       </header>
 
       <div class="stage" id="stage">
@@ -122,6 +140,7 @@
       </div>
       <p id="section" aria-live="polite"></p>
       <p id="rec-note" role="status" hidden></p>
+      <details id="problems" class="problems" hidden><summary></summary><ul></ul></details>
 
       <dl class="readout">
         <div><dt>Bus A</dt><dd id="ro-a">—</dd></div>
@@ -141,7 +160,9 @@
         Every switch, wipe, key and effect is a real panel command through the mixer's reducer, on the
         song's bar grid; between takes the footage is re-patched into the inputs like a vision engineer
         would. A/V Synchro listens to the kick drum. <strong>Record</strong> plays from the top in real
-        time and downloads the program output with the song when it ends. <kbd>Space</kbd> play/pause ·
+        time and downloads the program output with the song when it ends. <strong>Load…</strong> opens a
+        music video file (or drop one on the page) together with any of its song and clips;
+        <strong>Save</strong> downloads the one playing. <kbd>Space</kbd> play/pause ·
         <kbd>←</kbd><kbd>→</kbd> previous/next section · <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> one bar.
       </footer>
     </main>

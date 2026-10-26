@@ -1,27 +1,31 @@
-// Records the music video to a file: drives the built /music-video/ page in headless Chrome,
-// presses its Record button, and lets the page's own download land in video/render/.
+// Records a music video to a file: drives the built /music-video/ page in headless Chrome
+// with ?video=<file>, presses its Record button, and lets the page's own download land in
+// video/render/, named after the video's title:
 //
-//   video/render/music-video.raw.<mp4|webm>   what the page's MediaRecorder produced
-//   video/render/music-video.mp4              re-encoded with ffmpeg (H.264/AAC, faststart,
-//                                             a proper duration and seek index — browser
-//                                             recordings have neither)
+//   video/render/<title>.raw.<mp4|webm>   what the page's MediaRecorder produced
+//   video/render/<title>.mp4              re-encoded with ffmpeg (H.264/AAC, faststart,
+//                                         a proper duration and seek index — browser
+//                                         recordings have neither)
 //
 // The recording is real time (5:09) and every frame is the shipping renderer. Headless
 // Chrome is never "hidden", so the render loop cannot be throttled the way a background
 // tab would be. Needs a WebGPU-capable Chrome (headless with --enable-unsafe-webgpu,
 // WITHOUT --disable-gpu) — a maintainer step on a machine with a GPU, not a CI one.
 //
-// Run: npm run site:build && npm run video:record
+// The file must be one of the video/*.json the site build copies next to the page.
+//
+// Run: npm run site:build && npm run video:record [-- video/first-cut.json]
 
 import { createServer } from 'node:http';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
-import { join, extname, dirname } from 'node:path';
+import { join, extname, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, execFileSync } from 'node:child_process';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SITE = join(ROOT, '_site');
 const OUT = join(ROOT, 'video', 'render');
+const INCOMING = join(OUT, '.incoming');
 const MIME = {
   '.html': 'text/html',
   '.js': 'text/javascript',
@@ -75,11 +79,11 @@ async function connect(wsUrl) {
   return { ws, send, evaluate };
 }
 
-/** The finished download: a music-video.* file with no Chrome partial beside it. */
+/** The finished download: a video file with no Chrome partial beside it. */
 function finishedDownload() {
-  const names = readdirSync(OUT);
+  const names = readdirSync(INCOMING);
   if (names.some((n) => n.endsWith('.crdownload'))) return null;
-  return names.find((n) => /^music-video\.(mp4|webm)$/.test(n)) ?? null;
+  return names.find((n) => /\.(mp4|webm)$/.test(n)) ?? null;
 }
 
 async function main() {
@@ -89,8 +93,15 @@ async function main() {
   const chrome = findChrome();
   if (!chrome) throw new Error('no Chrome found (set CHROME_PATH)');
 
+  const requested = process.argv.slice(2).filter((a) => !a.startsWith('--'))[0] ?? 'video/first-cut.json';
+  const docName = basename(requested);
+  if (resolve(requested) !== join(ROOT, 'video', docName) || !existsSync(join(SITE, 'music-video', 'video', docName))) {
+    throw new Error(`${requested}: record a music video file from video/ that the site build copied — run \`npm run site:build\` after adding it`);
+  }
+
   mkdirSync(OUT, { recursive: true });
-  for (const n of readdirSync(OUT)) if (n.startsWith('music-video.')) rmSync(join(OUT, n));
+  rmSync(INCOMING, { recursive: true, force: true });
+  mkdirSync(INCOMING, { recursive: true });
 
   const server = createServer((req, res) => {
     let file = join(SITE, decodeURIComponent(req.url.split('?')[0]));
@@ -137,7 +148,7 @@ async function main() {
 
     // Downloads are a browser-level setting: let the page's own download land in OUT.
     const browser = await connect(version.webSocketDebuggerUrl);
-    await browser.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: OUT });
+    await browser.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: INCOMING });
 
     const target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page');
     const page = await connect(target.webSocketDebuggerUrl);
@@ -145,7 +156,7 @@ async function main() {
     await page.send('Page.enable');
 
     // navigator.gpu exists only in a secure context, so ask from the page, not about:blank.
-    await page.send('Page.navigate', { url: `${base}/music-video/` });
+    await page.send('Page.navigate', { url: `${base}/music-video/?video=video/${encodeURIComponent(docName)}` });
     await sleep(500);
     const adapter = await page.evaluate('navigator.gpu ? navigator.gpu.requestAdapter().then((a) => !!a) : false');
     if (!adapter) throw new Error('this Chrome has no WebGPU adapter — the recording must come from the real renderer');
@@ -156,8 +167,13 @@ async function main() {
       state = (await page.evaluate(`document.getElementById('overlay')?.className ?? ''`)) ?? '';
     }
     if (!/ready/.test(state)) {
-      throw new Error(`the page never became ready: ${await page.evaluate(`document.getElementById('status')?.textContent`)}`);
+      const why = await page.evaluate(
+        `document.getElementById('status')?.textContent + '\\n' + [...document.querySelectorAll('#problems li')].map((li) => '  ' + li.textContent).join('\\n')`,
+      );
+      throw new Error(`the page could not load ${docName}: ${why}`);
     }
+    const title = await page.evaluate(`document.getElementById('title').textContent`);
+    process.stdout.write(`loaded "${title}" from ${requested}\n`);
 
     process.stdout.write('recording in real time (about 5 minutes)…\n');
     await page.evaluate(`document.getElementById('record').click()`);
@@ -176,8 +192,10 @@ async function main() {
     }
 
     const ext = extname(file);
-    const raw = join(OUT, `music-video.raw${ext}`);
-    renameSync(join(OUT, file), raw);
+    const stem = basename(file, ext);
+    const raw = join(OUT, `${stem}.raw${ext}`);
+    renameSync(join(INCOMING, file), raw);
+    rmSync(INCOMING, { recursive: true, force: true });
     process.stdout.write(`recorded ${raw}\n`);
 
     try {
@@ -186,7 +204,7 @@ async function main() {
       process.stdout.write('ffmpeg not found — keeping the raw recording only\n');
       return;
     }
-    const mp4 = join(OUT, 'music-video.mp4');
+    const mp4 = join(OUT, `${stem}.mp4`);
     execFileSync(
       'ffmpeg',
       ['-v', 'error', '-y', '-i', raw, '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p',
