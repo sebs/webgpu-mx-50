@@ -45,6 +45,13 @@ jobs:
       - id: pages
         uses: actions/configure-pages@v6
 
+      # The music video's 720p footage and AAC song, encoded from the committed originals in
+      # video/ (the proxies themselves are not committed).
+      - name: Encode music video media
+        run: |
+          command -v ffmpeg || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg; }
+          npm run video:media
+
       - name: Build site
         run: npm run site:build
         env:

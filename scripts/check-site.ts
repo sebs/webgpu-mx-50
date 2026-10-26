@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { LOOKS } from '../site/looks.js';
 import { TIMELINES } from '../site/timelines.js';
 import { POSTERS, LOOPS } from '../site/posters.js';
+import { CLIPS, SONG_FILE } from '../site/music-video/score.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -66,6 +67,8 @@ function checkFetchedAssets(): void {
   // A loop's <video> uses the same id's still as its poster frame.
   for (const id of LOOPS) required.push(`site/posters/${id}.webm`, `site/posters/${id}.jpg`);
   required.push('site/assets/social-card.jpg');
+  // The music video fetches its footage and song beside its own document.
+  for (const file of CLIPS.map((c) => c.file).concat([SONG_FILE])) required.push(`music-video/video/web/${file}`);
   for (const rel of required) {
     if (!existsSync(join(OUT, rel))) problems.push(`missing asset: ${rel}`);
   }
