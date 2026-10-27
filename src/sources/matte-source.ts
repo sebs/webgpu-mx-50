@@ -52,7 +52,7 @@ export class MatteSource implements Source {
       primitive: { topology: 'triangle-list' },
     });
 
-    // Uniforms: color (vec3f, 16-aligned) + gradation (f32) + isBars (f32) = 32 bytes.
+    // Uniforms: color (vec3f, 16-aligned) + gradation (f32, offset 12) + isBars (f32, offset 16) = 32 bytes.
     this.uniform = device.createBuffer({
       size: 32,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -74,8 +74,8 @@ export class MatteSource implements Source {
     const [r, g, b] = matteFlatColor(this.matte);
     const bars = isColourBar(this.matte.colorIndex) ? 1 : 0;
     const gradation = this.matte.gradation ? 1 : 0;
-    // std140 layout: [r, g, b, pad, gradation, isBars, pad, pad]
-    device.queue.writeBuffer(uniform, 0, new Float32Array([r, g, b, 0, gradation, bars, 0, 0]));
+    // WGSL packs the f32 after a vec3f into its 4th slot: [r, g, b, gradation, isBars, pad, pad, pad]
+    device.queue.writeBuffer(uniform, 0, new Float32Array([r, g, b, gradation, bars, 0, 0, 0]));
 
     const encoder = device.createCommandEncoder();
     const pass = encoder.beginRenderPass({
