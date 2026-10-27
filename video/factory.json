@@ -1,0 +1,257 @@
+{
+  "format": "web-mx-50/music-video",
+  "version": 1,
+  "title": "Factory",
+  "description": "A fairground at night: the Ferris wheel, two spinning rides and fireworks over Liberty, cut against light columns, dot rings, a hex tunnel and drawn shapes on the web-mx-50.",
+  "song": { "file": "Factory.m4a", "bpm": 129.01, "downbeat": 0.227, "length": 237.16 },
+  "clips": [
+    { "id": "wheel", "file": "2122-155244130.mp4", "label": "Ferris wheel", "duration": 31.791 },
+    { "id": "ride", "file": "119818-719443755.mp4", "label": "Aqua ride", "duration": 33 },
+    { "id": "dance", "file": "3834-175213527.mp4", "label": "Break dance", "duration": 48.481 },
+    { "id": "liberty", "file": "143629-784129617.mp4", "label": "Liberty fireworks", "duration": 12.033 },
+    { "id": "tunnel", "file": "56489-480081101.mp4", "label": "Hex tunnel", "duration": 8.36 },
+    { "id": "rings", "file": "204204-923582484.mp4", "label": "Dot rings", "duration": 6 },
+    { "id": "columns", "file": "1386-147055509.mp4", "label": "Light columns", "duration": 5 },
+    { "id": "streaks", "file": "1374-147055463.mp4", "label": "Light streaks", "duration": 13.033 },
+    { "id": "shapes", "file": "130870-748406273.mp4", "label": "Shapes", "duration": 10 }
+  ],
+  "patch": { "1": "liberty", "2": "wheel", "3": "rings", "4": "tunnel", "ext": "columns" },
+  "edit": [
+    { "section": "Intro · fireworks", "at": { "time": 0 } },
+    { "at": { "time": 0 }, "do": [
+      { "buses": [1, 2] }, { "transition": "mix" }, { "effect": { "bus": "A" } },
+      { "fade": { "target": "black", "video": true, "dsk": true } }, { "matte": "cyan" }, { "dsk": false }
+    ] },
+    { "move": "set", "lane": "lever", "at": { "time": 0 }, "value": 0 },
+    { "move": "set", "lane": "fade", "at": { "time": 0 }, "value": 1 },
+    { "move": "ramp", "lane": "fade", "from": 0, "to": 4, "values": [1, 0], "curve": "ease" },
+    { "at": 6, "note": "The light columns are bright on black: a reversed window keys everything above it.", "do": [
+      { "dsk": { "fill": "matte", "reverse": true } }
+    ], "play": { "columns": { "from": 0, "rate": 0.5 } } },
+    { "move": "set", "lane": "dskHigh", "at": 6, "value": 1 },
+    { "move": "ramp", "lane": "dskHigh", "from": 6, "to": 8, "values": [1, 0.55], "curve": "ease" },
+
+    { "section": "Intro · the wheel", "at": 8 },
+    { "at": 8, "do": [{ "colourCorrect": { "bus": "B", "mode": "chroma-plus-joystick" } }], "play": { "wheel": { "from": 0 } } },
+    { "move": "set", "lane": "chromaB", "at": 8, "value": 0.75 },
+    { "move": "ramp", "lane": "hueB", "from": 8, "to": 14, "values": [0, 0.5] },
+    { "move": "ramp", "lane": "lever", "from": 8, "to": 12, "values": [0, 1], "curve": "ease" },
+    { "at": 12, "note": "Liberty leaves Source 1 while bus A is off air; the tunnel takes its place.", "patch": { "1": "tunnel" } },
+    { "at": 13, "do": [{ "dsk": false }] },
+
+    { "section": "Build · into the tunnel", "at": 14 },
+    { "at": 14, "do": [
+      { "colourCorrect": { "bus": "B", "mode": "off" } }, { "effect": { "bus": "A", "mosaic": true } },
+      { "fade": { "target": "white", "video": true, "dsk": false } }
+    ] },
+    { "move": "cuts", "from": 14, "to": 16, "every": 2, "start": 0 },
+    { "move": "cuts", "from": 16, "to": 17, "every": 1, "start": 0 },
+    { "move": "cuts", "from": 17, "to": 18, "every": 0.5, "start": 0 },
+    { "move": "ramp", "lane": "mosaic", "from": 14, "to": 18, "values": [2, 28] },
+    { "move": "flash", "at": 18 },
+
+    { "section": "Drop I · cut on the beat", "at": 18 },
+    { "at": 18, "do": [
+      { "buses": [1, 2] }, { "transition": "mix" }, { "effect": { "bus": "A" } },
+      { "dsk": { "fill": "white", "reverse": true, "edge": "wide-border", "edgeColor": "magenta" } }
+    ], "patch": { "1": "dance", "2": "ride", "ext": "shapes" },
+    "play": { "dance": { "from": 0, "rate": 1 }, "ride": { "from": 0 }, "shapes": { "from": 0, "rate": 1 } } },
+    { "move": "set", "lane": "dskHigh", "at": 18, "value": 0.3 },
+    { "move": "cuts", "from": 18, "to": 26, "every": 2, "start": 0 },
+    { "at": 22, "do": [{ "avSynchro": ["nega"] }] },
+    { "move": "set", "lane": "avLevel", "at": 22, "value": 0.55 },
+
+    { "section": "Drop I · wipes", "at": 26 },
+    { "at": 26, "do": [{ "dsk": false }, { "avSynchro": [] }, { "effect": { "bus": "A", "multi": 4 } }, { "border": "cyan" }] },
+    { "at": 26, "do": [{ "wipe": { "pattern": 26, "edge": "border-wide" } }] },
+    { "at": 27, "do": [{ "wipe": { "pattern": 28, "edge": "border-wide" } }] },
+    { "at": 28, "do": [{ "wipe": { "pattern": 17, "edge": "border-wide", "multi": 1 } }] },
+    { "at": 29, "do": [{ "wipe": { "pattern": 21, "edge": "border-wide", "multi": 2 } }] },
+    { "at": 30, "do": [{ "wipe": { "pattern": 26, "edge": "border-wide", "multi": 3 } }, { "border": "magenta" }] },
+    { "at": 31, "do": [{ "wipe": { "pattern": 9, "reverse": true, "edge": "border-wide", "multi": 4 } }, { "border": "yellow" }] },
+    { "at": 28, "do": [{ "effect": { "bus": "A", "multi": 9 } }], "patch": { "2": "wheel" } },
+    { "move": "takes", "from": 26, "to": 32, "every": 4, "length": 1, "start": 1 },
+
+    { "section": "Break · rings over the wheel", "at": 32 },
+    { "at": 32, "note": "The dot rings are keyed over the wheel by brightness; the slice opens slowly through the break.", "do": [
+      { "transition": "lum-key" }, { "buses": [2, 3] }, { "effect": { "bus": "A" } },
+      { "colourCorrect": { "bus": "A", "mode": "chroma-only" } },
+      { "colourCorrect": { "bus": "B", "mode": "chroma-plus-joystick" } }
+    ], "play": { "wheel": { "from": 8, "rate": 0.6 }, "rings": { "from": 0, "rate": 0.75 } } },
+    { "move": "set", "lane": "lever", "at": 32, "value": 1 },
+    { "move": "set", "lane": "chromaA", "at": 32, "value": 0.2 },
+    { "move": "set", "lane": "chromaB", "at": 32, "value": 1 },
+    { "move": "ramp", "lane": "hueB", "from": 32, "to": 42, "values": [0, 1.25] },
+    { "move": "ramp", "lane": "slice", "from": 32, "to": 36, "values": [0.15, 0.55], "curve": "ease" },
+    { "move": "ramp", "lane": "slice", "from": 36, "to": 40, "values": [0.55, 0.2], "curve": "ease" },
+    { "at": 34, "do": [{ "effect": { "bus": "B", "trail": true } }] },
+    { "at": 38, "do": [{ "effect": { "bus": "B", "strobe": true } }] },
+    { "move": "ramp", "lane": "strobe", "from": 38, "to": 42, "values": [0.7, 0] },
+    { "move": "pump", "from": 40, "to": 42, "low": 0.15, "high": 0.7 },
+    { "at": 41, "do": [{ "fade": { "target": "white", "video": true, "dsk": false } }] },
+    { "move": "flash", "at": 42 },
+
+    { "section": "Drop II · four-source punch", "at": 42 },
+    { "at": 42, "do": [
+      { "transition": "mix" }, { "effect": { "bus": "B" } }, { "effect": { "bus": "A", "multi": 4 } },
+      { "colourCorrect": { "bus": "A", "mode": "off" } }, { "colourCorrect": { "bus": "B", "mode": "off" } }
+    ], "patch": { "1": "dance", "2": "ride", "3": "wheel", "4": "tunnel" },
+    "play": { "dance": { "from": 12 }, "ride": { "from": 10 }, "wheel": { "from": 20, "rate": 1 }, "tunnel": { "from": 0 } } },
+    { "move": "set", "lane": "lever", "at": 42, "value": 0 },
+    { "move": "punch", "bus": "A", "from": 42, "to": 50, "every": 1, "sources": [1, 2, 1, 3, 1, 2, 4, 2, 2, 1, 3, 1, 4, 1, 2, 3] },
+    { "at": 46, "do": [{ "effect": { "bus": "A", "multi": 16 } }] },
+
+    { "section": "Drop II · tunnel key", "at": 50 },
+    { "at": 50, "do": [
+      { "transition": "lum-key" }, { "buses": [1, 4] }, { "effect": { "bus": "A" } },
+      { "colourCorrect": { "bus": "A", "mode": "chroma-plus-joystick" } },
+      { "colourCorrect": { "bus": "B", "mode": "chroma-plus-joystick" } }
+    ] },
+    { "move": "set", "lane": "lever", "at": 50, "value": 1 },
+    { "move": "set", "lane": "chromaA", "at": 50, "value": 0.8 },
+    { "move": "set", "lane": "chromaB", "at": 50, "value": 0.9 },
+    { "move": "pump", "from": 50, "to": 56, "low": 0.25, "high": 0.75 },
+    { "move": "ramp", "lane": "hueA", "from": 50, "to": 56, "values": [0, 1] },
+    { "move": "ramp", "lane": "hueB", "from": 50, "to": 56, "values": [0.5, -0.5] },
+    { "at": 52, "patch": { "1": "ride" } },
+    { "at": 54, "patch": { "1": "dance" } },
+    { "at": 54, "do": [{ "effect": { "bus": "A", "trail": true } }] },
+
+    { "section": "Break · slow trails", "at": 56 },
+    { "at": 56, "do": [
+      { "transition": "nam" }, { "buses": [1, 2] }, { "effect": { "bus": "B", "trail": true } },
+      { "colourCorrect": { "bus": "A", "mode": "off" } }, { "colourCorrect": { "bus": "B", "mode": "off" } }
+    ], "patch": { "1": "wheel", "2": "liberty" }, "play": { "wheel": { "from": 0, "rate": 0.5 }, "liberty": { "from": 0, "rate": 0.75 } } },
+    { "move": "ramp", "lane": "lever", "from": 56, "to": 58, "values": [0.3, 0.75], "curve": "ease" },
+    { "move": "ramp", "lane": "lever", "from": 58, "to": 60, "values": [0.75, 0.3], "curve": "ease" },
+    { "move": "ramp", "lane": "lever", "from": 60, "to": 62, "values": [0.3, 0.8], "curve": "ease" },
+    { "at": 61, "do": [{ "fade": { "target": "white", "video": true, "dsk": false } }] },
+    { "move": "flash", "at": 62 },
+    { "at": 62, "do": [{ "transition": "mix" }, { "effect": { "bus": "B" } }, { "effect": { "bus": "A", "mosaic": true } }], "patch": { "2": "streaks" } },
+    { "move": "set", "lane": "lever", "at": 62, "value": 0 },
+    { "move": "steps", "lane": "mosaic", "from": 62, "every": 1, "values": [31, 29, 27, 25, 23, 21, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1] },
+    { "move": "cuts", "from": 64, "to": 65, "every": 1, "start": 1 },
+    { "move": "cuts", "from": 65, "to": 66, "every": 0.5, "start": 1 },
+
+    { "section": "Drop III · fairground montage", "at": 66 },
+    { "at": 66, "do": [{ "effect": { "bus": "A" } }, { "buses": [1, 2] }, { "avSynchro": ["nega"] }],
+      "play": { "wheel": { "rate": 1 }, "liberty": { "rate": 1 } } },
+    { "move": "set", "lane": "lever", "at": 66, "value": 0 },
+    { "move": "set", "lane": "avLevel", "at": 66, "value": 0.6 },
+    { "move": "montage", "input": 1, "from": 66, "to": 74, "every": 1,
+      "clips": ["dance", "ride", "wheel", "dance", "liberty", "ride", "dance", "wheel", "ride", "dance", "tunnel", "ride", "wheel", "dance", "ride", "liberty"] },
+    { "at": 70, "do": [{ "effect": { "bus": "A", "paint": true } }, { "avSynchro": ["nega"] }] },
+
+    { "section": "Break · light on black", "at": 74 },
+    { "at": 74, "do": [
+      { "avSynchro": [] }, { "effect": { "bus": "A" } }, { "fade": { "target": "black", "video": true, "dsk": false } },
+      { "dsk": { "fill": "white", "reverse": true, "edge": "wide-border", "edgeColor": "cyan" } }
+    ], "patch": { "1": "wheel" } },
+    { "move": "set", "lane": "dskHigh", "at": 74, "value": 0.3 },
+    { "move": "ramp", "lane": "fade", "from": 74, "to": 75, "values": [0, 1], "curve": "ease" },
+    { "move": "rotate", "input": "ext", "from": 74, "to": 78, "every": 2, "clips": ["columns", "shapes"] },
+    { "move": "rotate", "input": "ext", "from": 78, "to": 82, "every": 2, "rate": 0.5, "clips": ["rings", "columns"] },
+    { "at": 80, "do": [{ "dsk": { "fill": "matte", "reverse": true, "edge": "drop-shadow" } }, { "matte": "magenta" }] },
+    { "move": "set", "lane": "fade", "at": 81, "value": 1, "curve": "ease" },
+    { "move": "set", "lane": "fade", "at": 82, "value": 0 },
+
+    { "section": "Call and answer", "at": 82 },
+    { "at": 82, "note": "The song alternates a loud bar and a quiet one: the loud bars get the ride, the quiet ones the streaks.", "do": [
+      { "dsk": false }, { "buses": [1, 2] }, { "effect": { "bus": "A", "nega": true, "trail": true } }
+    ], "patch": { "1": "streaks", "2": "dance" }, "play": { "streaks": { "from": 0 }, "dance": { "from": 20 } } },
+    { "move": "cuts", "from": 82, "to": 92, "every": 4, "start": 1 },
+    { "at": 86, "patch": { "2": "ride" } },
+    { "at": 88, "do": [{ "effect": { "bus": "B", "multi": 4 } }] },
+    { "at": 89, "patch": { "2": "dance" } },
+    { "at": 90, "do": [{ "effect": { "bus": "B", "multi": 9 } }] },
+
+    { "section": "Breakdown · orbiting fireworks", "at": 92 },
+    { "at": 92, "do": [
+      { "effect": { "bus": "A" } }, { "wipe": { "pattern": 26, "edge": "border-wide" } }, { "positioner": true }, { "border": "magenta" },
+      { "colourCorrect": { "bus": "A", "mode": "chroma-plus-joystick" } }
+    ], "patch": { "1": "wheel", "2": "liberty" }, "play": { "wheel": { "from": 4, "rate": 0.5 }, "liberty": { "from": 0 } } },
+    { "move": "set", "lane": "lever", "at": 92, "value": 0.45 },
+    { "move": "set", "lane": "chromaA", "at": 92, "value": 0.8 },
+    { "move": "ramp", "lane": "orbit", "from": 92, "to": 98, "values": [0, 2] },
+    { "move": "ramp", "lane": "hueA", "from": 92, "to": 98, "values": [0, 1] },
+
+    { "section": "Build", "at": 98 },
+    { "at": 98, "do": [
+      { "positioner": false }, { "transition": "mix" }, { "colourCorrect": { "bus": "A", "mode": "off" } },
+      { "buses": [1, 2] }, { "fade": { "target": "white", "video": true, "dsk": false } }
+    ], "patch": { "1": "tunnel", "2": "dance" }, "play": { "tunnel": { "from": 0 }, "dance": { "from": 30 } } },
+    { "move": "cuts", "from": 98, "to": 99, "every": 2, "start": 1 },
+    { "move": "cuts", "from": 99, "to": 100, "every": 1, "start": 1 },
+    { "move": "cuts", "from": 100, "to": 101, "every": 0.5, "start": 1 },
+    { "move": "cuts", "from": 101, "to": 102, "every": 0.25, "start": 1 },
+    { "at": 100, "do": [{ "effect": { "bus": "A", "mono": true, "mosaic": true } }] },
+    { "move": "ramp", "lane": "mosaic", "from": 100, "to": 102, "values": [2, 31] },
+    { "move": "flash", "at": 102 },
+
+    { "section": "Drop IV · the whole panel", "at": 102 },
+    { "at": 102, "do": [
+      { "effect": { "bus": "A" } }, { "buses": [1, 2] },
+      { "colourCorrect": { "bus": "A", "mode": "chroma-plus-joystick" } },
+      { "colourCorrect": { "bus": "B", "mode": "chroma-plus-joystick" } },
+      { "dsk": { "fill": "white", "reverse": true, "edge": "wide-border", "edgeColor": "yellow" } }
+    ], "patch": { "1": "ride", "2": "dance" } },
+    { "move": "set", "lane": "dskHigh", "at": 102, "value": 0.3 },
+    { "move": "set", "lane": "chromaA", "at": 102, "value": 0.9 },
+    { "move": "set", "lane": "chromaB", "at": 102, "value": 0.9 },
+    { "move": "ramp", "lane": "hueA", "from": 102, "to": 110, "values": [0, 2] },
+    { "move": "ramp", "lane": "hueB", "from": 102, "to": 110, "values": [0.5, -1.5] },
+    { "at": 102, "do": [{ "wipe": { "pattern": 17, "edge": "border-wide", "multi": 1 } }, { "border": "yellow" }] },
+    { "at": 103, "do": [{ "wipe": { "pattern": 21, "edge": "border-wide", "multi": 2 } }, { "border": "cyan" }] },
+    { "at": 104, "do": [{ "wipe": { "pattern": 25, "edge": "border-wide", "multi": 3 } }, { "border": "magenta" }] },
+    { "at": 105, "do": [{ "wipe": { "pattern": 13, "reverse": true, "edge": "border-wide", "multi": 4 } }, { "border": "green" }] },
+    { "at": 106, "do": [{ "wipe": { "pattern": 27, "edge": "border-wide", "multi": 5 } }, { "border": "red" }] },
+    { "at": 107, "do": [{ "wipe": { "pattern": 22, "edge": "border-wide", "multi": 6 } }, { "border": "blue" }] },
+    { "at": 108, "do": [{ "wipe": { "pattern": 8, "edge": "border-wide", "multi": 1 } }, { "border": "white" }] },
+    { "at": 109, "do": [{ "wipe": { "pattern": 28, "edge": "border-wide", "multi": 2 } }, { "border": "yellow" }] },
+    { "move": "takes", "from": 102, "to": 110, "every": 2, "length": 1, "start": 0 },
+    { "move": "rotate", "input": "ext", "from": 102, "to": 110, "every": 1, "clips": ["shapes", "columns", "rings"] },
+    { "at": 106, "patch": { "2": "wheel" } },
+
+    { "section": "Drop IV · strobing tunnel", "at": 110 },
+    { "at": 110, "do": [
+      { "transition": "lum-key" }, { "buses": [1, 4] }, { "effect": { "bus": "A", "strobe": true } }, { "dsk": false }
+    ], "patch": { "1": "dance", "4": "tunnel" }, "play": { "tunnel": { "from": 0, "rate": 1.5 } } },
+    { "move": "set", "lane": "lever", "at": 110, "value": 1 },
+    { "move": "set", "lane": "strobe", "at": 110, "value": 0.2 },
+    { "move": "pump", "from": 110, "to": 116, "low": 0.2, "high": 0.7 },
+    { "at": 112, "patch": { "1": "ride" } },
+    { "at": 114, "patch": { "1": "dance", "4": "rings" } },
+
+    { "section": "Hold", "at": 116 },
+    { "at": 116, "do": [
+      { "transition": "mix" }, { "effect": { "bus": "A", "still": true } },
+      { "colourCorrect": { "bus": "A", "mode": "off" } }, { "colourCorrect": { "bus": "B", "mode": "off" } },
+      { "fade": { "target": "black", "video": true, "dsk": true } }
+    ] },
+    { "move": "set", "lane": "lever", "at": 116, "value": 0 },
+    { "move": "ramp", "lane": "fade", "from": 116, "to": 117.75, "values": [0, 0.65] },
+    { "move": "set", "lane": "fade", "at": 118, "value": 0 },
+
+    { "section": "Climax · montage", "at": 118 },
+    { "at": 118, "do": [{ "effect": { "bus": "A" } }, { "buses": [1, 2] }, { "avSynchro": ["nega"] }],
+      "play": { "dance": { "rate": 1 }, "ride": { "rate": 1 }, "tunnel": { "rate": 1 } } },
+    { "move": "set", "lane": "avLevel", "at": 118, "value": 0.6 },
+    { "move": "montage", "input": 1, "from": 118, "to": 120, "every": 1,
+      "clips": ["dance", "ride", "wheel", "tunnel", "dance", "ride", "liberty", "wheel"] },
+    { "at": 119, "do": [{ "fade": { "target": "white", "video": true, "dsk": false } }] },
+    { "move": "flash", "at": 120 },
+    { "at": 120, "do": [{ "effect": { "bus": "A", "multi": 4 } }] },
+    { "move": "montage", "input": 1, "from": 120, "to": 124, "every": 0.5,
+      "clips": ["dance", "ride", "dance", "wheel", "ride", "tunnel", "dance", "liberty", "ride", "rings", "dance", "wheel", "ride", "columns", "dance", "streaks"] },
+    { "at": 122, "do": [{ "effect": { "bus": "A", "multi": 16 } }] },
+
+    { "section": "Out", "at": 124 },
+    { "at": 124, "do": [
+      { "avSynchro": [] }, { "effect": { "bus": "A" } }, { "fade": { "target": "black", "video": true, "dsk": false } },
+      { "dsk": { "fill": "white", "reverse": true, "edge": "normal" } }
+    ], "patch": { "1": "wheel", "ext": "rings" }, "play": { "wheel": { "rate": 0.5 }, "rings": { "from": 0, "rate": 0.5 } } },
+    { "move": "set", "lane": "dskHigh", "at": 124, "value": 0.3 },
+    { "move": "ramp", "lane": "fade", "from": 124, "to": 125.5, "values": [0, 1], "curve": "ease" },
+    { "move": "ramp", "lane": "dskHigh", "from": 125.5, "to": 127, "values": [0.3, 1], "curve": "ease" }
+  ]
+}

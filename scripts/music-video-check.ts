@@ -37,8 +37,9 @@ function findMedia(file: string, docDir: string): string | null {
 }
 
 function formatTime(t: number): string {
-  const m = Math.floor(t / 60);
-  const s = t - m * 60;
+  const tenths = Math.round(t * 10); // round first, or 189.97 s prints as 3:010.0
+  const m = Math.floor(tenths / 600);
+  const s = (tenths - m * 600) / 10;
   return `${m}:${s < 10 ? '0' : ''}${s.toFixed(1)}`;
 }
 
