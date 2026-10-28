@@ -1,5 +1,6 @@
-// Encodes the footage and songs in video/ into the browser copies music-video.html loads
-// from video/web/ — the names a music video file (docs/MUSIC-VIDEO-FORMAT.md) refers to:
+// Encodes the footage and songs in video/<video>/ into the browser copies music-video.html
+// loads from video/web/<video>/ — the names a music video file (docs/MUSIC-VIDEO-FORMAT.md)
+// refers to, as "<video>/<name>.mp4":
 //
 //   <name>.mp4   from any video (.mp4 .mov .m4v .webm .mkv): 1920×1080 H.264, no audio,
 //                a keyframe every 6 frames — the page retriggers clips on the beat, and a
@@ -34,13 +35,25 @@ function upToDate(source, target) {
   return !force && existsSync(target) && statSync(target).mtimeMs >= statSync(source).mtimeMs;
 }
 
+/** Every media file in a video's folder, as paths relative to video/ ("factory/Factory.wav"). */
+function mediaFiles() {
+  const files = [];
+  for (const dir of readdirSync(SRC).sort()) {
+    if (dir === 'web' || dir === 'render' || !statSync(join(SRC, dir)).isDirectory()) continue;
+    for (const name of readdirSync(join(SRC, dir)).sort()) {
+      if (statSync(join(SRC, dir, name)).isFile()) files.push(`${dir}/${name}`);
+    }
+  }
+  return files;
+}
+
 let made = 0;
 let kept = 0;
-for (const name of readdirSync(SRC).sort()) {
+for (const name of mediaFiles()) {
   const source = join(SRC, name);
-  if (!statSync(source).isFile()) continue;
   const ext = extname(name).toLowerCase();
-  const stem = basename(name, extname(name));
+  const stem = join(dirname(name), basename(name, extname(name)));
+  mkdirSync(join(OUT, dirname(name)), { recursive: true });
   if (VIDEO.indexOf(ext) !== -1) {
     const out = join(OUT, `${stem}.mp4`);
     if (upToDate(source, out)) {

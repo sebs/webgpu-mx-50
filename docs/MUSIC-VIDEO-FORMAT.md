@@ -16,10 +16,12 @@ JSON path, so the loop is: write → `npm run video:check` → fix → load.
 
 ## Workflow
 
-1. Put the song and the clips in `video/` and run `npm run video:media`. It encodes Full HD
-   copies into `video/web/` — `clip.mov` becomes `web/clip.mp4`, `track.wav` becomes
-   `web/track.m4a`. **The file refers to these encoded names.**
-2. `npm run video:analyse -- video/track.wav` measures the song: `bpm`, `downbeat`, length,
+1. Put the song and the clips in a folder of their own, `video/<name>/`, and run
+   `npm run video:media`. It encodes Full HD copies into `video/web/<name>/` —
+   `<name>/clip.mov` becomes `web/<name>/clip.mp4`, `<name>/track.wav` becomes
+   `web/<name>/track.m4a`. **The file refers to these encoded names, folder included**
+   (`"<name>/clip.mp4"`).
+2. `npm run video:analyse -- video/<name>/track.wav` measures the song: `bpm`, `downbeat`, length,
    the energy of every bar, and suggested section starts (drops are "high", breaks "low").
 3. Write `video/<name>.json`.
 4. `npm run video:check -- video/<name>.json` until it says `ok`.
@@ -52,10 +54,10 @@ Bars before 0 do not exist: anything before the first downbeat uses `{"time": �
   "version": 1,
   "title": "Night drive",
   "description": "optional, free text",
-  "song": { "file": "track.m4a", "bpm": 124, "downbeat": 0.21, "length": 241.5 },
+  "song": { "file": "night-drive/track.m4a", "bpm": 124, "downbeat": 0.21, "length": 241.5 },
   "clips": [
-    { "id": "city", "file": "city.mp4", "label": "City", "duration": 12.4 },
-    { "id": "lines", "file": "lines.mp4" }
+    { "id": "city", "file": "night-drive/city.mp4", "label": "City", "duration": 12.4 },
+    { "id": "lines", "file": "night-drive/lines.mp4" }
   ],
   "patch": { "1": "city", "2": "city", "3": "lines", "4": "lines", "ext": "lines" },
   "edit": []
@@ -66,7 +68,7 @@ Bars before 0 do not exist: anything before the first downbeat uses `{"time": �
 |---|---|---|
 | `format`, `version` | yes | exactly `"web-mx-50/music-video"` and `1` |
 | `title` | yes | shown on the page; also names Save and recordings |
-| `song.file` | yes | the soundtrack (an encoded name in `video/web/`) |
+| `song.file` | yes | the soundtrack (an encoded name under `video/web/`, e.g. `night-drive/track.m4a`) |
 | `song.bpm`, `song.downbeat` | yes | the grid, from `video:analyse` |
 | `song.length` | no | seconds; measured from the song when left out |
 | `clips[]` | yes | `id` (your name for it), `file`, optional `label` and `duration` (measured when left out). Clips loop. |
@@ -248,11 +250,11 @@ and a fade out.
   "format": "web-mx-50/music-video",
   "version": 1,
   "title": "Sixteen bars",
-  "song": { "file": "song.m4a", "bpm": 130.97, "downbeat": 0.503 },
+  "song": { "file": "first-cut/song.m4a", "bpm": 130.97, "downbeat": 0.503 },
   "clips": [
-    { "id": "crew", "file": "142032-779071806.mp4", "label": "Crew" },
-    { "id": "crowd", "file": "142030-779071797.mp4", "label": "Crowd" },
-    { "id": "drawing", "file": "140629-775595871.mp4", "label": "Drawing" }
+    { "id": "crew", "file": "first-cut/142032-779071806.mp4", "label": "Crew" },
+    { "id": "crowd", "file": "first-cut/142030-779071797.mp4", "label": "Crowd" },
+    { "id": "drawing", "file": "first-cut/140629-775595871.mp4", "label": "Drawing" }
   ],
   "patch": { "1": "crew", "2": "crowd", "3": "crew", "4": "crowd", "ext": "drawing" },
   "edit": [

@@ -3,14 +3,14 @@
   "version": 1,
   "title": "First cut",
   "description": "Six clips on one song: the spiral, three line-drawn dancers, a street crowd and a dance crew, cut live on the web-mx-50.",
-  "song": { "file": "song.m4a", "bpm": 130.97, "downbeat": 0.503, "length": 309.52 },
+  "song": { "file": "first-cut/song.m4a", "bpm": 130.97, "downbeat": 0.503, "length": 309.52 },
   "clips": [
-    { "id": "spiral", "file": "135378-761676435.mp4", "label": "Spiral", "duration": 10 },
-    { "id": "line1", "file": "140629-775595871.mp4", "label": "Line dancer I", "duration": 5.666 },
-    { "id": "line2", "file": "140630-775595877.mp4", "label": "Line dancer II", "duration": 5.75 },
-    { "id": "line3", "file": "140631-775595881.mp4", "label": "Line dancer III", "duration": 5.75 },
-    { "id": "crowd", "file": "142030-779071797.mp4", "label": "Crowd", "duration": 14.931 },
-    { "id": "crew", "file": "142032-779071806.mp4", "label": "Crew", "duration": 22.564 }
+    { "id": "spiral", "file": "first-cut/135378-761676435.mp4", "label": "Spiral", "duration": 10 },
+    { "id": "line1", "file": "first-cut/140629-775595871.mp4", "label": "Line dancer I", "duration": 5.666 },
+    { "id": "line2", "file": "first-cut/140630-775595877.mp4", "label": "Line dancer II", "duration": 5.75 },
+    { "id": "line3", "file": "first-cut/140631-775595881.mp4", "label": "Line dancer III", "duration": 5.75 },
+    { "id": "crowd", "file": "first-cut/142030-779071797.mp4", "label": "Crowd", "duration": 14.931 },
+    { "id": "crew", "file": "first-cut/142032-779071806.mp4", "label": "Crew", "duration": 22.564 }
   ],
   "patch": { "1": "crew", "2": "crowd", "3": "spiral", "4": "line1", "ext": "line1" },
   "edit": [

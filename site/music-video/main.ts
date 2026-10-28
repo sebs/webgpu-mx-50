@@ -55,11 +55,15 @@ function stemOf(name: string): string {
   return dot > 0 ? name.slice(0, dot) : name;
 }
 
-/** A picked file for a name in the document: the same name, else the same stem (track.wav for track.m4a). */
+/**
+ * A picked file for a name in the document: the same name, else the same stem (track.wav for
+ * track.m4a). Picked files have no folder, so "factory/track.m4a" is matched as "track.m4a".
+ */
 function pickedFor(file: string, picked: Map<string, File>): File | undefined {
-  const exact = picked.get(file);
+  const name = file.slice(file.lastIndexOf('/') + 1);
+  const exact = picked.get(name);
   if (exact) return exact;
-  const stem = stemOf(file);
+  const stem = stemOf(name);
   let found: File | undefined;
   picked.forEach((f, name) => {
     if (!found && stemOf(name) === stem) found = f;

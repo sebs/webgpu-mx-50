@@ -28,7 +28,7 @@ function findMedia(file: string, docDir: string): string | null {
   if (existsSync(join(WEB, file))) return join(WEB, file);
   if (existsSync(join(docDir, file))) return join(docDir, file);
   // A Load from disk matches by stem too (track.wav stands in for track.m4a).
-  for (const dir of [docDir, WEB]) {
+  for (const dir of [join(docDir, dirname(file)), join(WEB, dirname(file))]) {
     if (!existsSync(dir)) continue;
     const hit = readdirSync(dir).filter((n) => stem(n) === stem(file))[0];
     if (hit) return join(dir, hit);
