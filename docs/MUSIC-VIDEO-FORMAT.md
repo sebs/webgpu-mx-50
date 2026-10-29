@@ -23,13 +23,22 @@ JSON path, so the loop is: write → `npm run video:check` → fix → load.
    (`"<name>/clip.mp4"`).
 2. `npm run video:analyse -- video/<name>/track.wav` measures the song: `bpm`, `downbeat`, length,
    the energy of every bar, and suggested section starts (drops are "high", breaks "low").
-3. Write `video/<name>.json`.
-4. `npm run video:check -- video/<name>.json` until it says `ok`.
-5. Watch it: `npm run dev`, open `/music-video.html?video=video/<name>.json`, or press
-   **Load…** and pick the `.json` (plus any media not in `video/web/`). **Save** writes the
-   loaded file back out.
-6. Record it: `npm run site:build && npm run video:record -- video/<name>.json` →
-   `video/render/<title>.mp4`.
+3. `npm run video:clips -- video/<name>` measures the footage: each clip's ready-to-paste
+   `clips[]` entry, its cuts and phases (where the picture changes without a cut), and per
+   phase the numbers for the keys — brightness percentiles for `slice` and the DSK window,
+   the share of grey, and the main hues with how much the Chroma Key removes at each — plus
+   a contact sheet per clip in `video/render/clips/<name>/`.
+4. Write `video/<name>.json`.
+5. `npm run video:check -- video/<name>.json` until it says `ok`.
+6. Look at it: `npm run site:build` once, then `npm run video:frames -- video/<name>.json`
+   for one still per section from the real renderer, laid out on a labelled
+   `video/render/frames/<name>/contact.jpg` (give bars — `… 16 44.5` — for those moments, or
+   `--every 4` for the whole cut). It reads the file from `video/`, so after an edit just run
+   it again. To watch: `npm run dev`, open `/music-video.html?video=video/<name>.json`, or
+   press **Load…** and pick the `.json` (plus any media not in `video/web/`). **Save** writes
+   the loaded file back out.
+7. Record it: `npm run video:record -- video/<name>.json` → `video/render/<title>.mp4`
+   (real time; after `npm run site:build` once).
 
 ## Time
 
@@ -71,8 +80,9 @@ Bars before 0 do not exist: anything before the first downbeat uses `{"time": �
 | `song.file` | yes | the soundtrack (an encoded name under `video/web/`, e.g. `night-drive/track.m4a`) |
 | `song.bpm`, `song.downbeat` | yes | the grid, from `video:analyse` |
 | `song.length` | no | seconds; measured from the song when left out |
-| `clips[]` | yes | `id` (your name for it), `file`, optional `label` and `duration` (measured when left out). Clips loop. |
+| `clips[]` | yes | `id` (your name for it), `file`, optional `label` and `duration` (measured when left out; needed for `until`). Clips loop unless played `once`. |
 | `patch` | yes | which clip feeds each **input** at the start: Sources `"1"`–`"4"` and `"ext"` (External Camera In — the Downstream Key's title input). All five are required; one clip may feed several inputs. |
+| `looks` | no | named recipes a cue applies with `{"look": name}` (see [Looks](#looks)) |
 | `edit` | no | the cut: sections, cues and moves, read top to bottom |
 
 ## The mixer in one page
@@ -86,7 +96,10 @@ The cut is played by a 1990s two-bus vision mixer. What matters for writing a fi
   `mix` (dissolve), `nam` (the brighter picture wins, pixel by pixel), `wipe` (a pattern
   reveals B), `lum-key` (B is keyed over A by **brightness**: B's pixels at or above the
   **slice** level are kept, darker ones show A; the lever is the key's opacity),
-  `chroma-key` (B keyed by hue; set the hue with a raw `SET_HUE` command).
+  `chroma-key` (B keyed by **hue**: set it with a raw `SET_HUE` command, 0–1 round the
+  wheel as a colour picker reads the frame — 0 red, 0.33 green, 0.53 a pale blue sky,
+  0.67 blue; `slice` sets how far round it reaches, and a narrow slice keys with a sharper
+  edge. Greys, whites and blacks have no hue and are never keyed).
 - **Digital effect** works on **one bus at a time** (A or B): filters `nega`, `mosaic`,
   `mono`, `paint` and the frame-memory effects `still`, `strobe`, `trail`, `multi`
   (a grid of 4, 9 or 16 pictures). It sits before the transition, so an effect on B is
@@ -137,6 +150,20 @@ A named marker: the page's section label, its ticks on the scrubber, and ←/→
 - `play` — restart a clip at `from` seconds, and/or change its playback `rate`
   (0.0625–16; 0.5 is half speed). Without `from` the clip continues where it is.
   A clip keeps running whether or not it is patched anywhere.
+  - `"until": <bar>` plays it from `from` (default: its start) to its end, arriving on that
+    bar: the rate is worked out for you, so a story clip fills its section exactly. Needs
+    the clip's `duration`; leave `rate` out.
+  - `"once": true` stops at the end and holds the last frame instead of looping.
+  - `"end": <seconds>` stops (with `once`) or arrives (with `until`) there instead of at
+    the clip's end — play part of a clip.
+  - A restart (`from`) loops again unless it says `once`; a rate change keeps the mode.
+
+  ```json
+  "play": { "cat": { "until": 32, "once": true } }
+  ```
+
+  A clip timed with `until` but not `once` that is still patched into an input when it
+  gets there plays on from its start: the checker warns, with the bar.
 
 ### Steps
 
@@ -158,6 +185,7 @@ safely.
 | `border` | colour name | the wipe border colour (needs a `border-*` edge) |
 | `positioner` | `true` · `false` | picture-in-picture: B in a box over A. **Needs a square-family wipe (25–28) selected first.** The lever sizes the box, the `orbit` lane moves it. |
 | `command` | a raw store command, e.g. `{ "type": "SET_HUE", "angle": 0.3 }` | escape hatch for controls without a step (`SET_HUE`, `SET_PAINT_LEVEL`, `SET_WIPE_ASPECT`, `PRESS_COMPRESSION`, `SET_MULTI_MODE`, …). Runner commands (Auto Take/Fade) are not allowed. |
+| `look` | a name from `looks` | the look's steps, in place, and its lane values at this cue |
 
 Colour names: `white` `yellow` `cyan` `green` `magenta` `red` `blue` `black`.
 
@@ -174,11 +202,18 @@ Moves write **lanes** (continuous controls, next section) and generate cues.
 | `takes` | `from`, `to`, `every` (beats), `length` (beats), `start`?, `curve`? | the lever travels across in `length` beats, every `every` beats, alternating direction — dissolves or wipes on the beat |
 | `pump` | `from`, `to`, `low`, `high` | the slice drops to `low` on every beat and opens to `high` before the next — a key that breathes with the kick |
 | `flash` | `at` | the fade lane rises over the beat before `at` and lets go over the two beats after. Set the fade `target` (e.g. `white`) in a cue first. |
-| `rotate` | `input`, `from`, `to`, `every` (**bars**), `clips: [...]`, `rate`? | patch the next clip from the list into the input every `every` bars, restarting it |
-| `montage` | `input`, `from`, `to`, `every` (beats), `clips: [...]`, `stagger`? | a different clip into the input every step, each entering `k × stagger` seconds into itself (default 1.37) |
+| `rotate` | `input`, `from`, `to`, `every` (**bars**), `clips: [...]`, `rate`? | patch the next clip from the list into the input every `every` bars, restarting it (at its start, or the item's `from`) |
+| `montage` | `input`, `from`, `to`, `every` (beats), `clips: [...]`, `stagger`? | a different clip into the input every step, each entering `k × stagger` seconds into itself (default 1.37) — or where the item says |
 | `punch` | `bus`, `from`, `to`, `every` (beats), `sources: [...]` | switch the bus to the next source (1–4, `"matte"`) every step — an operator punching buttons |
 
 `input` is `1`–`4` or `"ext"`. A span runs from `from` up to (not including) `to`.
+
+A `clips` item is a clip id, or `{ "clip": id, "from": seconds }` to choose the moment it
+enters at — a recap of the best moments, in story order:
+
+```json
+"clips": [{ "clip": "cat", "from": 11 }, { "clip": "square", "from": 2.5 }, "laundry"]
+```
 
 ### Lanes
 
@@ -199,6 +234,34 @@ A lane is silent until its first point; from then on **it owns that control** an
 every frame, holding its last value forever — a cue or raw command on the same control is
 overridden (the checker warns). So: give `lever` and `fade` a point at `{"time": 0}`, and
 use lanes, not cues, for anything that moves.
+
+### Looks
+
+A section's recipe often comes back later in the song. Name it once at the top of the
+file and apply it with a `look` step:
+
+```json
+"looks": {
+  "tunnel-sky": {
+    "note": "optional, free text",
+    "do": [{ "transition": "chroma-key" }, { "buses": [3, 1] }, { "command": { "type": "SET_HUE", "angle": 0.53 } }],
+    "lanes": { "lever": 1, "slice": 0.38 }
+  }
+}
+```
+
+```json
+{ "at": 16, "do": [{ "look": "tunnel-sky" }, { "colourCorrect": { "bus": "A", "mode": "off" } }] }
+```
+
+- `do` — steps, applied where the `look` step stands; steps after it in the cue win.
+- `lanes` — values the look sets at the cue's moment (a `set` with `hold`), so a look can
+  carry what only lanes control, like `lever` and `slice`. A move later in the file at the
+  same moment wins: keep the look and override one value.
+- A look cannot use another look. A mistake inside a look is reported once (at its first
+  use, with both paths: `$.edit[3].do[0] → $.looks.tunnel-sky.do[1]`); what the panel
+  refuses is reported at every use, as it depends on what came before. An unused look is
+  a warning.
 
 ## Wipe patterns
 
@@ -238,7 +301,16 @@ hardware's own rules, and the checker reports each one as a warning on the step:
 - **A white flash** on a drop: a cue with `{"fade": {"target": "white", "video": true, "dsk": false}}`
   some time before, and `{"move": "flash", "at": <bar>}`.
 - **Titles on black**: fade the video to black with `"dsk": false` — the DSK title stays.
-- Keep **one look per section**, and change something every 8 bars.
+- Keep **one look per section**, and change something every 8 bars. When a look comes
+  back, make it a named look.
+- **Tell a story with clips that play once.** `"until"` the end of the section and
+  `"once": true` — no rates to work out, and no clip that loops back to its start on air.
+- **Pick key settings from `video:clips`.** A `hue` line says where a colour sits and how
+  much the Chroma Key takes at a narrow, middle and wide slice: a share that hardly grows
+  from narrow to wide is a clean key (a sky); one that jumps has neighbours that come along
+  (the roofs next to a beige sky — keep the slice narrow). The `luma` percentiles are in
+  the keys' terms: a Luminance Key `slice` or a DSK window top at the 10th percentile
+  takes the darkest tenth of the picture.
 
 ## A complete small example
 

@@ -22,6 +22,7 @@ import {
   avSynchro,
   barTime,
   beatSeconds,
+  cueIndexAt,
   borderColour,
   buses,
   colourCorrect,
@@ -36,7 +37,7 @@ import {
   wipe,
 } from './score.js';
 import { FACTORY_PRESET } from '../../src/state/state.js';
-import type { Cue, Curve, EffectSet, Grid, Input, LaneName, LanePoint, Marker, Patch, Score, Step } from './score.js';
+import type { Cue, Curve, EffectSet, Grid, Input, LaneName, LanePoint, Marker, Patch, PlayDoc, Score, Step } from './score.js';
 import type { Command } from '../../src/state/commands.js';
 import type { AvSynchroEffect, PanelState } from '../../src/state/state.js';
 import type { BusSource } from '../../src/core/types.js';
@@ -63,11 +64,18 @@ export interface CueDoc {
   at: Position;
   do?: StepDoc[];
   patch?: PatchDoc;
-  play?: { [clip: string]: { from?: number; rate?: number } };
+  play?: { [clip: string]: { from?: number; rate?: number; until?: Position; end?: number; once?: boolean } };
   note?: string;
 }
 
 export type StepDoc = { [key: string]: unknown };
+
+/** A named set of steps (and lane values) a cue applies with {"look": name}. */
+export interface LookDoc {
+  do: StepDoc[];
+  lanes?: { [lane: string]: number };
+  note?: string;
+}
 export type MoveDoc = { move: string; [key: string]: unknown };
 
 export interface MusicVideoDoc {
@@ -78,6 +86,7 @@ export interface MusicVideoDoc {
   song: { file: string; bpm: number; downbeat: number; length?: number };
   clips: ClipDoc[];
   patch: PatchDoc;
+  looks?: { [name: string]: LookDoc };
   /** Sections, cues and moves, in any order (usually grouped by section). */
   edit?: EditItem[];
 }
@@ -102,9 +111,9 @@ export interface LoadedMusicVideo {
 
 // --- vocabulary ---------------------------------------------------------------------------
 
-const TOP_KEYS = ['format', 'version', 'title', 'description', 'song', 'clips', 'patch', 'edit'];
+const TOP_KEYS = ['format', 'version', 'title', 'description', 'song', 'clips', 'patch', 'looks', 'edit'];
 const PATCH_KEYS = ['1', '2', '3', '4', 'ext'];
-const STEP_KEYS = ['buses', 'transition', 'wipe', 'effect', 'avSynchro', 'colourCorrect', 'dsk', 'fade', 'matte', 'border', 'positioner', 'command'];
+const STEP_KEYS = ['buses', 'transition', 'wipe', 'effect', 'avSynchro', 'colourCorrect', 'dsk', 'fade', 'matte', 'border', 'positioner', 'command', 'look'];
 const MOVE_KINDS = ['set', 'ramp', 'steps', 'cuts', 'takes', 'pump', 'flash', 'rotate', 'montage', 'punch'];
 const TRANSITIONS = ['mix', 'nam', 'wipe', 'lum-key', 'chroma-key'];
 const WIPE_EDGES = ['hard', 'border-narrow', 'border-wide', 'soft-narrow', 'soft-wide'];
@@ -441,6 +450,35 @@ export function loadMusicVideo(json: unknown, options: LoadOptions = {}): Loaded
     return name === null ? null : MATTE[name]!;
   };
 
+  // --- looks: named step lists (and lane values), applied by a {"look": name} step
+  const looks = new Map<string, { steps: unknown[]; lanes: [LaneName, number][] }>();
+  if (root.looks !== undefined) {
+    const lo = r.obj(root.looks, '$.looks');
+    if (lo) {
+      for (const name in lo) {
+        const path = `$.looks.${name}`;
+        const o = r.obj(lo[name], path);
+        if (!o) continue;
+        r.keys(o, path, ['do', 'lanes', 'note'], ['do']);
+        const steps = r.arr(o.do, `${path}.do`);
+        const lanePoints: [LaneName, number][] = [];
+        if (o.lanes !== undefined) {
+          const lv = r.obj(o.lanes, `${path}.lanes`);
+          if (lv) {
+            for (const lane in lv) {
+              const ln = r.oneOf(lane, `${path}.lanes.${lane}`, LANE_NAMES);
+              const value = ln === null ? null : laneValue(ln, lv[lane], `${path}.lanes.${lane}`);
+              if (ln !== null && value !== null) lanePoints.push([ln, value]);
+            }
+          }
+        }
+        if (steps) looks.set(name, { steps, lanes: lanePoints });
+      }
+    }
+  }
+  const lookNames = (): string[] => Array.from(looks.keys());
+  const usedLooks = new Set<string>();
+
   // --- steps
   const readStep = (v: unknown, path: string, cueIndex: number, stepIndex: number, at: number): Step[] => {
     const o = r.obj(v, path);
@@ -588,12 +626,82 @@ export function loadMusicVideo(json: unknown, options: LoadOptions = {}): Loaded
         if (type in LANE_OWNED) laneTouches.push({ at, lane: LANE_OWNED[type]!, path: p });
         return [c as unknown as Command];
       }
+      case 'look':
+        r.error(path, 'a look cannot use another look');
+        return [];
       default: {
         const hint = closest(key, STEP_KEYS);
         r.error(path, `unknown step "${key}"${hint ? ` — did you mean "${hint}"?` : ''} (steps: ${STEP_KEYS.join(', ')})`);
         return [];
       }
     }
+  };
+
+  /**
+   * A {"look": name} step: the look's steps in place, each its own step for the intent
+   * checks, and its lane values set at the cue. A look's own mistakes are reported once,
+   * at its first use; what the panel refuses is reported at every use, as it depends on
+   * the moment.
+   */
+  const applyLook = (v: unknown, path: string, at: number, steps: Step[], stepGroups: number[]): void => {
+    const look = typeof v === 'string' ? looks.get(v) : undefined;
+    if (typeof v !== 'string' || !look) {
+      const hint = typeof v === 'string' ? closest(v, lookNames()) : null;
+      r.error(`${path}.look`, `unknown look ${describe(v)}${hint ? ` — did you mean "${hint}"?` : ''} (looks: ${lookNames().join(', ') || 'none'})`);
+      return;
+    }
+    const first = !usedLooks.has(v);
+    usedLooks.add(v);
+    const before = r.problems.length;
+    look.steps.forEach((s, k) => {
+      for (const st of readStep(s, `${path} → $.looks.${v}.do[${k}]`, cues.length, stepGroups.length, at)) steps.push(st);
+      stepGroups.push(steps.length);
+    });
+    if (!first) r.problems.length = before;
+    for (const [lane, value] of look.lanes) point(lane, at, value, 'hold', `$.looks.${v}.lanes.${lane}`);
+  };
+
+  const clipDuration = (id: string): number | undefined => {
+    for (const c of clips) if (c.id === id) return c.duration;
+    return undefined;
+  };
+
+  /** Plays given "until": the clip must reach its end there (checked after compiling). */
+  const fits: { id: string; at: number; until: number; once: boolean; path: string }[] = [];
+
+  /**
+   * "until": play from "from" (default the top) to the clip's end — or to "end" — arriving
+   * at that position; the rate follows. Needs the clip's duration in clips[].
+   */
+  const readUntil = (v: unknown, pp: string, id: string, at: number, entry: PlayDoc, duration: number | undefined): void => {
+    const until = pos(v, `${pp}.until`);
+    if (until === null) return;
+    if (entry.rate !== undefined) {
+      r.error(`${pp}.rate`, '"until" sets the rate — leave "rate" out');
+      return;
+    }
+    if (duration === undefined) {
+      r.error(`${pp}.until`, `"until" needs the clip's length — add "duration" to clip "${id}" (\`npm run video:clips\` prints it)`);
+      return;
+    }
+    if (until <= at) {
+      r.error(`${pp}.until`, '"until" must be after the cue');
+      return;
+    }
+    const from = entry.from !== undefined ? entry.from : 0;
+    const stop = entry.end !== undefined ? entry.end : duration;
+    if (stop <= from) {
+      r.error(`${pp}.from`, `nothing left to play: "from" (${from} s) is at or past where it should stop (${stop} s)`);
+      return;
+    }
+    const rate = (stop - from) / (until - at);
+    if (rate < 0.0625 || rate > 16) {
+      r.error(`${pp}.until`, `that takes a rate of ${rate.toFixed(3)}, outside 0.0625..16`);
+      return;
+    }
+    entry.from = from;
+    entry.rate = rate;
+    fits.push({ id, at, until, once: entry.once === true, path: `${pp}.until` });
   };
 
   // --- cues: a moment — intent-level steps, re-patches, clip restarts
@@ -607,13 +715,19 @@ export function loadMusicVideo(json: unknown, options: LoadOptions = {}): Loaded
       const doList = r.arr(o.do, `${path}.do`);
       if (doList) {
         doList.forEach((s, j) => {
-          for (const st of readStep(s, `${path}.do[${j}]`, cues.length, j, at)) steps.push(st);
+          const sp = `${path}.do[${j}]`;
+          const so = s !== null && typeof s === 'object' && !Array.isArray(s) ? (s as Obj) : null;
+          if (so && 'look' in so && Object.keys(so).length === 1) {
+            applyLook(so.look, sp, at, steps, stepGroups);
+            return;
+          }
+          for (const st of readStep(s, sp, cues.length, stepGroups.length, at)) steps.push(st);
           stepGroups.push(steps.length);
         });
       }
     }
     const patch = o.patch === undefined ? undefined : readPatch(o.patch, `${path}.patch`, false) ?? undefined;
-    let play: { [clip: string]: { from?: number; rate?: number } } | undefined;
+    let play: { [clip: string]: PlayDoc } | undefined;
     if (o.play !== undefined) {
       const po = r.obj(o.play, `${path}.play`);
       if (po) {
@@ -623,8 +737,8 @@ export function loadMusicVideo(json: unknown, options: LoadOptions = {}): Loaded
           if (clipId(id, pp) === null) continue;
           const e = r.obj(po[id], pp);
           if (!e) continue;
-          r.keys(e, pp, ['from', 'rate']);
-          const entry: { from?: number; rate?: number } = {};
+          r.keys(e, pp, ['from', 'rate', 'until', 'end', 'once']);
+          const entry: PlayDoc = {};
           if (e.from !== undefined) {
             const f = r.num(e.from, `${pp}.from`, 0);
             if (f !== null) entry.from = f;
@@ -633,6 +747,17 @@ export function loadMusicVideo(json: unknown, options: LoadOptions = {}): Loaded
             const rt = r.num(e.rate, `${pp}.rate`, 0.0625, 16);
             if (rt !== null) entry.rate = rt;
           }
+          if (e.once !== undefined) {
+            const b = r.bool(e.once, `${pp}.once`);
+            if (b !== null) entry.once = b;
+          }
+          const duration = clipDuration(id);
+          if (e.end !== undefined) {
+            const end = r.num(e.end, `${pp}.end`, 0, duration ?? Infinity);
+            if (end !== null) entry.end = end;
+            if (e.until === undefined && e.once !== true) r.error(`${pp}.end`, '"end" needs "once" (stop there) or "until" (arrive there)');
+          }
+          if (e.until !== undefined) readUntil(e.until, `${pp}`, id, at, entry, duration);
           play[id] = entry;
         }
       }
@@ -692,21 +817,32 @@ export function loadMusicVideo(json: unknown, options: LoadOptions = {}): Loaded
       const n = r.num(v, p, 1, 4, true);
       return n === null ? null : (n as 1 | 2 | 3 | 4);
     };
-    const clipList = (v: unknown, p: string): string[] | null => {
+    /** Clip ids, or {"clip": id, "from": s} for an item that enters at a chosen moment. */
+    const clipList = (v: unknown, p: string): { id: string; from?: number }[] | null => {
       const list = r.arr(v, p);
       if (!list) return null;
       if (!list.length) {
         r.error(p, 'needs at least one clip');
         return null;
       }
-      const out: string[] = [];
+      const out: { id: string; from?: number }[] = [];
       list.forEach((x, i) => {
-        const id = clipId(x, `${p}[${i}]`);
-        if (id !== null) out.push(id);
+        const ip = `${p}[${i}]`;
+        if (typeof x === 'string') {
+          const id = clipId(x, ip);
+          if (id !== null) out.push({ id });
+          return;
+        }
+        const o = r.obj(x, ip);
+        if (!o) return;
+        r.keys(o, ip, ['clip', 'from'], ['clip', 'from']);
+        const id = clipId(o.clip, `${ip}.clip`);
+        const from = r.num(o.from, `${ip}.from`, 0);
+        if (id !== null && from !== null) out.push({ id, from });
       });
       return out.length === list.length ? out : null;
     };
-    const generated = (at: number, patch: Partial<Patch>, play: { [clip: string]: { from?: number; rate?: number } }, steps: Step[] = []): void => {
+    const generated = (at: number, patch: Partial<Patch>, play: { [clip: string]: PlayDoc }, steps: Step[] = []): void => {
       cueGroups.push([]);
       cues.push({ at, steps, patch, play });
     };
@@ -805,8 +941,8 @@ export function loadMusicVideo(json: unknown, options: LoadOptions = {}): Loaded
         const rate = o.rate === undefined ? 1 : r.num(o.rate, `${path}.rate`, 0.0625, 16);
         if (input === null || !s || everyBars === null || !list || rate === null) return;
         ticks(s[0], s[1], everyBars * 4 * beat).forEach((t, k) => {
-          const id = list[k % list.length]!;
-          generated(t, { [input]: id }, { [id]: { from: 0, rate } });
+          const item = list[k % list.length]!;
+          generated(t, { [input]: item.id }, { [item.id]: { from: item.from !== undefined ? item.from : 0, rate } });
         });
         return;
       }
@@ -819,8 +955,8 @@ export function loadMusicVideo(json: unknown, options: LoadOptions = {}): Loaded
         const stagger = o.stagger === undefined ? 1.37 : r.num(o.stagger, `${path}.stagger`, 0, 60);
         if (input === null || !s || every === null || !list || stagger === null) return;
         ticks(s[0], s[1], every * beat).forEach((t, k) => {
-          const id = list[k % list.length]!;
-          generated(t, { [input]: id }, { [id]: { from: k * stagger, rate: 1 } });
+          const item = list[k % list.length]!;
+          generated(t, { [input]: item.id }, { [item.id]: { from: item.from !== undefined ? item.from : k * stagger, rate: 1 } });
         });
         return;
       }
@@ -847,6 +983,8 @@ export function loadMusicVideo(json: unknown, options: LoadOptions = {}): Loaded
       }
     }
   }
+
+  for (const name of lookNames()) if (!usedLooks.has(name)) r.warn(`$.looks.${name}`, `look "${name}" is never used`);
 
   if (errorsOf(r.problems).length || !startPatch) return fail();
 
@@ -890,6 +1028,7 @@ export function loadMusicVideo(json: unknown, options: LoadOptions = {}): Loaded
     patch: startPatch as Patch,
   });
   checkIntents(r, cues, cueGroups, intents);
+  checkFits(r, score, grid, fits);
 
   return { doc, grid, clips, score, problems: r.problems };
 }
@@ -925,6 +1064,26 @@ function checkIntents(
       const message = s ? x.check(s) : null;
       if (message) r.warn(x.path, message);
     }
+  }
+}
+
+/**
+ * A clip played "until" a position, without "once", that is still patched in when it gets
+ * there plays on — from its start again, for a clip timed to its end. Usually that is a
+ * story clip seen to loop: say so, with the bar.
+ */
+function checkFits(r: Reader, score: Score, grid: Grid, fits: readonly { id: string; at: number; until: number; once: boolean; path: string }[]): void {
+  for (const f of fits) {
+    if (f.once || f.until >= score.length) continue;
+    const cue = score.cues[cueIndexAt(score, f.until + 1e-6)]!;
+    if (cue.clips[f.id]!.at !== f.at) continue; // restarted or re-timed by then
+    const inputs = INPUTS.filter((input) => cue.patch[input] === f.id).map((input) => (input === 'ext-camera' ? 'ext' : String(input)));
+    if (!inputs.length) continue;
+    const bar = (f.until - grid.downbeat) / (4 * beatSeconds(grid));
+    r.warn(
+      f.path,
+      `"${f.id}" gets to its end at bar ${+bar.toFixed(2)} and plays on while still patched into input ${inputs.join(', ')} — add "once": true to hold the last frame, or re-patch by then`,
+    );
   }
 }
 

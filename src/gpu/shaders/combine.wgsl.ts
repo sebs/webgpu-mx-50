@@ -1,7 +1,12 @@
 // The Mix/Wipe combine stage (reference §9.1–§9.3). Composites the A-bus and B-bus
 // textures either as a proportional cross-dissolve (Mix) or a non-additive brightness
 // mix (NAM), driven by the lever. Compositing is in linear light (ADR-0005). The
-// weights/rule are decided in core/transition.ts; this shader realises the pixels.
+// weights/rule are decided in core/transition.ts; this shader realises the pixels. The
+// Chroma Key mirrors chromaKeyAlpha() in core/key.ts.
+
+import { CHROMA_KEY_FLOOR } from '../../core/key.js';
+
+const f = (x: number): string => x.toFixed(4); // a WGSL float literal
 
 export const combineWGSL = /* wgsl */ `
 struct Uniforms {
@@ -50,6 +55,10 @@ fn hueDistance(a : f32, b : f32) -> f32 {
   let d = abs(a - b);
   return min(d, 1.0 - d);
 }
+fn encodeSrgb(c : vec3f) -> vec3f {
+  let x = clamp(c, vec3f(0.0), vec3f(1.0));
+  return select(1.055 * pow(x, vec3f(1.0 / 2.4)) - 0.055, 12.92 * x, x <= vec3f(0.0031308));
+}
 
 @fragment
 fn fs(in : VSOut) -> @location(0) vec4f {
@@ -76,9 +85,14 @@ fn fs(in : VSOut) -> @location(0) vec4f {
   }
 
   // Chroma Key (§9.6): remove the HUE colour from B (show A); lever blends keyed<->unkeyed B.
-  let d = hueDistance(rgbToHue(b), u.hue);
-  let tol = u.slice * 0.4;
-  let keyAlpha = 1.0 - smoothstep(tol - 0.05, tol + 0.05, d); // near hue -> removed
+  // The match is decided on the encoded signal's hue and colour difference: greys carry no
+  // colour difference and are never keyed. The blend itself stays linear.
+  let e = encodeSrgb(b);
+  let chroma = length(vec2f(e.r - dot(e, LUMA), e.b - dot(e, LUMA)));
+  let width = u.slice * 0.4;
+  let soft = 0.01 + width * 0.25;
+  let hueMatch = 1.0 - smoothstep(width - soft, width + soft, hueDistance(rgbToHue(e), fract(u.hue)));
+  let keyAlpha = hueMatch * smoothstep(${f(CHROMA_KEY_FLOOR[0])}, ${f(CHROMA_KEY_FLOOR[1])}, chroma);
   let keyed = mix(b, a, keyAlpha);
   return vec4f(mix(b, keyed, u.lever), 1.0);
 }

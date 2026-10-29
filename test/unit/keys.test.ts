@@ -10,6 +10,10 @@ import {
   keyedFraction,
   backdropHue,
   chromaTolerance,
+  chromaKeyAlpha,
+  chromaEdgeSoftness,
+  chromaHueWidth,
+  decodeSrgb,
   keySource,
   keyBackground,
 } from '../../src/core/key.js';
@@ -47,6 +51,44 @@ test('chroma: named backdrops map to hues; tolerance grows narrow→wide', () =>
   assert.equal(backdropHue('red'), 0);
   assert.ok(Math.abs(backdropHue('green') - 1 / 3) < 1e-9);
   assert.ok(chromaTolerance(0.25) < chromaTolerance(0.75));
+});
+
+/** A pixel given as 8-bit sRGB, the way a colour picker reads it, in the linear working space. */
+const srgb = (r: number, g: number, b: number): [number, number, number] => [decodeSrgb(r / 255), decodeSrgb(g / 255), decodeSrgb(b / 255)];
+const keyed = (px: [number, number, number], hue: number, slice: number) => chromaKeyAlpha(px[0], px[1], px[2], hue, slice);
+
+test('chroma: a solid backdrop is keyed, other colours are not', () => {
+  assert.equal(keyed([0, 1, 0], backdropHue('green'), 0.5), 1);
+  assert.equal(keyed([0, 0, 1], backdropHue('blue'), 0.5), 1);
+  assert.equal(keyed([1, 0, 0], backdropHue('green'), 0.5), 0);
+});
+
+test('chroma: greys have no hue to match and are never keyed', () => {
+  for (const v of [0, 0.02, 0.2, 0.5, 0.9, 1]) {
+    for (const hue of [0, 0.1, 1 / 3, 0.53, 2 / 3]) assert.equal(keyed([v, v, v], hue, 1), 0, `grey ${v} at hue ${hue}`);
+  }
+  // A nearly grey facade, tinted towards the key hue, stays (almost) opaque.
+  assert.ok(keyed(srgb(154, 147, 140), 0.085, 0.5) < 0.05);
+});
+
+test('chroma: a narrow SLICE separates two pale tints a twentieth of the wheel apart', () => {
+  // Measured from a crane shot: a beige sky (hue ≈ 0.13) behind a cream wing (≈ 0.08).
+  const sky = [srgb(230, 221, 195), srgb(234, 229, 208)];
+  const wing = srgb(207, 186, 167);
+  const crane = srgb(147, 111, 71);
+  for (const px of sky) assert.ok(keyed(px, 0.129, 0.05) > 0.95);
+  assert.ok(keyed(wing, 0.129, 0.05) < 0.05);
+  assert.ok(keyed(crane, 0.129, 0.05) < 0.05);
+});
+
+test('chroma: HUE is read from the encoded signal, as a colour picker reads it', () => {
+  // A pale blue sky picked at hue 0.53 in an 8-bit frame is keyed there.
+  assert.equal(keyed(srgb(177, 220, 229), 0.53, 0.35), 1);
+});
+
+test('chroma: narrowing SLICE sharpens the key edge', () => {
+  assert.ok(chromaEdgeSoftness(0.1) < chromaEdgeSoftness(0.5));
+  assert.ok(chromaHueWidth(0.1) < chromaHueWidth(0.5));
 });
 
 test('PRESS_LUM_KEY / PRESS_CHROMA_KEY toggle against Mix', () => {

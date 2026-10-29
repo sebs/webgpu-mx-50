@@ -80,6 +80,19 @@ Feature: Chroma Key
       | narrow    | shrinks, keying only colours very close to the chosen hue     |
       | wide      | grows, keying a broader spread of colours near the chosen hue |
 
+  # A chroma keyer compares colour-difference signals (R-Y, B-Y), and a grey has none:
+  # it has no hue to match, so no HUE or SLICE setting can key it out.
+  Scenario Outline: Colourless areas are never keyed
+    Given Chroma Key is engaged
+    And a <shade> area on the B-bus
+    Then the area stays opaque whatever HUE and SLICE are set to
+
+    Examples:
+      | shade |
+      | white |
+      | grey  |
+      | black |
+
   Scenario: The B-bus is always the key source regardless of assignment
     Given Chroma Key is engaged
     When I inspect the composite

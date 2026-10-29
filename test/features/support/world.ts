@@ -101,6 +101,9 @@ export class MixerWorld extends World {
   /** The chroma-key backdrop hue for the current scenario (default green). */
   chromaBackdropHue = 1 / 3;
 
+  /** The grey level of the B-bus area a chroma-key scenario probes. */
+  chromaProbe = 0.5;
+
   // --- wipe scratch state (Phase 2) ---
   wipeFamily: WipeFamily = 'straight';
   readonly num: { base: number; reversed: number } = { base: 0, reversed: 0 };

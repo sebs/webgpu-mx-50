@@ -22,7 +22,9 @@
     "video:media": "node scripts/music-video-media.mjs",
     "video:analyse": "node scripts/music-video-analyse.mjs",
     "video:check": "tsx scripts/music-video-check.ts",
-    "video:record": "node scripts/record-music-video.mjs"
+    "video:record": "node scripts/record-music-video.mjs",
+    "video:frames": "tsx scripts/music-video-frames.mjs",
+    "video:clips": "tsx scripts/music-video-clips.mjs"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",

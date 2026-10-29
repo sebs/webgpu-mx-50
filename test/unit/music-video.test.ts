@@ -15,7 +15,9 @@ import {
   INPUTS,
   LANE_NAMES,
   barTime,
+  clipHolding,
   clipTime,
+  LAST_FRAME,
   compileScore,
   cueIndexAt,
   effect,
@@ -271,6 +273,71 @@ test('intents the panel refuses come back as warnings on the step that asked', (
   assert.deepEqual(warned, ['$.edit[0].do[1].positioner', '$.edit[1].do[0].wipe', '$.edit[3].do[1].avSynchro']);
 });
 
+/** The tiny document with looks. */
+function withLooks(looks: unknown, edit: unknown[]): Problem[] {
+  return loadMusicVideo({ ...tiny(edit), looks } as MusicVideoDoc).problems.slice();
+}
+
+test('a look applies its steps and lane values at the cue, the same as writing them out', () => {
+  const look = { do: [{ transition: 'chroma-key' }, { buses: [2, 1] }, { command: { type: 'SET_HUE', angle: 0.53 } }], lanes: { lever: 1, slice: 0.38 } };
+  const inline = loadMusicVideo(tiny([
+    { at: 1, do: [{ transition: 'chroma-key' }, { buses: [2, 1] }, { command: { type: 'SET_HUE', angle: 0.53 } }] },
+    { move: 'set', lane: 'lever', at: 1, value: 1 },
+    { move: 'set', lane: 'slice', at: 1, value: 0.38 },
+  ]));
+  const looked = loadMusicVideo({ ...tiny([{ at: 1, do: [{ look: 'sky' }] }]), looks: { sky: look } } as MusicVideoDoc);
+  assert.deepEqual(looked.problems, []);
+  for (const t of [0, 1.9, 2.1, 10]) assert.deepEqual(stateAt(looked.score!, t), stateAt(inline.score!, t));
+});
+
+test('steps after a look, and moves later in the file, override it', () => {
+  const doc = {
+    ...tiny([{ at: 1, do: [{ look: 'sky' }, { buses: [1, 2] }] }, { move: 'set', lane: 'slice', at: 1, value: 0.2 }]),
+    looks: { sky: { do: [{ transition: 'chroma-key' }, { buses: [2, 1] }], lanes: { slice: 0.38 } } },
+  } as MusicVideoDoc;
+  const loaded = loadMusicVideo(doc);
+  assert.deepEqual(loaded.problems, []);
+  const s = stateAt(loaded.score!, 5);
+  assert.equal(s.busA.source, 1);
+  assert.equal(s.transition.slice, 0.2);
+});
+
+test('looks: unknown names are suggested, nesting is refused, unused looks are flagged', () => {
+  const unknown = withLooks({ sky: { do: [] } }, [{ at: 1, do: [{ look: 'skey' }] }]);
+  assert.equal(errorsOf(unknown)[0]!.path, '$.edit[0].do[0].look');
+  assert.match(errorsOf(unknown)[0]!.message, /did you mean "sky"/);
+
+  const nested = withLooks({ a: { do: [{ look: 'b' }] }, b: { do: [] } }, [{ at: 1, do: [{ look: 'a' }] }]);
+  assert.match(errorsOf(nested)[0]!.message, /a look cannot use another look/);
+
+  const unused = withLooks({ sky: { do: [] } }, []);
+  assert.deepEqual(errorsOf(unused), []);
+  assert.deepEqual(unused.map((p) => p.path), ['$.looks.sky']);
+});
+
+test('a broken look is reported once, however often it is used', () => {
+  const problems = withLooks({ sky: { do: [{ transition: 'chroma-kye' }] } }, [
+    { at: 1, do: [{ look: 'sky' }] },
+    { at: 2, do: [{ look: 'sky' }] },
+  ]);
+  assert.equal(errorsOf(problems).length, 1);
+  assert.match(errorsOf(problems)[0]!.path, /^\$\.edit\[0\]\.do\[0\] → \$\.looks\.sky\.do\[0\]/);
+});
+
+test('what the panel refuses inside a look is warned at every use', () => {
+  // The positioner needs a square wipe: the first use has none selected, the second does.
+  const problems = withLooks({ pip: { do: [{ positioner: true }] } }, [
+    { at: 1, do: [{ look: 'pip' }] },
+    { at: 2, do: [{ wipe: { pattern: 26 } }, { look: 'pip' }] },
+    { at: 3, do: [{ wipe: { pattern: 1 } }, { look: 'pip' }] },
+  ]);
+  assert.deepEqual(errorsOf(problems), []);
+  assert.deepEqual(
+    problems.map((p) => p.path),
+    ['$.edit[0].do[0] → $.looks.pip.do[0].positioner', '$.edit[2].do[1] → $.looks.pip.do[0].positioner'],
+  );
+});
+
 test('a raw command on a control a lane already owns is flagged', () => {
   const problems = problemsOf([
     { move: 'set', lane: 'lever', at: 0, value: 0 },
@@ -334,4 +401,86 @@ test('a clip loops on its own clock from its last (re)start', () => {
   assert.equal(clipTime(10, { at: 10, from: 2, rate: 0.5 }, 14), 4);
   assert.ok(Math.abs(clipTime(10, { at: 0, from: 0, rate: 1 }, 12.5) - 2.5) < 1e-9);
   assert.ok(Math.abs(clipTime(10, { at: 0, from: 23, rate: 1 }, 0) - 3) < 1e-9, 'offsets are wrapped at play time');
+});
+
+test('a clip played once stops at its end, or at "end", and holds that frame', () => {
+  const once = { at: 0, from: 0, rate: 1, once: true };
+  assert.equal(clipTime(10, once, 4), 4);
+  assert.equal(clipTime(10, once, 25), 10 - LAST_FRAME);
+  assert.ok(!clipHolding(10, once, 4));
+  assert.ok(clipHolding(10, once, 25));
+  assert.equal(clipTime(10, { ...once, end: 6 }, 7), 6);
+  assert.ok(clipHolding(10, { ...once, end: 6 }, 6.5));
+  assert.ok(!clipHolding(10, { at: 0, from: 0, rate: 1 }, 25), 'a looping clip never holds');
+});
+
+/** The clip clock of `id` in force at song time `t`. */
+const playAt = (sc: Score, id: string, t: number) => sc.cues[cueIndexAt(sc, t)]!.clips[id]!;
+
+test('a speed change keeps a clip playing once; a restart plays on a loop unless it says once', () => {
+  const sc = loadMusicVideo(tiny([
+    { at: 1, play: { a: { from: 0, once: true } } },
+    { at: 2, play: { a: { rate: 0.5 } } },
+    { at: 3, play: { a: { from: 1 } } },
+  ])).score!;
+  assert.equal(playAt(sc, 'a', 4.5).once, true);
+  assert.equal(playAt(sc, 'a', 4.5).rate, 0.5);
+  assert.equal(playAt(sc, 'a', 6.5).once, undefined);
+});
+
+test('"until" sets the rate so the clip arrives at its end, or at "end", on that bar', () => {
+  // tiny(): 120 bpm, one bar = 2 s; clips last 4 s.
+  const loaded = loadMusicVideo(tiny([
+    { at: 1, play: { a: { until: 5, once: true } } },
+    { at: 1, play: { b: { from: 1, end: 3, until: 2, once: true } } },
+  ]));
+  assert.deepEqual(loaded.problems, []);
+  const a = playAt(loaded.score!, 'a', 3);
+  assert.equal(a.from, 0);
+  assert.equal(a.rate, 0.5); // 4 s of clip over 8 s of song
+  assert.equal(playAt(loaded.score!, 'b', 3).rate, 1); // 2 s of clip over 2 s
+  assert.ok(clipHolding(4, a, 10.01));
+});
+
+test('"until" mistakes are errors with their paths', () => {
+  const noDuration = loadMusicVideo({
+    ...tiny([{ at: 1, play: { a: { until: 3 } } }]),
+    clips: [{ id: 'a', file: 'a.mp4' }, { id: 'b', file: 'b.mp4' }],
+  } as MusicVideoDoc).problems;
+  assert.match(errorsOf(noDuration)[0]!.message, /needs the clip's length/);
+  const cases: [unknown, string, RegExp][] = [
+    [{ until: 3, rate: 1 }, '$.edit[0].play.a.rate', /"until" sets the rate/],
+    [{ until: 1 }, '$.edit[0].play.a.until', /after the cue/],
+    [{ until: 1.05 }, '$.edit[0].play.a.until', /rate of 40\.000, outside/],
+    [{ from: 4, until: 3 }, '$.edit[0].play.a.from', /nothing left to play/],
+    [{ end: 2 }, '$.edit[0].play.a.end', /needs "once"/],
+  ];
+  for (const [entry, path, message] of cases) {
+    const errors = errorsOf(problemsOf([{ at: 1, play: { a: entry } }]));
+    assert.equal(errors[0]?.path, path, JSON.stringify(entry));
+    assert.match(errors[0]!.message, message);
+  }
+});
+
+test('a clip timed to end on a bar but still patched in then is flagged; "once" or a re-patch is not', () => {
+  const loops = problemsOf([{ at: 1, patch: { '1': 'a' }, play: { a: { until: 3 } } }]);
+  assert.deepEqual(errorsOf(loops), []);
+  assert.equal(loops[0]!.path, '$.edit[0].play.a.until');
+  assert.match(loops[0]!.message, /end at bar 3 .*input 1, 3/);
+  assert.deepEqual(problemsOf([{ at: 1, play: { a: { until: 3, once: true } } }]), []);
+  assert.deepEqual(problemsOf([
+    { at: 1, play: { a: { until: 3 } } },
+    { at: 2.5, patch: { '1': 'b', '3': 'b', ext: 'b' } },
+  ]), []);
+});
+
+test('montage and rotate items can name the moment a clip enters at', () => {
+  const sc = loadMusicVideo(tiny([
+    { move: 'montage', input: 1, from: 1, to: 2, every: 1, clips: [{ clip: 'a', from: 2.5 }, 'b'] },
+    { move: 'rotate', input: 2, from: 4, to: 6, every: 1, clips: [{ clip: 'b', from: 1 }, 'a'] },
+  ])).score!;
+  assert.equal(playAt(sc, 'a', 2.1).from, 2.5);
+  assert.equal(playAt(sc, 'b', 2.6).from, 1.37); // no "from": the stagger, as before
+  assert.equal(playAt(sc, 'b', 9.1).from, 1);
+  assert.equal(playAt(sc, 'a', 11.1).from, 0);
 });

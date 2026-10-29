@@ -12,72 +12,18 @@
 // tab would be. Needs a WebGPU-capable Chrome (headless with --enable-unsafe-webgpu,
 // WITHOUT --disable-gpu) — a maintainer step on a machine with a GPU, not a CI one.
 //
-// The file must be one of the video/*.json the site build copies next to the page.
+// The file must be one of the video/*.json; it and its media are served from the repo, the
+// page from the site build. The browser side lives in music-video-browser.mjs.
 //
 // Run: npm run site:build && npm run video:record [-- video/first-cut.json]
 
-import { createServer } from 'node:http';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
-import { join, extname, dirname, basename, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { spawn, execFileSync } from 'node:child_process';
+import { mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { join, extname, basename } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { ROOT, videoFile, openMusicVideo, sleep } from './music-video-browser.mjs';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SITE = join(ROOT, '_site');
 const OUT = join(ROOT, 'video', 'render');
 const INCOMING = join(OUT, '.incoming');
-const MIME = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.json': 'application/json',
-  '.mp4': 'video/mp4',
-  '.m4a': 'audio/mp4',
-};
-
-function findChrome() {
-  const candidates = [
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    process.env.CHROME_PATH,
-  ].filter(Boolean);
-  for (const c of candidates) if (existsSync(c)) return c;
-  try {
-    return execFileSync('which', ['google-chrome'], { encoding: 'utf8' }).trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function connect(wsUrl) {
-  const ws = new WebSocket(wsUrl);
-  await new Promise((r, j) => {
-    ws.onopen = r;
-    ws.onerror = j;
-  });
-  let id = 0;
-  const pending = new Map();
-  ws.onmessage = (ev) => {
-    const msg = JSON.parse(ev.data);
-    if (msg.id && pending.has(msg.id)) {
-      pending.get(msg.id)(msg);
-      pending.delete(msg.id);
-    }
-  };
-  const send = (method, params = {}) =>
-    new Promise((r) => {
-      const myId = ++id;
-      pending.set(myId, r);
-      ws.send(JSON.stringify({ id: myId, method, params }));
-    });
-  const evaluate = async (expression) => {
-    const { result } = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-    if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
-    return result.result.value;
-  };
-  return { ws, send, evaluate };
-}
 
 /** The finished download: a video file with no Chrome partial beside it. */
 function finishedDownload() {
@@ -87,92 +33,17 @@ function finishedDownload() {
 }
 
 async function main() {
-  if (!existsSync(join(SITE, 'music-video', 'index.html'))) {
-    throw new Error('_site/music-video is missing — run `npm run site:build` first');
-  }
-  const chrome = findChrome();
-  if (!chrome) throw new Error('no Chrome found (set CHROME_PATH)');
-
   const requested = process.argv.slice(2).filter((a) => !a.startsWith('--'))[0] ?? 'video/first-cut.json';
-  const docName = basename(requested);
-  if (resolve(requested) !== join(ROOT, 'video', docName) || !existsSync(join(SITE, 'music-video', 'video', docName))) {
-    throw new Error(`${requested}: record a music video file from video/ that the site build copied — run \`npm run site:build\` after adding it`);
-  }
+  const docName = videoFile(requested);
 
   mkdirSync(OUT, { recursive: true });
   rmSync(INCOMING, { recursive: true, force: true });
   mkdirSync(INCOMING, { recursive: true });
 
-  const server = createServer((req, res) => {
-    let file = join(SITE, decodeURIComponent(req.url.split('?')[0]));
-    if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html');
-    if (!file.startsWith(SITE) || !existsSync(file)) {
-      res.writeHead(404).end();
-      return;
-    }
-    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
-    res.end(readFileSync(file));
-  });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const base = `http://127.0.0.1:${server.address().port}`;
-
-  const port = 9500 + (process.pid % 200);
-  const proc = spawn(
-    chrome,
-    [
-      '--headless=new',
-      `--remote-debugging-port=${port}`,
-      '--no-first-run',
-      '--enable-unsafe-webgpu',
-      '--autoplay-policy=no-user-gesture-required',
-      '--disable-background-timer-throttling',
-      '--disable-renderer-backgrounding',
-      '--disable-backgrounding-occluded-windows',
-      '--window-size=1400,1000',
-      '--user-data-dir=' + join(ROOT, 'node_modules', '.cache', 'record-profile'),
-      'about:blank',
-    ],
-    { stdio: 'ignore' },
-  );
-
+  const { browser, page, title, close } = await openMusicVideo(docName, { profile: 'record-profile' });
   try {
-    let version = null;
-    for (let i = 0; i < 60 && !version; i++) {
-      try {
-        version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
-      } catch {
-        await sleep(250);
-      }
-    }
-    if (!version) throw new Error('chrome did not expose its debugging port');
-
     // Downloads are a browser-level setting: let the page's own download land in OUT.
-    const browser = await connect(version.webSocketDebuggerUrl);
     await browser.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: INCOMING });
-
-    const target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page');
-    const page = await connect(target.webSocketDebuggerUrl);
-    await page.send('Runtime.enable');
-    await page.send('Page.enable');
-
-    // navigator.gpu exists only in a secure context, so ask from the page, not about:blank.
-    await page.send('Page.navigate', { url: `${base}/music-video/?video=video/${encodeURIComponent(docName)}` });
-    await sleep(500);
-    const adapter = await page.evaluate('navigator.gpu ? navigator.gpu.requestAdapter().then((a) => !!a) : false');
-    if (!adapter) throw new Error('this Chrome has no WebGPU adapter — the recording must come from the real renderer');
-
-    let state = '';
-    for (let i = 0; i < 240 && !/ready|failed/.test(state); i++) {
-      await sleep(500);
-      state = (await page.evaluate(`document.getElementById('overlay')?.className ?? ''`)) ?? '';
-    }
-    if (!/ready/.test(state)) {
-      const why = await page.evaluate(
-        `document.getElementById('status')?.textContent + '\\n' + [...document.querySelectorAll('#problems li')].map((li) => '  ' + li.textContent).join('\\n')`,
-      );
-      throw new Error(`the page could not load ${docName}: ${why}`);
-    }
-    const title = await page.evaluate(`document.getElementById('title').textContent`);
     process.stdout.write(`loaded "${title}" from ${requested}\n`);
 
     process.stdout.write('recording in real time (about 5 minutes)…\n');
@@ -213,8 +84,7 @@ async function main() {
     );
     process.stdout.write(`encoded  ${mp4}\n`);
   } finally {
-    proc.kill();
-    server.close();
+    close();
   }
 }
 

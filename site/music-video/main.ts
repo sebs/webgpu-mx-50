@@ -21,7 +21,7 @@ import { defineMixer } from '../../src/ui/mixer.js';
 import { VideoSource } from '../../src/sources/video-source.js';
 import { avSynchroActiveEffects } from '../../src/core/av-synchro.js';
 import { errorsOf, formatProblem, loadMusicVideo, loadMusicVideoText, serializeMusicVideo, slugOf } from './document.js';
-import { INPUTS, barTime, clipTime, cueIndexAt, laneCommandsAt, markerAt } from './score.js';
+import { INPUTS, barTime, clipHolding, clipTime, cueIndexAt, laneCommandsAt, markerAt } from './score.js';
 import type { MxMixer } from '../../src/ui/mixer.js';
 import type { LoadedMusicVideo, Problem } from './document.js';
 import type { ClipPlay, CompiledCue, Grid, Input, Score } from './score.js';
@@ -280,15 +280,20 @@ function run(mixer: MxMixer): void {
       const duration = s.durations.get(id)!;
       const play = cue.clips[id]!;
       const expected = clipTime(duration, play, t);
+      const holding = clipHolding(duration, play, t); // played once, now on its last frame
       if (video.playbackRate !== play.rate) video.playbackRate = play.rate;
       let off = Math.abs(video.currentTime - expected);
-      off = Math.min(off, duration - off); // a loop's wrap is not drift
+      if (!play.once) off = Math.min(off, duration - off); // a loop's wrap is not drift
       if (force || applied.get(id) !== play || off > 0.2) {
         if (off > 1 / 30) video.currentTime = expected;
         applied.set(id, play);
       }
-      if (s.song.paused && !video.paused) video.pause();
-      if (!s.song.paused && video.paused) void video.play().catch(() => undefined);
+      const stopped = s.song.paused || holding;
+      if (stopped && !video.paused) {
+        video.pause();
+        if (holding) video.currentTime = expected;
+      }
+      if (!stopped && video.paused) void video.play().catch(() => undefined);
     }
   }
 

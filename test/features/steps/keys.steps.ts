@@ -11,6 +11,9 @@ import {
   keyedFraction,
   backdropHue,
   chromaTolerance,
+  chromaKeyAlpha,
+  chromaEdgeSoftness,
+  decodeSrgb,
   keySource,
   keyBackground,
 } from '../../../src/core/key.js';
@@ -20,6 +23,12 @@ import { programVideo } from '../../../src/core/program.js';
 import { runnerComplete } from '../../../src/core/timeline.js';
 
 const tr = (w: MixerWorld) => w.snapshot().transition;
+
+/** An encoded colour from hue (turns), saturation and value. */
+function hsvToRgb(h: number, s: number, v: number): number[] {
+  const k = (n: number) => (n + (h - Math.floor(h)) * 6) % 6;
+  return [5, 3, 1].map((n) => v - v * s * Math.max(0, Math.min(k(n), 4 - k(n), 1)));
+}
 
 const LEVER_POS: Record<string, number> = {
   'fully at B': 1,
@@ -303,10 +312,25 @@ When('I fine-tune SLICE for a clean key edge', function (this: MixerWorld) {
   this.dispatch({ type: 'SET_SLICE', value: 0.4 });
 });
 Then('the transition between opaque subject and transparent backdrop is sharpened', function (this: MixerWorld) {
-  assert.equal(tr(this).type, 'chroma-key');
+  assert.ok(chromaEdgeSoftness(tr(this).slice) < chromaEdgeSoftness(0.5));
 });
 Then('backdrop-colour spill around the subject edge is reduced', function (this: MixerWorld) {
-  assert.equal(tr(this).type, 'chroma-key');
+  // A subject edge whose colour sits at the rim of the key (a fifth of the wheel from the
+  // backdrop hue): a narrower SLICE keys less of it away.
+  const hue = this.chromaBackdropHue;
+  const [r, g, b] = hsvToRgb(hue - 0.18, 0.6, 0.8).map(decodeSrgb);
+  const tinted = (slice: number) => chromaKeyAlpha(r!, g!, b!, hue, slice);
+  assert.ok(tinted(tr(this).slice) < tinted(0.5));
+});
+
+Given(/^a (white|grey|black) area on the B-bus$/, function (this: MixerWorld, shade: string) {
+  this.chromaProbe = { white: 1, grey: 0.2, black: 0 }[shade]!;
+});
+Then('the area stays opaque whatever HUE and SLICE are set to', function (this: MixerWorld) {
+  const v = this.chromaProbe;
+  for (const hue of [0, 0.1, 1 / 3, 0.5, 2 / 3]) {
+    for (const slice of [0, 0.5, 1]) assert.equal(chromaKeyAlpha(v, v, v, hue, slice), 0);
+  }
 });
 When(/^I move SLICE toward (narrow|wide)$/, function (this: MixerWorld, direction: string) {
   this.dispatch({ type: 'SET_SLICE', value: direction === 'narrow' ? 0.25 : 0.75 });

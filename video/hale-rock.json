@@ -18,13 +18,37 @@
     { "id": "kaleido", "file": "hale-rock/fx-3.mp4", "label": "Kaleidoscope", "duration": 10 }
   ],
   "patch": { "1": "roofs", "2": "cat", "3": "tunnel", "4": "swirl", "ext": "roofs" },
+  "looks": {
+    "tunnel-sky": {
+      "note": "The story on B, chroma-keyed on the pale blue of its sky (hue 0.53): the VJ loop on A shows through wherever the sky was, and goes negative on the kick.",
+      "do": [
+        { "positioner": false }, { "transition": "chroma-key" }, { "buses": [3, 1] },
+        { "command": { "type": "SET_HUE", "angle": 0.53 } }, { "effect": { "bus": "A" } }, { "avSynchro": ["nega"] }
+      ],
+      "lanes": { "lever": 1, "slice": 0.38 }
+    },
+    "rays": {
+      "note": "A VJ loop's brightest light keyed over the story, turning round the colour wheel; pump the slice to open the key on every kick.",
+      "do": [{ "transition": "lum-key" }, { "colourCorrect": { "bus": "B", "mode": "chroma-plus-joystick" } }],
+      "lanes": { "lever": 1 }
+    },
+    "tunnel-opens": {
+      "note": "Picture-in-picture: bus B in a soft circle over A; ramp the lever to grow it and the orbit to move it.",
+      "do": [{ "wipe": { "pattern": 26, "edge": "soft-wide" } }, { "positioner": true }],
+      "lanes": { "lever": 0.1 }
+    },
+    "comic-panels": {
+      "note": "The chapter on both buses, B as a grid of frames.",
+      "do": [{ "effect": { "bus": "B", "multi": 4 } }, { "colourCorrect": { "bus": "B", "mode": "off" } }, { "buses": [1, 2] }]
+    }
+  },
   "edit": [
     { "section": "1 · Over the roofs · a postcard", "at": { "time": 0 } },
-    { "at": { "time": 0 }, "note": "Input 1 always carries the chapter on air; 3 and 4 the VJ loops. Each chapter plays once, in order, slowed to fill its verse. The first opens as an old postcard: drained to a warm cast.", "do": [
+    { "at": { "time": 0 }, "note": "Input 1 always carries the chapter on air; 3 and 4 the VJ loops. Each chapter plays once, in order, timed with \"until\" to end with its verse, and holds its last frame. The first opens as an old postcard: drained to a warm cast.", "do": [
       { "buses": [1, 3] }, { "transition": "mix" }, { "effect": { "bus": "A" } },
       { "colourCorrect": { "bus": "A", "mode": "chroma-plus-joystick" } }, { "colourCorrect": { "bus": "B", "mode": "off" } },
       { "fade": { "target": "black", "video": true, "dsk": true } }, { "dsk": false }
-    ], "play": { "roofs": { "from": 0, "rate": 0.5 }, "tunnel": { "from": 0, "rate": 0.5 } } },
+    ], "play": { "roofs": { "until": 16, "once": true }, "tunnel": { "from": 0, "rate": 0.5 } } },
     { "move": "set", "lane": "lever", "at": { "time": 0 }, "value": 0 },
     { "move": "set", "lane": "fade", "at": { "time": 0 }, "value": 1 },
     { "move": "ramp", "lane": "fade", "from": 0, "to": 2, "values": [1, 0], "curve": "ease" },
@@ -37,30 +61,24 @@
 
     { "section": "Build · the tunnel opens", "at": 12 },
     { "at": 12, "note": "Picture-in-picture: the ray tunnel in a circle, circling the plane and growing until it is the whole frame on the drop.", "do": [
-      { "effect": { "bus": "A" } }, { "wipe": { "pattern": 26, "edge": "soft-wide" } }, { "positioner": true }
+      { "effect": { "bus": "A" } }, { "look": "tunnel-opens" }
     ], "play": { "tunnel": { "from": 0, "rate": 1 } } },
-    { "move": "set", "lane": "lever", "at": 12, "value": 0.1 },
     { "move": "ramp", "lane": "lever", "from": 12, "to": 16, "values": [0.1, 1], "curve": "ease" },
     { "move": "ramp", "lane": "orbit", "from": 12, "to": 16, "values": [0, 2] },
     { "move": "flash", "at": 16 },
 
     { "section": "2 · The cat · a tunnel for a sky", "at": 16 },
-    { "at": 16, "note": "LOOK — tunnel sky. The story on B, chroma-keyed on the pale blue of its sky (hue 0.53): the VJ loop on A shows through wherever the sky was, and goes negative on the kick.", "do": [
-      { "positioner": false }, { "transition": "chroma-key" }, { "buses": [3, 1] },
-      { "command": { "type": "SET_HUE", "angle": 0.53 } },
-      { "colourCorrect": { "bus": "A", "mode": "off" } }, { "effect": { "bus": "A" } }, { "avSynchro": ["nega"] }
-    ], "patch": { "1": "cat" }, "play": { "cat": { "from": 0, "rate": 0.5 } } },
-    { "move": "set", "lane": "lever", "at": 16, "value": 1 },
+    { "at": 16, "note": "LOOK — tunnel sky, with a different loop for a sky every two bars.", "do": [
+      { "look": "tunnel-sky" }, { "colourCorrect": { "bus": "A", "mode": "off" } }
+    ], "patch": { "1": "cat" }, "play": { "cat": { "until": 32, "once": true } } },
     { "move": "set", "lane": "slice", "at": 16, "value": 0.35 },
     { "move": "set", "lane": "avLevel", "at": 16, "value": 0.6 },
     { "move": "rotate", "input": 3, "from": 18, "to": 24, "every": 2, "clips": ["swirl", "kaleido", "tunnel"] },
 
     { "section": "2 · The cat · rays through the roofs", "at": 24 },
-    { "at": 24, "note": "LOOK — rays. The tunnel's brightest rays are keyed over the story; the key opens on every kick and closes before the next, the rays turning round the colour wheel.", "do": [
-      { "avSynchro": [] }, { "transition": "lum-key" }, { "buses": [1, 3] },
-      { "colourCorrect": { "bus": "B", "mode": "chroma-plus-joystick" } }
+    { "at": 24, "note": "LOOK — rays. The tunnel's brightest rays are keyed over the story; the key opens on every kick and closes before the next.", "do": [
+      { "avSynchro": [] }, { "look": "rays" }, { "buses": [1, 3] }
     ], "patch": { "3": "tunnel" }, "play": { "tunnel": { "from": 4, "rate": 1 } } },
-    { "move": "set", "lane": "lever", "at": 24, "value": 1 },
     { "move": "pump", "from": 24, "to": 31, "low": 0.45, "high": 0.92 },
     { "move": "set", "lane": "chromaB", "at": 24, "value": 1 },
     { "move": "ramp", "lane": "hueB", "from": 24, "to": 31, "values": [0, 2] },
@@ -72,9 +90,8 @@
 
     { "section": "3 · The square · comic panels", "at": 32 },
     { "at": 32, "note": "LOOK — comic panels. The same chapter on both buses, B as a grid of four frames; a bordered wipe turns the page every bar, a new pattern every two.", "do": [
-      { "effect": { "bus": "B", "multi": 4 } }, { "colourCorrect": { "bus": "B", "mode": "off" } },
-      { "wipe": { "pattern": 17, "edge": "border-wide" } }, { "border": "white" }, { "buses": [1, 2] }
-    ], "patch": { "1": "square", "2": "square" }, "play": { "square": { "from": 0, "rate": 0.5 } } },
+      { "look": "comic-panels" }, { "wipe": { "pattern": 17, "edge": "border-wide" } }, { "border": "white" }
+    ], "patch": { "1": "square", "2": "square" }, "play": { "square": { "until": 48, "once": true } } },
     { "move": "set", "lane": "lever", "at": 32, "value": 0 },
     { "move": "takes", "from": 32, "to": 40, "every": 4, "length": 1, "start": 0 },
     { "at": 34, "do": [{ "wipe": { "pattern": 26, "edge": "border-wide" } }, { "border": "yellow" }] },
@@ -104,35 +121,31 @@
       { "dsk": false }, { "transition": "chroma-key" }, { "buses": [4, 1] },
       { "command": { "type": "SET_HUE", "angle": 0.02 } },
       { "colourCorrect": { "bus": "A", "mode": "off" } }, { "colourCorrect": { "bus": "B", "mode": "off" } }
-    ], "patch": { "1": "flag", "4": "swirl" }, "play": { "flag": { "from": 0, "rate": 0.5 }, "swirl": { "from": 0, "rate": 1 } } },
+    ], "patch": { "1": "flag", "4": "swirl" }, "play": { "flag": { "until": 64, "once": true }, "swirl": { "from": 0, "rate": 1 } } },
     { "move": "set", "lane": "lever", "at": 48, "value": 1 },
     { "move": "set", "lane": "slice", "at": 48, "value": 0.2 },
     { "move": "ramp", "lane": "slice", "from": 52, "to": 56, "values": [0.2, 0.3] },
 
     { "section": "4 · The dome · a tunnel for a sky", "at": 56 },
     { "at": 56, "note": "The tunnel sky again, now with the kaleidoscope behind the dome, blocking up on the kick.", "do": [
-      { "command": { "type": "SET_HUE", "angle": 0.53 } }, { "buses": [3, 1] }, { "avSynchro": ["mosaic"] }
+      { "look": "tunnel-sky" }, { "avSynchro": ["mosaic"] }
     ], "patch": { "3": "kaleido" }, "play": { "kaleido": { "from": 2, "rate": 1 } } },
     { "move": "set", "lane": "slice", "at": 56, "value": 0.35 },
     { "move": "set", "lane": "mosaic", "at": 56, "value": 14 },
 
     { "section": "Build · the tunnel opens", "at": 62 },
     { "at": 62, "do": [
-      { "avSynchro": [] }, { "buses": [1, 3] }, { "wipe": { "pattern": 26, "edge": "soft-wide" } }, { "positioner": true },
+      { "avSynchro": [] }, { "buses": [1, 3] }, { "look": "tunnel-opens" },
       { "fade": { "target": "white", "video": true, "dsk": false } }
     ], "patch": { "3": "tunnel" }, "play": { "tunnel": { "from": 0, "rate": 1.5 } } },
-    { "move": "set", "lane": "lever", "at": 62, "value": 0.1 },
     { "move": "ramp", "lane": "lever", "from": 62, "to": 64, "values": [0.1, 1], "curve": "ease" },
     { "move": "ramp", "lane": "orbit", "from": 62, "to": 64, "values": [2, 4] },
     { "move": "flash", "at": 64 },
 
     { "section": "5 · Chimneys · full throttle", "at": 64 },
     { "at": 64, "note": "LOOK — full throttle. The tunnel sky, but the operator punches the sky between the two loops on the beat, both turning round the wheel; from bar 70 the plane stutters through the strobe.", "do": [
-      { "positioner": false }, { "transition": "chroma-key" }, { "buses": [3, 1] },
-      { "colourCorrect": { "bus": "A", "mode": "chroma-plus-joystick" } }, { "effect": { "bus": "A" } }, { "avSynchro": ["nega"] }
-    ], "patch": { "1": "chimneys", "4": "swirl" }, "play": { "chimneys": { "from": 0, "rate": 0.67 }, "tunnel": { "rate": 1 } } },
-    { "move": "set", "lane": "lever", "at": 64, "value": 1 },
-    { "move": "set", "lane": "slice", "at": 64, "value": 0.38 },
+      { "look": "tunnel-sky" }, { "colourCorrect": { "bus": "A", "mode": "chroma-plus-joystick" } }
+    ], "patch": { "1": "chimneys", "4": "swirl" }, "play": { "chimneys": { "until": 76, "once": true }, "tunnel": { "rate": 1 } } },
     { "move": "set", "lane": "chromaA", "at": 64, "value": 1 },
     { "move": "ramp", "lane": "hueA", "from": 64, "to": 76, "values": [0, 4] },
     { "move": "punch", "bus": "A", "from": 64, "to": 70, "every": 2, "sources": [3, 4] },
@@ -145,7 +158,7 @@
     { "at": 76, "note": "The kick drops out and we are in the cockpit — the first clean picture of the song.", "do": [
       { "avSynchro": [] }, { "effect": { "bus": "B" } }, { "transition": "mix" }, { "buses": [1, 4] },
       { "colourCorrect": { "bus": "A", "mode": "off" } }
-    ], "patch": { "1": "cockpit" }, "play": { "cockpit": { "from": 0, "rate": 0.4 } } },
+    ], "patch": { "1": "cockpit" }, "play": { "cockpit": { "until": 96, "once": true } } },
     { "move": "set", "lane": "lever", "at": 76, "value": 0 },
 
     { "section": "6 · Cockpit · the swirl in orbit", "at": 80 },
@@ -159,11 +172,8 @@
 
     { "section": "6 · Cockpit · a tunnel for a sky", "at": 88 },
     { "at": 88, "do": [
-      { "positioner": false }, { "transition": "chroma-key" }, { "buses": [4, 1] },
-      { "command": { "type": "SET_HUE", "angle": 0.53 } }, { "effect": { "bus": "A" } }, { "avSynchro": ["nega"] }
+      { "look": "tunnel-sky" }, { "buses": [4, 1] }
     ], "patch": { "4": "kaleido" }, "play": { "kaleido": { "from": 0, "rate": 1.5 } } },
-    { "move": "set", "lane": "lever", "at": 88, "value": 1 },
-    { "move": "set", "lane": "slice", "at": 88, "value": 0.38 },
     { "at": 94, "note": "The dip before the last verse: the cockpit holds still.", "do": [
       { "avSynchro": [] }, { "effect": { "bus": "B", "still": true } }, { "fade": { "target": "white", "video": true, "dsk": false } }
     ] },
@@ -171,16 +181,14 @@
 
     { "section": "7 · Laundry · rays through the roofs", "at": 96 },
     { "at": 96, "note": "The rays again, from the swirl now, over the dive through the washing lines.", "do": [
-      { "effect": { "bus": "A" } }, { "transition": "lum-key" }, { "buses": [1, 4] },
-      { "colourCorrect": { "bus": "B", "mode": "chroma-plus-joystick" } }
-    ], "patch": { "1": "laundry", "4": "swirl" }, "play": { "laundry": { "from": 0, "rate": 0.5 }, "swirl": { "from": 0, "rate": 1 } } },
-    { "move": "set", "lane": "lever", "at": 96, "value": 1 },
+      { "effect": { "bus": "A" } }, { "look": "rays" }, { "buses": [1, 4] }
+    ], "patch": { "1": "laundry", "4": "swirl" }, "play": { "laundry": { "until": 112, "once": true }, "swirl": { "from": 0, "rate": 1 } } },
     { "move": "pump", "from": 96, "to": 104, "low": 0.4, "high": 0.9 },
     { "move": "ramp", "lane": "hueB", "from": 96, "to": 104, "values": [0, -2] },
 
     { "section": "7 · Laundry · comic panels at speed", "at": 104 },
     { "at": 104, "note": "The comic panels, cut on the beat now, the grid getting finer.", "do": [
-      { "transition": "mix" }, { "buses": [1, 2] }, { "effect": { "bus": "B", "multi": 4 } }, { "colourCorrect": { "bus": "B", "mode": "off" } }
+      { "transition": "mix" }, { "look": "comic-panels" }
     ], "patch": { "2": "laundry" } },
     { "move": "cuts", "from": 104, "to": 110, "every": 1, "start": 0 },
     { "at": 106, "do": [{ "effect": { "bus": "B", "multi": 9 } }] },
@@ -201,35 +209,36 @@
     { "move": "flash", "at": 112 },
 
     { "section": "The whole flight", "at": 112 },
-    { "at": 112, "note": "Recap at the peak: every chapter, one per beat, all under a VJ sky the operator punches every bar — then as panels of four and of sixteen.", "do": [
-      { "transition": "chroma-key" }, { "buses": [3, 1] }, { "effect": { "bus": "A" } },
-      { "command": { "type": "SET_HUE", "angle": 0.53 } }, { "colourCorrect": { "bus": "B", "mode": "off" } }, { "avSynchro": ["nega"] }
-    ], "play": { "tunnel": { "rate": 1 } } },
-    { "move": "set", "lane": "lever", "at": 112, "value": 1 },
-    { "move": "set", "lane": "slice", "at": 112, "value": 0.38 },
-    { "move": "set", "lane": "chromaA", "at": 112, "value": 0.9 },
-    { "move": "ramp", "lane": "hueA", "from": 112, "to": 121, "values": [0, 4.5] },
-    { "move": "montage", "input": 1, "from": 112, "to": 121, "every": 1,
-      "clips": ["roofs", "cat", "square", "flag", "chimneys", "cockpit", "laundry", "pigeons"] },
-    { "move": "punch", "bus": "A", "from": 112, "to": 121, "every": 4, "sources": [3, 4] },
-    { "at": 116, "do": [{ "effect": { "bus": "B", "multi": 4 } }, { "avSynchro": ["nega"] }] },
-    { "at": 119, "do": [{ "effect": { "bus": "B", "multi": 16 } }, { "avSynchro": ["nega"] }] },
+    { "at": 112, "note": "Recap at the peak: two moments from every chapter, in story order, one per beat, under a VJ sky the operator punches through all three loops, one a bar — then as panels of four and of sixteen. The sky flashes negative only on the hardest kicks. The loops keep their own colours, saturated: a colour cast would turn their black into a flat sheet of colour.", "do": [
+      { "look": "tunnel-sky" }, { "colourCorrect": { "bus": "B", "mode": "off" } }, { "colourCorrect": { "bus": "A", "mode": "chroma-only" } }
+    ], "patch": { "2": "kaleido" }, "play": { "tunnel": { "rate": 1 }, "kaleido": { "from": 0, "rate": 1 } } },
+    { "move": "set", "lane": "chromaA", "at": 112, "value": 1 },
+    { "move": "set", "lane": "avLevel", "at": 112, "value": 0.85 },
+    { "move": "montage", "input": 1, "from": 112, "to": 121, "every": 1, "clips": [
+      { "clip": "roofs", "from": 1 }, { "clip": "roofs", "from": 3 }, { "clip": "cat", "from": 1 }, { "clip": "cat", "from": 11 },
+      { "clip": "square", "from": 6 }, { "clip": "square", "from": 11 }, { "clip": "flag", "from": 6 }, { "clip": "flag", "from": 12 },
+      { "clip": "chimneys", "from": 1 }, { "clip": "chimneys", "from": 7 }, { "clip": "cockpit", "from": 0.5 }, { "clip": "cockpit", "from": 4 },
+      { "clip": "laundry", "from": 1 }, { "clip": "laundry", "from": 9 }, { "clip": "pigeons", "from": 6 }, { "clip": "pigeons", "from": 12.5 }
+    ] },
+    { "move": "punch", "bus": "A", "from": 112, "to": 121, "every": 4, "sources": [3, 4, 2] },
+    { "at": 116, "note": "The panels take over the effect bus; the kick pulse stops rather than turn the story negative — a negative story has no blue sky left to key.", "do": [
+      { "effect": { "bus": "B", "multi": 4 } }, { "avSynchro": [] }
+    ] },
+    { "at": 119, "do": [{ "effect": { "bus": "B", "multi": 16 } }] },
 
     { "section": "8 · Pigeons · home", "at": 121 },
     { "at": 121, "note": "The song drops out: the last chapter starts clean, the mountains behind the roofs.", "do": [
       { "avSynchro": [] }, { "effect": { "bus": "B" } }, { "transition": "mix" }, { "buses": [1, 3] },
       { "colourCorrect": { "bus": "A", "mode": "off" } }
-    ], "patch": { "1": "pigeons", "ext": "pigeons" }, "play": { "pigeons": { "from": 0, "rate": 0.85 } } },
+    ], "patch": { "1": "pigeons", "ext": "pigeons" }, "play": { "pigeons": { "until": 130.75, "once": true } } },
     { "move": "set", "lane": "lever", "at": 121, "value": 0 },
     { "at": 122.75, "do": [{ "fade": { "target": "white", "video": true, "dsk": false } }] },
     { "move": "flash", "at": 123 },
 
     { "section": "8 · Pigeons · last pass", "at": 123 },
     { "at": 123, "note": "The last drop: one more tunnel sky as the plane passes, the pigeons scattering in trails.", "do": [
-      { "transition": "chroma-key" }, { "buses": [3, 1] }, { "effect": { "bus": "A" } }, { "avSynchro": ["nega"] }
+      { "look": "tunnel-sky" }
     ], "patch": { "3": "tunnel" }, "play": { "tunnel": { "from": 0, "rate": 1 } } },
-    { "move": "set", "lane": "lever", "at": 123, "value": 1 },
-    { "move": "set", "lane": "slice", "at": 123, "value": 0.38 },
     { "at": 126, "do": [{ "avSynchro": [] }, { "effect": { "bus": "B", "trail": true } }] },
 
     { "section": "Out · the city in red", "at": 128 },

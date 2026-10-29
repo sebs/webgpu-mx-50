@@ -68,11 +68,30 @@ export interface ClipPlay {
   /** Clip time at that moment, unwrapped (may exceed the clip's duration). */
   readonly from: number;
   readonly rate: number;
+  /** Play to the end (or to `end`) and hold that frame instead of looping. */
+  readonly once?: boolean;
+  /** With `once`: the clip time (s) to stop at; the clip's last frame when left out. */
+  readonly end?: number;
 }
 
-/** Where a clip's picture is at song time `t`, looped over its duration. */
+/** How far before a clip's end its last frame is held (seeking to the very end shows none). */
+export const LAST_FRAME = 0.05;
+
+/** The clip time a `once` play stops at. */
+function stopTime(duration: number, play: ClipPlay): number {
+  const last = Math.max(0, duration - LAST_FRAME);
+  return play.end !== undefined ? Math.min(play.end, last) : last;
+}
+
+/** Whether a `once` play has reached its end at song time `t` and holds its frame. */
+export function clipHolding(duration: number, play: ClipPlay, t: number): boolean {
+  return play.once === true && play.from + (t - play.at) * play.rate >= stopTime(duration, play);
+}
+
+/** Where a clip's picture is at song time `t`: looped over its duration, or held at its end. */
 export function clipTime(duration: number, play: ClipPlay, t: number): number {
   const raw = play.from + (t - play.at) * play.rate;
+  if (play.once) return Math.max(0, Math.min(raw, stopTime(duration, play)));
   return ((raw % duration) + duration) % duration;
 }
 
@@ -85,7 +104,15 @@ export interface Cue {
   readonly at: number;
   readonly steps: readonly Step[];
   readonly patch?: Partial<Patch>;
-  readonly play?: { readonly [clip: string]: { from?: number; rate?: number } };
+  readonly play?: { readonly [clip: string]: PlayDoc };
+}
+
+/** A cue's instruction for one clip: restart it, change its speed, play it once. */
+export interface PlayDoc {
+  from?: number;
+  rate?: number;
+  once?: boolean;
+  end?: number;
 }
 
 export interface CompiledCue {
@@ -286,10 +313,15 @@ export function compileScore(spec: {
       for (const id in cue.play) {
         const p = cue.play[id]!;
         const prev = clips[id]!;
+        // A restart plays on a loop unless it says otherwise; a speed change keeps the mode.
+        const once = p.once !== undefined ? p.once : p.from !== undefined ? false : prev.once === true;
+        const end = once ? (p.end !== undefined ? p.end : p.from !== undefined ? undefined : prev.end) : undefined;
         clips[id] = {
           at: cue.at,
           from: p.from !== undefined ? p.from : prev.from + (cue.at - prev.at) * prev.rate,
           rate: p.rate !== undefined ? p.rate : prev.rate,
+          ...(once ? { once } : {}),
+          ...(end !== undefined ? { end } : {}),
         };
       }
     }
